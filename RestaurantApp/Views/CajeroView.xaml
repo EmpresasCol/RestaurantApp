@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.CajeroView"  
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"  
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"  
+             xmlns:controls="clr-namespace:Microsoft.Maui.Controls;assembly=Microsoft.Maui.Controls"  
+             Title="Cajero - Facturación">  
+
+    <Grid RowDefinitions="Auto,*">  
+
+        <!-- Header -->  
+        <StackLayout Grid.Row="0" BackgroundColor="DarkGreen" Padding="15">  
+            <Label Text="Vista Cajero" TextColor="White" FontSize="20" FontAttributes="Bold"/>  
+            <Label Text="{Binding FechaActual, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}"   
+                   TextColor="White" FontSize="14"/>  
+        </StackLayout>  
+
+        <!-- Main Content -->  
+        <ScrollView Grid.Row="1">  
+            <StackLayout Padding="15" Spacing="15">  
+
+                <!-- Selector de Mesa para Facturar -->  
+                <Frame BackgroundColor="LightBlue" Padding="15">  
+                    <StackLayout>  
+                        <Label Text="Seleccionar Mesa para Facturar:" FontSize="18" FontAttributes="Bold"/>  
+                        <CollectionView ItemsSource="{Binding MesasConPedidosListos}"   
+                                      SelectedItem="{Binding MesaSeleccionada}"  
+                                      SelectionMode="Single">  
+                            <CollectionView.ItemsLayout>  
+                                <GridItemsLayout Orientation="Vertical" Span="4"/>  
+                            </CollectionView.ItemsLayout>  
+                            <CollectionView.ItemTemplate>  
+                                <DataTemplate>  
+                                    <Grid Padding="5">  
+                                        <Frame BackgroundColor="Green" Padding="15" CornerRadius="10"  
+                                               HasShadow="True">  
+                                            <StackLayout>  
+                                                <Label Text="{Binding UltimoPedido.Total, StringFormat='${0:F2}'}"  
+                                                       HorizontalOptions="Center" TextColor="White" FontSize="14"  
+                                                       FontAttributes="Bold"/>  
+                                            </StackLayout>  
+                                        </Frame>  
+                                    </Grid>  
+                                </DataTemplate>  
+                            </CollectionView.ItemTemplate>  
+                        </CollectionView>  
+                    </StackLayout>  
+                </Frame>  
+
+                <!-- Detalle del Pedido Seleccionado -->  
+                <Frame BackgroundColor="LightGray" Padding="15"   
+                       IsVisible="{Binding MesaSeleccionada, Converter={StaticResource NullToBoolConverter}}">  
+                    <StackLayout>  
+                        <Label Text="{Binding MesaSeleccionada.Numero, StringFormat='Factura Mesa {0}'}"   
+                               FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>  
+
+                        <BoxView HeightRequest="1" BackgroundColor="Gray" Margin="0,10"/>  
+
+                        <!-- Información del Pedido -->  
+                        <Grid ColumnDefinitions="*,*" Margin="0,10">  
+                            <StackLayout Grid.Column="0">  
+                                <Label Text="Fecha y Hora:" FontAttributes="Bold"/>  
+                                <Label Text="{Binding PedidoSeleccionado.FechaHora, StringFormat='{0:dd/MM/yyyy HH:mm}'}"/>  
+                            </StackLayout>  
+                            <StackLayout Grid.Column="1">  
+                                <Label Text="Estado:" FontAttributes="Bold"/>  
+                                <Label Text="{Binding PedidoSeleccionado.Estado}" TextColor="Green"/>  
+                            </StackLayout>  
+                        </Grid>  
+
+                        <BoxView HeightRequest="1" BackgroundColor="Gray" Margin="0,10"/>  
+
+                        <!-- Items del Pedido -->  
+                        <Label Text="Detalle del Pedido:" FontSize="16" FontAttributes="Bold"/>  
+
+                        <!-- Header de la tabla -->  
+                        <Grid ColumnDefinitions="*,Auto,Auto,Auto" BackgroundColor="DarkGray" Padding="10">  
+                            <Label Grid.Column="0" Text="Producto" TextColor="White" FontAttributes="Bold"/>  
+                            <Label Grid.Column="1" Text="Cant." TextColor="White" FontAttributes="Bold"/>  
+                            <Label Grid.Column="2" Text="Precio" TextColor="White" FontAttributes="Bold"/>  
+                            <Label Grid.Column="3" Text="Subtotal" TextColor="White" FontAttributes="Bold"/>  
+                        </Grid>  
+
+                        <!-- Items -->  
+                        <CollectionView ItemsSource="{Binding PedidoSeleccionado.Items}">  
+                            <CollectionView.ItemTemplate>  
+                                <DataTemplate>  
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Padding="10,5"   
+                                          BackgroundColor="White">  
+                                        <StackLayout Grid.Column="0">  
+                                            <Label Text="{Binding Producto.Nombre}" FontAttributes="Bold"/>  
+                                            <Label Text="{Binding AdicionesEspeciales}"   
+                                                   FontSize="12" TextColor="Orange" FontAttributes="Italic"  
+                                                   IsVisible="{Binding AdicionesEspeciales, Converter={StaticResource StringToBoolConverter}}"/>  
+                                        </StackLayout>  
+                                        <Label Grid.Column="1" Text="{Binding Cantidad}"   
+                                               HorizontalOptions="Center" VerticalOptions="Center"/>  
+                                        <Label Grid.Column="2" Text="{Binding PrecioUnitario, StringFormat='${0:F2}'}"   
+                                               HorizontalOptions="Center" VerticalOptions="Center"/>  
+                                        <Label Grid.Column="3" Text="{Binding Subtotal, StringFormat='${0:F2}'}"   
+                                               HorizontalOptions="Center" VerticalOptions="Center" FontAttributes="Bold"/>  
+                                    </Grid>  
+                                </DataTemplate>  
+                            </CollectionView.ItemTemplate>  
+                        </CollectionView>  
+
+                        <BoxView HeightRequest="1" BackgroundColor="Gray" Margin="0,15"/>  
+
+                        <!-- Resumen de Totales -->  
+                        <StackLayout BackgroundColor="LightYellow" Padding="15">  
+                            <Grid ColumnDefinitions="*,Auto">  
+                                <Label Grid.Column="0" Text="Subtotal:" FontSize="16"/>  
+                                <Label Grid.Column="1" Text="{Binding PedidoSeleccionado.Subtotal, StringFormat='${0:F2}'}"   
+                                       FontSize="16" HorizontalOptions="End"/>  
+                            </Grid>  
+
+                            <Grid ColumnDefinitions="*,Auto">  
+                                <Label Grid.Column="0" Text="IVA (19%):" FontSize="16"/>  
+                                <Label Grid.Column="1" Text="{Binding PedidoSeleccionado.IVA, StringFormat='${0:F2}'}"   
+                                       FontSize="16" HorizontalOptions="End"/>  
+                            </Grid>  
+
+                            <BoxView HeightRequest="1" BackgroundColor="Gray"/>  
+
+                            <Grid ColumnDefinitions="*,Auto">  
+                                <Label Grid.Column="0" Text="TOTAL A PAGAR:" FontSize="20" FontAttributes="Bold" TextColor="DarkGreen"/>  
+                                <Label Grid.Column="1" Text="{Binding PedidoSeleccionado.Total, StringFormat='${0:F2}'}"   
+                                       FontSize="20" FontAttributes="Bold" TextColor="DarkGreen" HorizontalOptions="End"/>  
+                            </Grid>  
+                        </StackLayout>  
+
+                        <!-- Método de Pago -->  
+                        <StackLayout Margin="0,15">  
+                            <Label Text="Método de Pago:" FontSize="16" FontAttributes="Bold"/>  
+                            <CollectionView ItemsSource="{Binding MetodosPago}"   
+                                          SelectedItem="{Binding MetodoPagoSeleccionado}"  
+                                          SelectionMode="Single">  
+                                <CollectionView.ItemsLayout>  
+                                    <LinearItemsLayout Orientation="Horizontal"/>  
+                                </CollectionView.ItemsLayout>  
+                                <CollectionView.ItemTemplate>  
+                                    <DataTemplate>  
+                                        <Button Text="{Binding}" BackgroundColor="DarkBlue" TextColor="White"  
+                                                Margin="5" Padding="15,10"/>  
+                                    </DataTemplate>  
+                                </CollectionView.ItemTemplate>  
+                            </CollectionView>  
+                        </StackLayout>  
+
+                        <!-- Campos adicionales según método de pago -->  
+                        <StackLayout IsVisible="{Binding EsEfectivo}">  
+                            <Label Text="Dinero Recibido:" FontAttributes="Bold"/>  
+                            <Entry Placeholder="Ingrese el monto recibido"   
+                                   Text="{Binding DineroRecibido}" Keyboard="Numeric"/>  
+                            <Label Text="{Binding Cambio, StringFormat='Cambio: ${0:F2}'}"   
+                                   FontSize="16" FontAttributes="Bold" TextColor="Green"  
+                                   IsVisible="{Binding MostrarCambio}"/>  
+                        </StackLayout>  
+
+                        <!-- Notas del Cajero -->  
+                        <StackLayout Margin="0,10">  
+                            <Label Text="Notas del Cajero:" FontAttributes="Bold"/>  
+                            <Entry Placeholder="Notas adicionales (opcional)..."   
+                                   Text="{Binding NotasCajero}"/>  
+                        </StackLayout>  
+
+                        <!-- Botones de Acción -->  
+                        <Grid ColumnDefinitions="*,*" Margin="0,20">  
+                            <Button Grid.Column="0" Text="Cancelar"   
+                                   BackgroundColor="Red" TextColor="White" Padding="15"  
+                                   Command="{Binding CancelarFacturacionCommand}"/>  
+                            <Button Grid.Column="1" Text="Procesar Pago"   
+                                   BackgroundColor="Green" TextColor="White" Padding="15"  
+                                   Command="{Binding ProcesarPagoCommand}"  
+                                   IsEnabled="{Binding PuedeProcesarPago}"/>  
+                        </Grid>  
+
+                    </StackLayout>  
+                </Frame>  
+
+                <!-- Pedidos Recientes Pagados -->  
+                <Frame BackgroundColor="LightGreen" Padding="15">  
+                    <StackLayout>  
+                        <Label Text="Pedidos Pagados Hoy:" FontSize="18" FontAttributes="Bold"/>  
+                        <CollectionView ItemsSource="{Binding PedidosPagadosHoy}">  
+                            <CollectionView.ItemTemplate>  
+                                <DataTemplate>  
+                                    <Frame BackgroundColor="White" Padding="10" Margin="0,5"  
+                                           HasShadow="True">  
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto">  
+                                            <Label Grid.Column="0" Text="{Binding Mesa.Numero, StringFormat='M{0}'}"   
+                                                   FontSize="16" FontAttributes="Bold" TextColor="DarkGreen"  
+                                                   VerticalOptions="Center"/>  
+
+                                            <StackLayout Grid.Column="1" Padding="10,0">  
+                                                <Label Text="{Binding FechaHora, StringFormat='{0:HH:mm}'}"   
+                                                       FontSize="12" TextColor="Gray"/>  
+                                                <Label Text="{Binding Items.Count, StringFormat='{0} items'}"  
+                                                       FontSize="12"/>  
+                                            </StackLayout>  
+
+                                            <Label Grid.Column="2" Text="{Binding MetodoPago}"   
+                                                   FontSize="12" TextColor="Blue" VerticalOptions="Center"/>  
+
+                                            <Label Grid.Column="3" Text="{Binding Total, StringFormat='${0:F2}'}"   
+                                                   FontSize="16" FontAttributes="Bold" TextColor="DarkGreen"  
+                                                   VerticalOptions="Center"/>  
+                                        </Grid>  
+                                    </Frame>  
+                                </DataTemplate>  
+                            </CollectionView.ItemTemplate>  
+                        </CollectionView>  
+                    </StackLayout>  
+                </Frame>  
+
+                <!-- Resumen del Día -->  
+                <Frame BackgroundColor="DarkGreen" Padding="15">  
+                    <StackLayout>  
+                        <Label Text="Resumen de Ventas del Día" TextColor="White"   
+                               FontSize="18" FontAttributes="Bold" HorizontalOptions="Center"/>  
+
+                        <Grid ColumnDefinitions="*,*,*" Margin="0,15">  
+                            <StackLayout Grid.Column="0" HorizontalOptions="Center">  
+                                <Label Text="{Binding TotalVentasHoy}" FontSize="24"   
+                                       FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>  
+                                <Label Text="Ventas" FontSize="14" TextColor="White" HorizontalOptions="Center"/>  
+                            </StackLayout>  
+
+                            <StackLayout Grid.Column="1" HorizontalOptions="Center">  
+                                <Label Text="{Binding TotalRecaudadoHoy, StringFormat='${0:F0}'}" FontSize="24"   
+                                       FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>  
+                                <Label Text="Recaudado" FontSize="14" TextColor="White" HorizontalOptions="Center"/>  
+                            </StackLayout>  
+
+                            <StackLayout Grid.Column="2" HorizontalOptions="Center">  
+                                <Label Text="{Binding PromedioVenta, StringFormat='${0:F0}'}" FontSize="24"   
+                                       FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>  
+                                <Label Text="Promedio" FontSize="14" TextColor="White" HorizontalOptions="Center"/>  
+                            </StackLayout>  
+                        </Grid>  
+
+                        <!-- Distribución por Método de Pago -->  
+                        <BoxView HeightRequest="1" BackgroundColor="White" Margin="0,10"/>  
+                        <Label Text="Por Método de Pago:" FontSize="16" FontAttributes="Bold" TextColor="White"/>  
+                        <CollectionView ItemsSource="{Binding ResumenMetodosPago}">  
+                            <CollectionView.ItemTemplate>  
+                                <DataTemplate>  
+                                    <Grid ColumnDefinitions="*,Auto" Padding="5">  
+                                        <Label Grid.Column="0" Text="{Binding MetodoPago}" TextColor="White"/>  
+                                        <Label Grid.Column="1" Text="{Binding Total, StringFormat='${0:F2}'}"   
+                                               TextColor="White" FontAttributes="Bold" HorizontalOptions="End"/>  
+                                    </Grid>  
+                                </DataTemplate>  
+                            </CollectionView.ItemTemplate>  
+                        </CollectionView>  
+                    </StackLayout>  
+                </Frame>  
+
+            </StackLayout>  
+        </ScrollView>  
+
+    </Grid>  
+
+</ContentPage>

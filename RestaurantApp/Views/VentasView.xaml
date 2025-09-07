@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.VentasView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Reporte de Ventas">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Header -->
+        <StackLayout Grid.Row="0" BackgroundColor="Purple" Padding="15">
+            <Label Text="Reporte de Ventas" TextColor="White" FontSize="20" FontAttributes="Bold"/>
+            <Label Text="{Binding FechaSeleccionada, StringFormat='Fecha: {0:dd/MM/yyyy}'}" 
+                   TextColor="White" FontSize="14"/>
+        </StackLayout>
+
+        <!-- Main Content -->
+        <ScrollView Grid.Row="1">
+            <StackLayout Padding="15" Spacing="15">
+
+                <!-- Selector de Fecha -->
+                <Frame BackgroundColor="LightGray" Padding="15">
+                    <StackLayout>
+                        <Label Text="Seleccionar Fecha:" FontSize="16" FontAttributes="Bold"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <DatePicker Grid.Column="0" Date="{Binding FechaSeleccionada}" 
+                                       BackgroundColor="White"/>
+                            <Button Grid.Column="1" Text="Consultar" BackgroundColor="Purple" 
+                                   TextColor="White" Command="{Binding ConsultarVentasCommand}"/>
+                        </Grid>
+
+                        <!-- Botones de Fecha Rápida -->
+                        <StackLayout Orientation="Horizontal" Margin="0,10">
+                            <Button Text="Hoy" BackgroundColor="Gray" TextColor="White"
+                                   Command="{Binding SeleccionarHoyCommand}"/>
+                            <Button Text="Ayer" BackgroundColor="Gray" TextColor="White"
+                                   Command="{Binding SeleccionarAyerCommand}"/>
+                            <Button Text="Esta Semana" BackgroundColor="Gray" TextColor="White"
+                                   Command="{Binding SeleccionarSemanaCommand}"/>
+                            <Button Text="Este Mes" BackgroundColor="Gray" TextColor="White"
+                                   Command="{Binding SeleccionarMesCommand}"/>
+                        </StackLayout>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Resumen General -->
+                <Frame BackgroundColor="DarkBlue" Padding="20">
+                    <StackLayout>
+                        <Label Text="Resumen General" TextColor="White" 
+                               FontSize="20" FontAttributes="Bold" HorizontalOptions="Center"/>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0,15">
+
+                            <!-- Total Ventas -->
+                            <StackLayout Grid.Column="0" Grid.Row="0" HorizontalOptions="Center">
+                                <Label Text="{Binding TotalVentas}" FontSize="32" 
+                                       FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>
+                                <Label Text="Total Ventas" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <!-- Total Ingresos -->
+                            <StackLayout Grid.Column="1" Grid.Row="0" HorizontalOptions="Center">
+                                <Label Text="{Binding TotalIngresos, StringFormat='${0:F2}'}" FontSize="32" 
+                                       FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>
+                                <Label Text="Total Ingresos" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <!-- Venta Promedio -->
+                            <StackLayout Grid.Column="0" Grid.Row="1" HorizontalOptions="Center" Margin="0,15">
+                                <Label Text="{Binding VentaPromedio, StringFormat='${0:F2}'}" FontSize="24" 
+                                       FontAttributes="Bold" TextColor="LightBlue" HorizontalOptions="Center"/>
+                                <Label Text="Venta Promedio" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <!-- Items Vendidos -->
+                            <StackLayout Grid.Column="1" Grid.Row="1" HorizontalOptions="Center" Margin="0,15">
+                                <Label Text="{Binding TotalItemsVendidos}" FontSize="24" 
+                                       FontAttributes="Bold" TextColor="LightBlue" HorizontalOptions="Center"/>
+                                <Label Text="Items Vendidos" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Gráfico de Ventas por Hora -->
+                <Frame BackgroundColor="LightBlue" Padding="15">
+                    <StackLayout>
+                        <Label Text="Ventas por Hora" FontSize="18" FontAttributes="Bold"/>
+                        <!-- Aquí iría un gráfico - por ahora lista -->
+                        <CollectionView ItemsSource="{Binding VentasPorHora}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Padding="5">
+                                        <Label Grid.Column="0" Text="{Binding Hora, StringFormat='{0:HH}:00'}" 
+                                               FontAttributes="Bold"/>
+
+                                        <!-- Barra visual simple -->
+                                        <ProgressBar Grid.Column="1" Progress="{Binding PorcentajeDelMaximo}" 
+                                                    ProgressColor="Blue" Margin="10,0"/>
+
+                                        <Label Grid.Column="2" Text="{Binding Ventas}" 
+                                               FontAttributes="Bold" TextColor="Blue"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Productos Más Vendidos -->
+                <Frame BackgroundColor="LightGreen" Padding="15">
+                    <StackLayout>
+                        <Label Text="Top 10 Productos Más Vendidos" FontSize="18" FontAttributes="Bold"/>
+
+                        <!-- Header -->
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" BackgroundColor="DarkGreen" Padding="10">
+                            <Label Grid.Column="0" Text="#" TextColor="White" FontAttributes="Bold"/>
+                            <Label Grid.Column="1" Text="Producto" TextColor="White" FontAttributes="Bold"/>
+                            <Label Grid.Column="2" Text="Cant." TextColor="White" FontAttributes="Bold"/>
+                            <Label Grid.Column="3" Text="Total" TextColor="White" FontAttributes="Bold"/>
+                        </Grid>
+
+                        <CollectionView ItemsSource="{Binding TopProductos}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" Padding="10,5" 
+                                          BackgroundColor="White">
+                                        <Label Grid.Column="0" Text="{Binding Posicion}" 
+                                               FontAttributes="Bold" TextColor="DarkGreen"/>
+                                        <StackLayout Grid.Column="1">
+                                            <Label Text="{Binding Producto.Nombre}" FontAttributes="Bold"/>
+                                            <Label Text="{Binding Producto.Categoria}" FontSize="12" TextColor="Gray"/>
+                                        </StackLayout>
+                                        <Label Grid.Column="2" Text="{Binding CantidadVendida}" 
+                                               HorizontalOptions="Center" FontAttributes="Bold"/>
+                                        <Label Grid.Column="3" Text="{Binding TotalVentas, StringFormat='${0:F2}'}" 
+                                               FontAttributes="Bold" TextColor="DarkGreen"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Métodos de Pago -->
+                <Frame BackgroundColor="LightYellow" Padding="15">
+                    <StackLayout>
+                        <Label Text="Distribución por Método de Pago" FontSize="18" FontAttributes="Bold"/>
+
+                        <CollectionView ItemsSource="{Binding DistribucionPagos}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Frame BackgroundColor="White" Padding="15" Margin="0,5">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <StackLayout Grid.Column="0">
+                                                <Label Text="{Binding MetodoPago}" FontSize="16" FontAttributes="Bold"/>
+                                                <Label Text="{Binding Porcentaje, StringFormat='{0:F1}% del total'}" 
+                                                       FontSize="12" TextColor="Gray"/>
+                                            </StackLayout>
+
+                                            <Label Grid.Column="1" Text="{Binding CantidadTransacciones}" 
+                                                   FontSize="16" FontAttributes="Bold" VerticalOptions="Center"
+                                                   HorizontalOptions="Center"/>
+
+                                            <Label Grid.Column="2" Text="{Binding TotalMonto, StringFormat='${0:F2}'}" 
+                                                   FontSize="16" FontAttributes="Bold" TextColor="DarkGreen"
+                                                   VerticalOptions="Center"/>
+                                        </Grid>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Análisis por Mesa -->
+                <Frame BackgroundColor="LightCoral" Padding="15">
+                    <StackLayout>
+                        <Label Text="Análisis por Mesa" FontSize="18" FontAttributes="Bold"/>
+
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" BackgroundColor="DarkRed" Padding="10">
+                            <Label Grid.Column="0" Text="Mesa" TextColor="White" FontAttributes="Bold"/>
+                            <Label Grid.Column="1" Text="Rotación" TextColor="White" FontAttributes="Bold"/>
+                            <Label Grid.Column="2" Text="Pedidos" TextColor="White" FontAttributes="Bold"/>
+                            <Label Grid.Column="3" Text="Total" TextColor="White" FontAttributes="Bold"/>
+                        </Grid>
+
+                        <CollectionView ItemsSource="{Binding AnalisisMesas}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" Padding="10,5" 
+                                          BackgroundColor="White">
+                                        <Label Grid.Column="0" Text="{Binding NumeroMesa}" 
+                                               FontAttributes="Bold" TextColor="DarkRed"/>
+                                        <Label Grid.Column="1" Text="{Binding RotacionDiaria}" 
+                                               HorizontalOptions="Center"/>
+                                        <Label Grid.Column="2" Text="{Binding TotalPedidos}" 
+                                               HorizontalOptions="Center" FontAttributes="Bold"/>
+                                        <Label Grid.Column="3" Text="{Binding TotalVentas, StringFormat='${0:F2}'}" 
+                                               FontAttributes="Bold" TextColor="DarkRed"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Comparativa Períodos -->
+                <Frame BackgroundColor="Purple" Padding="15">
+                    <StackLayout>
+                        <Label Text="Comparativa con Período Anterior" TextColor="White"
+                               FontSize="18" FontAttributes="Bold"/>
+
+                        <Grid ColumnDefinitions="*,*,*" Margin="0,15">
+                            <StackLayout Grid.Column="0" HorizontalOptions="Center">
+                                <Label Text="{Binding CambioVentas, StringFormat='{0:+#;-#;0}%'}" 
+                                       FontSize="24" FontAttributes="Bold" 
+                                       TextColor="{Binding CambioVentas, Converter={StaticResource PositiveNegativeColorConverter}}"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Ventas" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <StackLayout Grid.Column="1" HorizontalOptions="Center">
+                                <Label Text="{Binding CambioIngresos, StringFormat='{0:+#;-#;0}%'}" 
+                                       FontSize="24" FontAttributes="Bold" 
+                                       TextColor="{Binding CambioIngresos, Converter={StaticResource PositiveNegativeColorConverter}}"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Ingresos" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <StackLayout Grid.Column="2" HorizontalOptions="Center">
+                                <Label Text="{Binding CambioPromedio, StringFormat='{0:+#;-#;0}%'}" 
+                                       FontSize="24" FontAttributes="Bold" 
+                                       TextColor="{Binding CambioPromedio, Converter={StaticResource PositiveNegativeColorConverter}}"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Promedio" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
+                            </StackLayout>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Acciones -->
+                <Frame BackgroundColor="Gray" Padding="15">
+                    <StackLayout>
+                        <Label Text="Acciones del Reporte" FontSize="18" FontAttributes="Bold" TextColor="White"/>
+
+                        <Grid ColumnDefinitions="*,*" Margin="0,10">
+                            <Button Grid.Column="0" Text="Exportar PDF" 
+                                   BackgroundColor="Red" TextColor="White"
+                                   Command="{Binding ExportarPDFCommand}"/>
+                            <Button Grid.Column="1" Text="Exportar Excel" 
+                                   BackgroundColor="Green" TextColor="White"
+                                   Command="{Binding ExportarExcelCommand}"/>
+                        </Grid>
+
+                        <Button Text="Enviar Reporte por Email" 
+                               BackgroundColor="Blue" TextColor="White"
+                               Command="{Binding EnviarEmailCommand}" Margin="0,5"/>
+                    </StackLayout>
+                </Frame>
+
+            </StackLayout>
+        </ScrollView>
+
+    </Grid>
+
+</ContentPage>

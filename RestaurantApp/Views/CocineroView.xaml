@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.CocineroView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Cocinero - Órdenes de Cocina">
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Header -->
+        <StackLayout Grid.Row="0" BackgroundColor="DarkOrange" Padding="15">
+            <Label Text="Vista Cocinero" TextColor="White" FontSize="20" FontAttributes="Bold"/>
+            <Label Text="{Binding FechaActual, StringFormat='Fecha: {0:dd/MM/yyyy HH:mm}'}" 
+                   TextColor="White" FontSize="14"/>
+        </StackLayout>
+
+        <!-- Main Content -->
+        <ScrollView Grid.Row="1">
+            <StackLayout Padding="15" Spacing="15">
+
+                <!-- Filtros de Estado -->
+                <Frame BackgroundColor="LightGray" Padding="10">
+                    <StackLayout>
+                        <Label Text="Filtrar por Estado:" FontSize="16" FontAttributes="Bold"/>
+                        <CollectionView ItemsSource="{Binding EstadosDisponibles}"
+                                      SelectedItem="{Binding EstadoFiltroSeleccionado}"
+                                      SelectionMode="Single">
+                            <CollectionView.ItemsLayout>
+                                <LinearItemsLayout Orientation="Horizontal"/>
+                            </CollectionView.ItemsLayout>
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Text="{Binding}" BackgroundColor="Gray" TextColor="White"
+                                            Margin="5" Padding="15,10"/>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Pedidos Activos -->
+                <Frame BackgroundColor="LightGreen" Padding="10">
+                    <StackLayout>
+                        <Label Text="Pedidos Activos:" FontSize="18" FontAttributes="Bold" TextColor="DarkGreen"/>
+                        <CollectionView ItemsSource="{Binding PedidosActivos}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Frame BackgroundColor="White" Padding="15" Margin="0,5" 
+                                           BorderColor="Green" HasShadow="True">
+                                        <StackLayout>
+                                            <!-- Header del Pedido -->
+                                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                                <StackLayout Grid.Column="0">
+                                                    <Label Text="{Binding Mesa.Numero, StringFormat='Mesa: {0}'}" 
+                                                           FontSize="18" FontAttributes="Bold" TextColor="DarkBlue"/>
+                                                    <Label Text="{Binding FechaHora, StringFormat='Hora: {0:HH:mm}'}" 
+                                                           FontSize="14" TextColor="Gray"/>
+                                                </StackLayout>
+
+                                                <Label Grid.Column="1" Text="{Binding Estado}" 
+                                                       FontSize="16" FontAttributes="Bold" 
+                                                       TextColor="Green" VerticalOptions="Center"/>
+
+                                                <Button Grid.Column="2" Text="En Proceso" 
+                                                       BackgroundColor="Orange" TextColor="White"
+                                                       Command="{Binding BindingContext.CambiarEstadoPedidoCommand,
+                                                       Source={x:Reference Name=CocineroPage}}"
+                                                       CommandParameter="{Binding}"
+                                                       IsVisible="{Binding Estado, Converter={StaticResource EstadoToVisibilityConverter}}"/>
+                                            </Grid>
+
+
+                                            <BoxView HeightRequest="1" BackgroundColor="Gray" Margin="0,10"/>
+                                            <!-- Items del Pedido -->
+                                            <Label Text="Items del Pedido:" FontSize="16" FontAttributes="Bold"/>
+                                            <CollectionView ItemsSource="{Binding Items}">
+                                                <CollectionView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid ColumnDefinitions="Auto,*,Auto" Padding="5">
+                                                            <Frame Grid.Column="0" BackgroundColor="DarkBlue" 
+                                                                   Padding="8" CornerRadius="15">
+                                                                <Label Text="{Binding Cantidad}" TextColor="White" 
+                                                                       FontAttributes="Bold" FontSize="16"/>
+                                                            </Frame>
+
+                                                            <StackLayout Grid.Column="1" Padding="10,0">
+                                                                <Label Text="{Binding Producto.Nombre}" 
+                                                                       FontSize="16" FontAttributes="Bold"/>
+                                                                <Label Text="{Binding Producto.Descripcion}" 
+                                                                       FontSize="12" TextColor="Gray"/>
+                                                                <Label Text="{Binding AdicionesEspeciales}" 
+                                                                       FontSize="12" TextColor="Orange" 
+                                                                       FontAttributes="Italic"
+                                                                       IsVisible="{Binding AdicionesEspeciales, Converter={StaticResource StringToBoolConverter}}"/>
+                                                            </StackLayout>
+
+                                                            <Label Grid.Column="2" Text="{Binding Producto.Categoria}"
+                                                                   FontSize="12" TextColor="Purple" 
+                                                                   VerticalOptions="Center"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </CollectionView.ItemTemplate>
+                                            </CollectionView>
+
+                                            <!-- Notas Especiales -->
+                                            <Frame BackgroundColor="LightYellow" Padding="10" Margin="0,10"
+                                                   IsVisible="{Binding NotasEspeciales, Converter={StaticResource StringToBoolConverter}}">
+                                                <StackLayout>
+                                                    <Label Text="Notas Especiales:" FontAttributes="Bold" TextColor="Orange"/>
+                                                    <Label Text="{Binding NotasEspeciales}" TextColor="DarkOrange"/>
+                                                </StackLayout>
+                                            </Frame>
+
+                                            <!-- Botones de Acción -->
+                                            <Grid ColumnDefinitions="*,*" Margin="0,10">
+                                                <Button Grid.Column="0" Text="Marcar Listo" 
+                                                       BackgroundColor="Green" TextColor="White"
+                                                       Command="{Binding BindingContext.MarcarListoCommand,
+                                                       Source={x:Reference Name=CocineroPage}}"
+                                                       CommandParameter="{Binding}"
+                                                       IsEnabled="{Binding Estado, Converter={StaticResource EstadoToEnabledConverter}}"/>
+
+                                                <Button Grid.Column="1" Text="Marcar Problemático" 
+                                                       BackgroundColor="Red" TextColor="White"
+                                                       Command="{Binding BindingContext.MarcarProblematicoCommand,
+                                                       Source={x:Reference Name=CocineroPage}}"
+                                                       CommandParameter="{Binding}"/>
+                                            </Grid>
+
+                                            <!-- Tiempo transcurrido -->
+                                            <Label Text="{Binding TiempoTranscurrido, StringFormat='Tiempo: {0}'}" 
+                                                   FontSize="12" TextColor="Red" HorizontalOptions="End"
+                                                   FontAttributes="Bold"/>
+                                        </StackLayout>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Pedidos Cancelados -->
+                <Frame BackgroundColor="LightCoral" Padding="10">
+                    <StackLayout>
+                        <Label Text="Pedidos Cancelados Hoy:" FontSize="18" FontAttributes="Bold" TextColor="DarkRed"/>
+                        <CollectionView ItemsSource="{Binding PedidosCancelados}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Frame BackgroundColor="White" Padding="15" Margin="0,5" 
+                                           BorderColor="Red" HasShadow="True" Opacity="0.7">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
+                                            <StackLayout Grid.Column="0">
+                                                <Label Text="{Binding Mesa.Numero, StringFormat='Mesa: {0}'}" 
+                                                       FontSize="16" FontAttributes="Bold"/>
+                                                <Label Text="{Binding FechaHora, StringFormat='Cancelado: {0:HH:mm}'}" 
+                                                       FontSize="12" TextColor="Gray"/>
+                                            </StackLayout>
+
+                                            <Label Grid.Column="1" Text="CANCELADO" 
+                                                   FontSize="14" FontAttributes="Bold" 
+                                                   TextColor="Red" VerticalOptions="Center"/>
+
+                                            <Label Grid.Column="2" Text="{Binding Items.Count, StringFormat='{0} items'}"
+                                                   FontSize="12" TextColor="Gray" VerticalOptions="Center"/>
+                                        </Grid>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Estadísticas del Día -->
+                <Frame BackgroundColor="LightBlue" Padding="15">
+                    <StackLayout>
+                        <Label Text="Resumen del Día:" FontSize="18" FontAttributes="Bold"/>
+                        <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto">
+                            <StackLayout Grid.Column="0" Grid.Row="0" HorizontalOptions="Center">
+                                <Label Text="{Binding TotalPedidosActivos}" FontSize="24" 
+                                       FontAttributes="Bold" TextColor="Green" HorizontalOptions="Center"/>
+                                <Label Text="Activos" FontSize="12" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <StackLayout Grid.Column="1" Grid.Row="0" HorizontalOptions="Center">
+                                <Label Text="{Binding TotalPedidosListos}" FontSize="24" 
+                                       FontAttributes="Bold" TextColor="Blue" HorizontalOptions="Center"/>
+                                <Label Text="Listos" FontSize="12" HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <StackLayout Grid.Column="2" Grid.Row="0" HorizontalOptions="Center">
+                                <Label Text="{Binding TotalPedidosCancelados}" FontSize="24" 
+                                       FontAttributes="Bold" TextColor="Red" HorizontalOptions="Center"/>
+                                <Label Text="Cancelados" FontSize="12" HorizontalOptions="Center"/>
+                            </StackLayout>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+            </StackLayout>
+        </ScrollView>
+
+    </Grid>
+
+</ContentPage>
