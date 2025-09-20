@@ -30,7 +30,9 @@ namespace RestaurantApi.Controllers
                 .Include(p => p.Pedido)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            if (pago == null) return NotFound();
+            if (pago == null)
+                return NotFound();
+
             return pago;
         }
 
@@ -45,9 +47,12 @@ namespace RestaurantApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPago(int id, Pago pago)
         {
-            if (id != pago.Id) return BadRequest();
+            if (id != pago.Id)
+                return BadRequest();
+
             _context.Entry(pago).State = EntityState.Modified;
             await _context.SaveChangesAsync();
+
             return NoContent();
         }
 
@@ -55,10 +60,12 @@ namespace RestaurantApi.Controllers
         public async Task<IActionResult> DeletePago(int id)
         {
             var pago = await _context.Pagos.FindAsync(id);
-            if (pago == null) return NotFound();
+            if (pago == null)
+                return NotFound();
 
             _context.Pagos.Remove(pago);
             await _context.SaveChangesAsync();
+
             return NoContent();
         }
     }

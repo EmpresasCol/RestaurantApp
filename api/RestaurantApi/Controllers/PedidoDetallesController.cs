@@ -19,8 +19,8 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<IEnumerable<PedidoDetalle>>> GetPedidoDetalles()
         {
             return await _context.PedidoDetalles
-                .Include(d => d.Platillo)
                 .Include(d => d.Pedido)
+                .Include(d => d.Platillo)
                 .ToListAsync();
         }
 
@@ -28,11 +28,13 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<PedidoDetalle>> GetPedidoDetalle(int id)
         {
             var detalle = await _context.PedidoDetalles
-                .Include(d => d.Platillo)
                 .Include(d => d.Pedido)
+                .Include(d => d.Platillo)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
-            if (detalle == null) return NotFound();
+            if (detalle == null)
+                return NotFound();
+
             return detalle;
         }
 
@@ -47,9 +49,12 @@ namespace RestaurantApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPedidoDetalle(int id, PedidoDetalle detalle)
         {
-            if (id != detalle.Id) return BadRequest();
+            if (id != detalle.Id)
+                return BadRequest();
+
             _context.Entry(detalle).State = EntityState.Modified;
             await _context.SaveChangesAsync();
+
             return NoContent();
         }
 
@@ -57,10 +62,12 @@ namespace RestaurantApi.Controllers
         public async Task<IActionResult> DeletePedidoDetalle(int id)
         {
             var detalle = await _context.PedidoDetalles.FindAsync(id);
-            if (detalle == null) return NotFound();
+            if (detalle == null)
+                return NotFound();
 
             _context.PedidoDetalles.Remove(detalle);
             await _context.SaveChangesAsync();
+
             return NoContent();
         }
     }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
+using RestaurantApi.Dtos;
 
 namespace RestaurantApi.Controllers
 {
@@ -16,17 +17,31 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Usuario>>> GetUsuarios()
+        public async Task<ActionResult<IEnumerable<UsuarioDto>>> GetUsuarios()
         {
-            return await _context.Usuarios.ToListAsync();
+            var usuarios = await _context.Usuarios.ToListAsync();
+            return usuarios.Select(u => new UsuarioDto
+            {
+                Id = u.Id,
+                Nombre = u.Nombre,
+                Usuario = u.Usuario,
+                Rol = u.Rol.ToString()
+            }).ToList();
         }
 
         [HttpGet("{id}")]
-        public async Task<ActionResult<Usuario>> GetUsuario(int id)
+        public async Task<ActionResult<UsuarioDto>> GetUsuario(int id)
         {
             var usuario = await _context.Usuarios.FindAsync(id);
             if (usuario == null) return NotFound();
-            return usuario;
+
+            return new UsuarioDto
+            {
+                Id = usuario.Id,
+                Nombre = usuario.Nombre,
+                Usuario = usuario.Usuario,
+                Rol = usuario.Rol.ToString()
+            };
         }
 
         [HttpPost]

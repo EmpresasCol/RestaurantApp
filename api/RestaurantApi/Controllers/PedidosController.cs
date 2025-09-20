@@ -21,8 +21,6 @@ namespace RestaurantApi.Controllers
             return await _context.Pedidos
                 .Include(p => p.Mesa)
                 .Include(p => p.Usuario)
-                .Include(p => p.Detalles)
-                .ThenInclude(d => d.Platillo)
                 .ToListAsync();
         }
 
@@ -32,11 +30,11 @@ namespace RestaurantApi.Controllers
             var pedido = await _context.Pedidos
                 .Include(p => p.Mesa)
                 .Include(p => p.Usuario)
-                .Include(p => p.Detalles)
-                .ThenInclude(d => d.Platillo)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
-            if (pedido == null) return NotFound();
+            if (pedido == null)
+                return NotFound();
+
             return pedido;
         }
 
@@ -51,9 +49,12 @@ namespace RestaurantApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPedido(int id, Pedido pedido)
         {
-            if (id != pedido.Id) return BadRequest();
+            if (id != pedido.Id)
+                return BadRequest();
+
             _context.Entry(pedido).State = EntityState.Modified;
             await _context.SaveChangesAsync();
+
             return NoContent();
         }
 
@@ -61,10 +62,12 @@ namespace RestaurantApi.Controllers
         public async Task<IActionResult> DeletePedido(int id)
         {
             var pedido = await _context.Pedidos.FindAsync(id);
-            if (pedido == null) return NotFound();
+            if (pedido == null)
+                return NotFound();
 
             _context.Pedidos.Remove(pedido);
             await _context.SaveChangesAsync();
+
             return NoContent();
         }
     }
