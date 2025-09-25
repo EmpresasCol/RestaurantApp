@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.ConfiguracionView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Configuración"
+             BackgroundColor="#F5F5F5">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <StackLayout Grid.Row="0" BackgroundColor="#6C757D" Padding="20,15">
+            <Label Text="Configuración" 
+                   TextColor="White" 
+                   FontSize="20" 
+                   FontAttributes="Bold"/>
+            <Label Text="Ajustes del sistema" 
+                   TextColor="White" 
+                   FontSize="14"
+                   Opacity="0.9"/>
+        </StackLayout>
+
+        <!-- Configuraciones -->
+        <ScrollView Grid.Row="1" Padding="15">
+            <StackLayout Spacing="20">
+
+                <!-- Información del Mesero -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Información Personal" 
+                               FontSize="16" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+                            <Label Grid.Row="0" Grid.Column="0" Text="Nombre:" FontAttributes="Bold"/>
+                            <Entry Grid.Row="0" Grid.Column="1" Text="{Binding NombreMesero}" />
+
+                            <Label Grid.Row="1" Grid.Column="0" Text="ID Empleado:" FontAttributes="Bold"/>
+                            <Entry Grid.Row="1" Grid.Column="1" Text="{Binding IdEmpleado}" IsReadOnly="True" BackgroundColor="#F8F9FA"/>
+
+                            <Label Grid.Row="2" Grid.Column="0" Text="Turno:" FontAttributes="Bold"/>
+                            <Picker Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Turnos}" SelectedItem="{Binding TurnoSeleccionado}"/>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Configuración de la App -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Configuración de la App" 
+                               FontSize="16" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <!-- Servidor API -->
+                        <Grid ColumnDefinitions="*,*" RowSpacing="10" ColumnSpacing="10">
+                            <Label Grid.Row="0" Grid.Column="0" Text="Servidor API:" FontAttributes="Bold"/>
+                            <Entry Grid.Row="0" Grid.Column="1" 
+                                   Text="{Binding UrlServidor}" 
+                                   Placeholder="http://localhost:5176"
+                                   Completed="OnUrlServidorCompleted"/>
+                        </Grid>
+
+                        <!-- Switches de configuración -->
+                        <StackLayout Spacing="15" Margin="0,20,0,0">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" Text="Modo Offline" VerticalOptions="Center"/>
+                                <Switch Grid.Column="1" 
+                                        IsToggled="{Binding ModoOffline}"
+                                        Toggled="OnModoOfflineChanged"/>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" Text="Notificaciones" VerticalOptions="Center"/>
+                                <Switch Grid.Column="1" IsToggled="{Binding NotificacionesActivas}"/>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" Text="Sonidos" VerticalOptions="Center"/>
+                                <Switch Grid.Column="1" IsToggled="{Binding SonidosActivos}"/>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Grid.Column="0" Text="Modo Oscuro" VerticalOptions="Center"/>
+                                <Switch Grid.Column="1" 
+                                        IsToggled="{Binding ModoOscuro}"
+                                        Toggled="OnModoOscuroChanged"/>
+                            </Grid>
+                        </StackLayout>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Estadísticas del Día -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Estadísticas del Día" 
+                               FontSize="16" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+                            <Label Grid.Row="0" Grid.Column="0" Text="Pedidos Tomados:" FontAttributes="Bold"/>
+                            <Label Grid.Row="0" Grid.Column="1" Text="{Binding PedidosTomados}" HorizontalOptions="End"/>
+
+                            <Label Grid.Row="1" Grid.Column="0" Text="Mesas Atendidas:" FontAttributes="Bold"/>
+                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding MesasAtendidas}" HorizontalOptions="End"/>
+
+                            <Label Grid.Row="2" Grid.Column="0" Text="Ventas Generadas:" FontAttributes="Bold"/>
+                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding VentasGeneradas, StringFormat='${0:N0}'}" HorizontalOptions="End" TextColor="#28A745"/>
+
+                            <Label Grid.Row="3" Grid.Column="0" Text="Tiempo Activo:" FontAttributes="Bold"/>
+                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding TiempoActivo}" HorizontalOptions="End"/>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Acciones Rápidas -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Acciones Rápidas" 
+                               FontSize="16" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+                            <Button Grid.Row="0" Grid.Column="0"
+                                    Text="🔄 Sincronizar"
+                                    BackgroundColor="#17A2B8"
+                                    TextColor="White"
+                                    CornerRadius="8"
+                                    Command="{Binding SincronizarCommand}"/>
+
+                            <Button Grid.Row="0" Grid.Column="1"
+                                    Text="🗑️ Limpiar Caché"
+                                    BackgroundColor="#FFC107"
+                                    TextColor="White"
+                                    CornerRadius="8"
+                                    Command="{Binding LimpiarCacheCommand}"/>
+
+                            <Button Grid.Row="1" Grid.Column="0"
+                                    Text="📤 Exportar Datos"
+                                    BackgroundColor="#6F42C1"
+                                    TextColor="White"
+                                    CornerRadius="8"
+                                    Command="{Binding ExportarDatosCommand}"/>
+
+                            <Button Grid.Row="1" Grid.Column="1"
+                                    Text="❓ Ayuda"
+                                    BackgroundColor="#28A745"
+                                    TextColor="White"
+                                    CornerRadius="8"
+                                    Command="{Binding MostrarAyudaCommand}"/>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Información del Sistema -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Información del Sistema" 
+                               FontSize="16" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="5">
+                            <Label Grid.Row="0" Grid.Column="0" Text="Versión de la App:" FontSize="12" TextColor="#666"/>
+                            <Label Grid.Row="0" Grid.Column="1" Text="{Binding VersionApp}" FontSize="12" HorizontalOptions="End"/>
+
+                            <Label Grid.Row="1" Grid.Column="0" Text="Última Sincronización:" FontSize="12" TextColor="#666"/>
+                            <Label Grid.Row="1" Grid.Column="1" Text="{Binding UltimaSincronizacion, StringFormat='{0:dd/MM HH:mm}'}" FontSize="12" HorizontalOptions="End"/>
+
+                            <Label Grid.Row="2" Grid.Column="0" Text="Estado Conexión:" FontSize="12" TextColor="#666"/>
+                            <Label Grid.Row="2" Grid.Column="1" Text="{Binding EstadoConexion}" FontSize="12" HorizontalOptions="End" TextColor="{Binding ColorConexion}"/>
+
+                            <Label Grid.Row="3" Grid.Column="0" Text="Dispositivo:" FontSize="12" TextColor="#666"/>
+                            <Label Grid.Row="3" Grid.Column="1" Text="{Binding InfoDispositivo}" FontSize="12" HorizontalOptions="End"/>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+            </StackLayout>
+        </ScrollView>
+
+        <!-- Footer -->
+        <StackLayout Grid.Row="2" 
+                     BackgroundColor="White" 
+                     Orientation="Horizontal" 
+                     Padding="15,10">
+            <Button Text="🏠 Inicio"
+                    BackgroundColor="Transparent"
+                    TextColor="#666"
+                    Command="{Binding VolverInicioCommand}"
+                    HorizontalOptions="Start"/>
+
+            <Button Text="💾 Guardar Cambios"
+                    BackgroundColor="#28A745"
+                    TextColor="White"
+                    FontSize="12"
+                    CornerRadius="15"
+                    Padding="20,8"
+                    Command="{Binding GuardarConfiguracionCommand}"
+                    HorizontalOptions="CenterAndExpand"/>
+
+            <Button Text="🚪 Cerrar Sesión"
+                    BackgroundColor="#DC3545"
+                    TextColor="White"
+                    FontSize="12"
+                    CornerRadius="15"
+                    Padding="15,8"
+                    Command="{Binding CerrarSesionCommand}"
+                    HorizontalOptions="End"/>
+        </StackLayout>
+
+    </Grid>
+
+</ContentPage>

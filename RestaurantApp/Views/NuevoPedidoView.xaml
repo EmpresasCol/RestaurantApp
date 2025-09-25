@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.NuevoPedidoView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Nuevo Pedido"
+             BackgroundColor="#F5F5F5">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header con Mesa Seleccionada -->
+        <StackLayout Grid.Row="0" BackgroundColor="#FF6B35" Padding="20,15">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackLayout Grid.Column="0">
+                    <Label Text="Nuevo Pedido" 
+                           TextColor="White" 
+                           FontSize="20" 
+                           FontAttributes="Bold"/>
+                    <Label Text="{Binding MesaSeleccionada, StringFormat='Mesa: {0}'}" 
+                           TextColor="White" 
+                           FontSize="16"
+                           Opacity="0.9"/>
+                </StackLayout>
+                <Button Grid.Column="1"
+                        Text="📋"
+                        BackgroundColor="Transparent"
+                        TextColor="White"
+                        FontSize="20"
+                        Clicked="OnVerCarritoClicked"
+                        WidthRequest="50"
+                        HeightRequest="50"/>
+            </Grid>
+        </StackLayout>
+
+        <!-- Contenido Principal -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,300">
+
+            <!-- Panel Izquierdo - Menú -->
+            <ScrollView Grid.Column="0" Padding="15">
+                <StackLayout Spacing="20">
+
+                    <!-- Selector de Mesa -->
+                    <Frame BackgroundColor="White" CornerRadius="12" Padding="15" HasShadow="True">
+                        <StackLayout>
+                            <Label Text="Seleccionar Mesa" 
+                                   FontSize="16" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#333"
+                                   Margin="0,0,0,10"/>
+
+                            <CollectionView ItemsSource="{Binding MesasDisponibles}"
+                                          SelectedItem="{Binding MesaSeleccionada}"
+                                          SelectionMode="Single">
+                                <CollectionView.ItemsLayout>
+                                    <GridItemsLayout Orientation="Vertical" Span="6"/>
+                                </CollectionView.ItemsLayout>
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Padding="5">
+                                            <Frame BackgroundColor="{Binding ColorEstado}"
+                                                   Padding="10"
+                                                   CornerRadius="8"
+                                                   HasShadow="True">
+                                                <StackLayout HorizontalOptions="Center">
+                                                    <Label Text="{Binding Numero}" 
+                                                           TextColor="White"
+                                                           FontAttributes="Bold"
+                                                           FontSize="16"
+                                                           HorizontalOptions="Center"/>
+                                                    <Label Text="{Binding Estado}" 
+                                                           TextColor="White"
+                                                           FontSize="10"
+                                                           HorizontalOptions="Center"/>
+                                                </StackLayout>
+                                            </Frame>
+                                        </Grid>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </StackLayout>
+                    </Frame>
+
+                    <!-- Categorías -->
+                    <Frame BackgroundColor="White" CornerRadius="12" Padding="15" HasShadow="True">
+                        <StackLayout>
+                            <Label Text="Categorías" 
+                                   FontSize="16" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#333"
+                                   Margin="0,0,0,10"/>
+
+                            <CollectionView ItemsSource="{Binding Categorias}"
+                                          SelectedItem="{Binding CategoriaSeleccionada}"
+                                          SelectionMode="Single">
+                                <CollectionView.ItemsLayout>
+                                    <LinearItemsLayout Orientation="Horizontal" ItemSpacing="10"/>
+                                </CollectionView.ItemsLayout>
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Text="{Binding Nombre}"
+                                                BackgroundColor="{Binding ColorFondo}"
+                                                TextColor="White"
+                                                FontSize="14"
+                                                FontAttributes="Bold"
+                                                CornerRadius="20"
+                                                Padding="20,10"
+                                                Command="{Binding BindingContext.SeleccionarCategoriaCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                CommandParameter="{Binding}"/>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </StackLayout>
+                    </Frame>
+
+                    <!-- Platillos -->
+                    <Frame BackgroundColor="White" CornerRadius="12" Padding="15" HasShadow="True">
+                        <StackLayout>
+                            <Label Text="Menú" 
+                                   FontSize="16" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#333"
+                                   Margin="0,0,0,15"/>
+
+                            <CollectionView ItemsSource="{Binding PlatillosFiltrados}">
+                                <CollectionView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Frame BackgroundColor="#FAFAFA" 
+                                               CornerRadius="10" 
+                                               Padding="15" 
+                                               Margin="0,5"
+                                               HasShadow="False">
+                                            <Grid ColumnDefinitions="80,*,Auto">
+
+                                                <!-- Imagen -->
+                                                <Frame Grid.Column="0" 
+                                                       CornerRadius="8" 
+                                                       Padding="0"
+                                                       HeightRequest="70"
+                                                       WidthRequest="70">
+                                                    <Image Source="{Binding ImagenUrl, FallbackValue='https://via.placeholder.com/70x70?text=🍽️'}"
+                                                           Aspect="AspectFill"/>
+                                                </Frame>
+
+                                                <!-- Información -->
+                                                <StackLayout Grid.Column="1" 
+                                                           Padding="15,0"
+                                                           VerticalOptions="Center">
+                                                    <Label Text="{Binding Nombre}" 
+                                                           FontAttributes="Bold"
+                                                           FontSize="16"
+                                                           TextColor="#333"/>
+                                                    <Label Text="{Binding Descripcion}" 
+                                                           FontSize="12"
+                                                           TextColor="#666"
+                                                           LineBreakMode="TailTruncation"/>
+                                                    <Label Text="{Binding Precio, StringFormat='${0:N0}'}" 
+                                                           FontAttributes="Bold"
+                                                           FontSize="16"
+                                                           TextColor="#FF6B35"/>
+                                                </StackLayout>
+
+                                                <!-- Controles -->
+                                                <StackLayout Grid.Column="2" 
+                                                           VerticalOptions="Center"
+                                                           Orientation="Horizontal"
+                                                           Spacing="10">
+                                                    <Button Text="−"
+                                                            BackgroundColor="#DC3545"
+                                                            TextColor="White"
+                                                            FontSize="18"
+                                                            FontAttributes="Bold"
+                                                            CornerRadius="15"
+                                                            WidthRequest="30"
+                                                            HeightRequest="30"
+                                                            Command="{Binding BindingContext.DisminuirCantidadCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                            CommandParameter="{Binding}"/>
+
+                                                    <Label Text="{Binding CantidadTemporal}"
+                                                           FontAttributes="Bold"
+                                                           FontSize="16"
+                                                           VerticalOptions="Center"
+                                                           HorizontalOptions="Center"
+                                                           WidthRequest="30"
+                                                           HorizontalTextAlignment="Center"/>
+
+                                                    <Button Text="+"
+                                                            BackgroundColor="#28A745"
+                                                            TextColor="White"
+                                                            FontSize="18"
+                                                            FontAttributes="Bold"
+                                                            CornerRadius="15"
+                                                            WidthRequest="30"
+                                                            HeightRequest="30"
+                                                            Command="{Binding BindingContext.AumentarCantidadCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </StackLayout>
+                                            </Grid>
+                                        </Frame>
+                                    </DataTemplate>
+                                </CollectionView.ItemTemplate>
+                            </CollectionView>
+                        </StackLayout>
+                    </Frame>
+
+                </StackLayout>
+            </ScrollView>
+
+            <!-- Panel Derecho - Carrito -->
+            <Frame Grid.Column="1" 
+                   BackgroundColor="White" 
+                   CornerRadius="0" 
+                   Padding="20"
+                   HasShadow="True"
+                   Margin="0">
+                <StackLayout>
+                    <Label Text="Pedido Actual" 
+                           FontSize="18" 
+                           FontAttributes="Bold" 
+                           TextColor="#333"
+                           Margin="0,0,0,15"/>
+
+                    <!-- Items del Pedido -->
+                    <CollectionView ItemsSource="{Binding ItemsPedidoActual}"
+                                  HeightRequest="400">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Padding="0,5" ColumnDefinitions="*,Auto,Auto">
+                                    <StackLayout Grid.Column="0">
+                                        <Label Text="{Binding Platillo.Nombre}" 
+                                               FontAttributes="Bold"
+                                               FontSize="14"/>
+                                        <Label Text="{Binding Platillo.Precio, StringFormat='${0:N0} c/u'}" 
+                                               FontSize="12"
+                                               TextColor="#666"/>
+                                    </StackLayout>
+
+                                    <StackLayout Grid.Column="1" 
+                                               Orientation="Horizontal"
+                                               VerticalOptions="Center"
+                                               Spacing="5">
+                                        <Label Text="{Binding Cantidad, StringFormat='x{0}'}"
+                                               FontAttributes="Bold"
+                                               VerticalOptions="Center"/>
+                                        <Label Text="{Binding Subtotal, StringFormat='${0:N0}'}"
+                                               FontAttributes="Bold"
+                                               TextColor="#FF6B35"
+                                               VerticalOptions="Center"/>
+                                    </StackLayout>
+
+                                    <Button Grid.Column="2"
+                                            Text="🗑️"
+                                            BackgroundColor="Transparent"
+                                            TextColor="#DC3545"
+                                            FontSize="16"
+                                            WidthRequest="30"
+                                            Command="{Binding BindingContext.EliminarItemCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+
+                    <BoxView HeightRequest="1" BackgroundColor="#E0E0E0" Margin="0,15"/>
+
+                    <!-- Total -->
+                    <StackLayout Orientation="Horizontal" Margin="0,10">
+                        <Label Text="Total:" 
+                               FontSize="18" 
+                               FontAttributes="Bold"
+                               VerticalOptions="Center"/>
+                        <Label Text="{Binding TotalPedido, StringFormat='${0:N0}'}" 
+                               FontSize="20" 
+                               FontAttributes="Bold"
+                               TextColor="#FF6B35"
+                               HorizontalOptions="EndAndExpand"
+                               VerticalOptions="Center"/>
+                    </StackLayout>
+
+                    <!-- Notas -->
+                    <Entry Placeholder="Notas especiales..."
+                           Text="{Binding NotasEspeciales}"
+                           Margin="0,10"/>
+
+                    <!-- Botones -->
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,20">
+                        <Button Grid.Column="0"
+                                Text="Limpiar"
+                                BackgroundColor="#6C757D"
+                                TextColor="White"
+                                CornerRadius="8"
+                                Command="{Binding LimpiarPedidoCommand}"/>
+                        <Button Grid.Column="1"
+                                Text="Confirmar"
+                                BackgroundColor="#28A745"
+                                TextColor="White"
+                                CornerRadius="8"
+                                Command="{Binding ConfirmarPedidoCommand}"
+                                IsEnabled="{Binding PuedeConfirmarPedido}"/>
+                    </Grid>
+                </StackLayout>
+            </Frame>
+
+        </Grid>
+
+        <!-- Footer de Navegación -->
+        <StackLayout Grid.Row="2" 
+                     BackgroundColor="White" 
+                     Orientation="Horizontal" 
+                     Padding="15,10">
+            <Button Text="🏠 Inicio"
+                    BackgroundColor="Transparent"
+                    TextColor="#666"
+                    Command="{Binding VolverInicioCommand}"
+                    HorizontalOptions="Start"/>
+
+            <Label Text="{Binding TotalItems, StringFormat='Items: {0}'}"
+                   VerticalOptions="Center"
+                   FontAttributes="Bold"
+                   TextColor="#FF6B35"
+                   HorizontalOptions="CenterAndExpand"/>
+
+            <Label Text="{Binding FechaHora, StringFormat='{0:HH:mm}'}"
+                   VerticalOptions="Center"
+                   TextColor="#666"
+                   HorizontalOptions="End"/>
+        </StackLayout>
+
+    </Grid>
+
+</ContentPage>

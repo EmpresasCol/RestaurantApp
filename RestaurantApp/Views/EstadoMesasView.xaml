@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.EstadoMesasView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Estado de Mesas"
+             BackgroundColor="#F5F5F5">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Header -->
+        <StackLayout Grid.Row="0" BackgroundColor="#6F42C1" Padding="20,15">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackLayout Grid.Column="0">
+                    <Label Text="Estado de Mesas" 
+                           TextColor="White" 
+                           FontSize="20" 
+                           FontAttributes="Bold"/>
+                    <Label Text="{Binding ResumenMesas}" 
+                           TextColor="White" 
+                           FontSize="14"
+                           Opacity="0.9"/>
+                </StackLayout>
+                <Button Grid.Column="1"
+                        Text="🔄"
+                        BackgroundColor="Transparent"
+                        TextColor="White"
+                        FontSize="18"
+                        Command="{Binding ActualizarEstadoCommand}"
+                        WidthRequest="50"
+                        HeightRequest="50"/>
+            </Grid>
+        </StackLayout>
+
+        <!-- Leyenda de Estados -->
+        <Frame Grid.Row="1" BackgroundColor="White" CornerRadius="0" Padding="15" HasShadow="True">
+            <StackLayout>
+                <Label Text="Estados:" 
+                       FontSize="14" 
+                       FontAttributes="Bold" 
+                       TextColor="#333"
+                       Margin="0,0,0,10"/>
+
+                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                    <StackLayout Grid.Column="0" Orientation="Horizontal">
+                        <Frame BackgroundColor="#28A745" 
+                               WidthRequest="20" 
+                               HeightRequest="20" 
+                               CornerRadius="10"
+                               Padding="0"
+                               VerticalOptions="Center"/>
+                        <Label Text="Disponible" 
+                               FontSize="12" 
+                               VerticalOptions="Center" 
+                               Padding="5,0"/>
+                    </StackLayout>
+
+                    <StackLayout Grid.Column="1" Orientation="Horizontal">
+                        <Frame BackgroundColor="#DC3545" 
+                               WidthRequest="20" 
+                               HeightRequest="20" 
+                               CornerRadius="10"
+                               Padding="0"
+                               VerticalOptions="Center"/>
+                        <Label Text="Ocupada" 
+                               FontSize="12" 
+                               VerticalOptions="Center" 
+                               Padding="5,0"/>
+                    </StackLayout>
+
+                    <StackLayout Grid.Column="2" Orientation="Horizontal">
+                        <Frame BackgroundColor="#FFC107" 
+                               WidthRequest="20" 
+                               HeightRequest="20" 
+                               CornerRadius="10"
+                               Padding="0"
+                               VerticalOptions="Center"/>
+                        <Label Text="Esperando Pago" 
+                               FontSize="12" 
+                               VerticalOptions="Center" 
+                               Padding="5,0"/>
+                    </StackLayout>
+
+                    <StackLayout Grid.Column="3" Orientation="Horizontal">
+                        <Frame BackgroundColor="#17A2B8" 
+                               WidthRequest="20" 
+                               HeightRequest="20" 
+                               CornerRadius="10"
+                               Padding="0"
+                               VerticalOptions="Center"/>
+                        <Label Text="Limpieza" 
+                               FontSize="12" 
+                               VerticalOptions="Center" 
+                               Padding="5,0"/>
+                    </StackLayout>
+                </Grid>
+            </StackLayout>
+        </Frame>
+
+        <!-- Grid de Mesas -->
+        <ScrollView Grid.Row="2" Padding="15">
+            <StackLayout>
+                <!-- Estadísticas Rápidas -->
+                <Frame BackgroundColor="White" 
+                       CornerRadius="12" 
+                       Padding="20"
+                       HasShadow="True"
+                       Margin="0,0,0,20">
+                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+                        <StackLayout Grid.Column="0" HorizontalOptions="Center">
+                            <Label Text="{Binding MesasDisponibles}" 
+                                   FontSize="24" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#28A745"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="Disponibles" 
+                                   FontSize="10" 
+                                   TextColor="#666"
+                                   HorizontalOptions="Center"/>
+                        </StackLayout>
+
+                        <StackLayout Grid.Column="1" HorizontalOptions="Center">
+                            <Label Text="{Binding MesasOcupadas}" 
+                                   FontSize="24" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#DC3545"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="Ocupadas" 
+                                   FontSize="10" 
+                                   TextColor="#666"
+                                   HorizontalOptions="Center"/>
+                        </StackLayout>
+
+                        <StackLayout Grid.Column="2" HorizontalOptions="Center">
+                            <Label Text="{Binding MesasEsperandoPago}" 
+                                   FontSize="24" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#FFC107"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="Esp. Pago" 
+                                   FontSize="10" 
+                                   TextColor="#666"
+                                   HorizontalOptions="Center"/>
+                        </StackLayout>
+
+                        <StackLayout Grid.Column="3" HorizontalOptions="Center">
+                            <Label Text="{Binding PorcentajeOcupacion, StringFormat='{0:F0}%'}" 
+                                   FontSize="24" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#6F42C1"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="Ocupación" 
+                                   FontSize="10" 
+                                   TextColor="#666"
+                                   HorizontalOptions="Center"/>
+                        </StackLayout>
+                    </Grid>
+                </Frame>
+
+                <!-- Mesas -->
+                <CollectionView ItemsSource="{Binding Mesas}">
+                    <CollectionView.ItemsLayout>
+                        <GridItemsLayout Orientation="Vertical" 
+                                       Span="4" 
+                                       HorizontalItemSpacing="10" 
+                                       VerticalItemSpacing="10"/>
+                    </CollectionView.ItemsLayout>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Frame BackgroundColor="{Binding ColorEstado}"
+                                       Padding="15"
+                                       CornerRadius="12"
+                                       HasShadow="True"
+                                       HeightRequest="120">
+                                    <Frame.GestureRecognizers>
+                                        <TapGestureRecognizer Command="{Binding BindingContext.SeleccionarMesaCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                            CommandParameter="{Binding}"/>
+                                    </Frame.GestureRecognizers>
+
+                                    <StackLayout HorizontalOptions="Center" VerticalOptions="Center">
+                                        <!-- Número de Mesa -->
+                                        <Label Text="{Binding Numero}" 
+                                               TextColor="White"
+                                               FontAttributes="Bold"
+                                               FontSize="24"
+                                               HorizontalOptions="Center"/>
+
+                                        <!-- Estado -->
+                                        <Label Text="{Binding Estado}" 
+                                               TextColor="White"
+                                               FontSize="10"
+                                               HorizontalOptions="Center"
+                                               Opacity="0.9"/>
+
+                                        <!-- Capacidad -->
+                                        <Label Text="{Binding Capacidad, StringFormat='👥{0}'}" 
+                                               TextColor="White"
+                                               FontSize="10"
+                                               HorizontalOptions="Center"
+                                               Opacity="0.8"/>
+
+                                        <!-- Tiempo ocupada (si aplica) -->
+                                        <Label Text="{Binding TiempoOcupada}" 
+                                               TextColor="White"
+                                               FontSize="9"
+                                               HorizontalOptions="Center"
+                                               Opacity="0.7"
+                                               IsVisible="{Binding EstaOcupada}"/>
+                                    </StackLayout>
+                                </Frame>
+
+                                <!-- Indicador de pedidos pendientes -->
+                                <Frame BackgroundColor="#FF6B35"
+                                       Padding="5"
+                                       CornerRadius="10"
+                                       WidthRequest="20"
+                                       HeightRequest="20"
+                                       HorizontalOptions="End"
+                                       VerticalOptions="Start"
+                                       Margin="5"
+                                       IsVisible="{Binding TienePedidosPendientes}">
+                                    <Label Text="{Binding CantidadPedidosPendientes}"
+                                           TextColor="White"
+                                           FontSize="10"
+                                           FontAttributes="Bold"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"/>
+                                </Frame>
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </StackLayout>
+        </ScrollView>
+
+        <!-- Footer -->
+        <StackLayout Grid.Row="3" 
+                     BackgroundColor="White" 
+                     Orientation="Horizontal" 
+                     Padding="15,10">
+            <Button Text="🏠 Inicio"
+                    BackgroundColor="Transparent"
+                    TextColor="#666"
+                    Command="{Binding VolverInicioCommand}"
+                    HorizontalOptions="Start"/>
+
+            <Label Text="{Binding TotalMesas, StringFormat='Total: {0} mesas'}"
+                   VerticalOptions="Center"
+                   FontAttributes="Bold"
+                   TextColor="#666"
+                   HorizontalOptions="CenterAndExpand"/>
+
+            <Button Text="📊 Detalles"
+                    BackgroundColor="#6F42C1"
+                    TextColor="White"
+                    FontSize="12"
+                    CornerRadius="15"
+                    Padding="15,8"
+                    Command="{Binding VerDetallesCommand}"
+                    HorizontalOptions="End"/>
+        </StackLayout>
+
+    </Grid>
+
+</ContentPage>

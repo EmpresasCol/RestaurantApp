@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.PedidosActivosView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Pedidos Activos"
+             BackgroundColor="#F5F5F5">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Header -->
+        <StackLayout Grid.Row="0" BackgroundColor="#17A2B8" Padding="20,15">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackLayout Grid.Column="0">
+                    <Label Text="Pedidos Activos" 
+                           TextColor="White" 
+                           FontSize="20" 
+                           FontAttributes="Bold"/>
+                    <Label Text="{Binding CantidadPedidosActivos, StringFormat='{0} pedidos activos'}" 
+                           TextColor="White" 
+                           FontSize="14"
+                           Opacity="0.9"/>
+                </StackLayout>
+                <Button Grid.Column="1"
+                        Text="🔄"
+                        BackgroundColor="Transparent"
+                        TextColor="White"
+                        FontSize="18"
+                        Command="{Binding ActualizarCommand}"
+                        WidthRequest="50"
+                        HeightRequest="50"/>
+            </Grid>
+        </StackLayout>
+
+        <!-- Filtros -->
+        <Frame Grid.Row="1" BackgroundColor="White" CornerRadius="0" Padding="15" HasShadow="True">
+            <StackLayout>
+                <Label Text="Filtrar por:" 
+                       FontSize="14" 
+                       FontAttributes="Bold" 
+                       TextColor="#333"
+                       Margin="0,0,0,5"/>
+
+                <CollectionView ItemsSource="{Binding FiltrosEstado}"
+                              SelectedItem="{Binding FiltroSeleccionado}"
+                              SelectionMode="Single">
+                    <CollectionView.ItemsLayout>
+                        <LinearItemsLayout Orientation="Horizontal" ItemSpacing="10"/>
+                    </CollectionView.ItemsLayout>
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Button Text="{Binding Texto}"
+                                    BackgroundColor="{Binding ColorFondo}"
+                                    TextColor="White"
+                                    FontSize="12"
+                                    CornerRadius="15"
+                                    Padding="15,8"
+                                    Command="{Binding BindingContext.SeleccionarFiltroCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                    CommandParameter="{Binding}"/>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </StackLayout>
+        </Frame>
+
+        <!-- Lista de Pedidos -->
+        <CollectionView Grid.Row="2" 
+                       ItemsSource="{Binding PedidosFiltrados}"
+                       Margin="15,10">
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Frame BackgroundColor="White" 
+                           CornerRadius="12" 
+                           Padding="20" 
+                           Margin="0,5"
+                           HasShadow="True">
+                        <StackLayout>
+
+                            <!-- Header del Pedido -->
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                <Frame Grid.Column="0" 
+                                       BackgroundColor="#FF6B35" 
+                                       Padding="10,5" 
+                                       CornerRadius="8"
+                                       VerticalOptions="Center">
+                                    <Label Text="{Binding Mesa.Numero, StringFormat='M{0}'}" 
+                                           TextColor="White" 
+                                           FontAttributes="Bold"
+                                           FontSize="14"/>
+                                </Frame>
+
+                                <StackLayout Grid.Column="1" 
+                                           Padding="15,0"
+                                           VerticalOptions="Center">
+                                    <Label Text="{Binding FechaHora, StringFormat='{0:HH:mm}'}" 
+                                           FontAttributes="Bold"
+                                           FontSize="16"
+                                           TextColor="#333"/>
+                                    <Label Text="{Binding TiempoTranscurrido}" 
+                                           TextColor="#666"
+                                           FontSize="12"/>
+                                </StackLayout>
+
+                                <Frame Grid.Column="2"
+                                       BackgroundColor="{Binding EstadoColor}"
+                                       Padding="8,4"
+                                       CornerRadius="12"
+                                       VerticalOptions="Center">
+                                    <Label Text="{Binding Estado}" 
+                                           TextColor="White"
+                                           FontAttributes="Bold"
+                                           FontSize="12"/>
+                                </Frame>
+
+                                <Label Grid.Column="3" 
+                                       Text="{Binding Total, StringFormat='${0:N0}'}" 
+                                       FontAttributes="Bold"
+                                       FontSize="16"
+                                       TextColor="#FF6B35"
+                                       VerticalOptions="Center"/>
+                            </Grid>
+
+                            <BoxView HeightRequest="1" BackgroundColor="#E0E0E0" Margin="0,15"/>
+
+                            <!-- Items del Pedido -->
+                            <StackLayout>
+                                <Label Text="Items del Pedido:" 
+                                       FontAttributes="Bold"
+                                       FontSize="14"
+                                       TextColor="#333"
+                                       Margin="0,0,0,10"/>
+
+                                <CollectionView ItemsSource="{Binding Items}">
+                                    <CollectionView.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" 
+                                                  Padding="5"
+                                                  BackgroundColor="#FAFAFA"
+                                                  Margin="0,2">
+
+                                                <Frame Grid.Column="0" 
+                                                       BackgroundColor="#17A2B8" 
+                                                       Padding="8,4" 
+                                                       CornerRadius="12"
+                                                       VerticalOptions="Center">
+                                                    <Label Text="{Binding Cantidad}" 
+                                                           TextColor="White" 
+                                                           FontAttributes="Bold"
+                                                           FontSize="12"/>
+                                                </Frame>
+
+                                                <StackLayout Grid.Column="1" 
+                                                           Padding="10,0"
+                                                           VerticalOptions="Center">
+                                                    <Label Text="{Binding Platillo.Nombre}" 
+                                                           FontAttributes="Bold"
+                                                           FontSize="14"/>
+                                                    <Label Text="{Binding Platillo.Descripcion}" 
+                                                           TextColor="#666"
+                                                           FontSize="11"
+                                                           LineBreakMode="TailTruncation"/>
+                                                </StackLayout>
+
+                                                <Label Grid.Column="2" 
+                                                       Text="{Binding EstadoItem}"
+                                                       TextColor="{Binding EstadoItemColor}"
+                                                       FontSize="11"
+                                                       FontAttributes="Bold"
+                                                       VerticalOptions="Center"/>
+
+                                                <Label Grid.Column="3" 
+                                                       Text="{Binding Subtotal, StringFormat='${0:N0}'}" 
+                                                       FontAttributes="Bold"
+                                                       TextColor="#333"
+                                                       VerticalOptions="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </CollectionView.ItemTemplate>
+                                </CollectionView>
+                            </StackLayout>
+
+                            <!-- Notas Especiales -->
+                            <Frame BackgroundColor="#FFF3CD" 
+                                   CornerRadius="8" 
+                                   Padding="10" 
+                                   Margin="0,10"
+                                   IsVisible="{Binding TieneNotas}">
+                                <StackLayout Orientation="Horizontal">
+                                    <Label Text="📝" 
+                                           VerticalOptions="Center"
+                                           FontSize="16"/>
+                                    <StackLayout Padding="10,0" VerticalOptions="Center">
+                                        <Label Text="Notas Especiales:" 
+                                               FontAttributes="Bold"
+                                               FontSize="12"
+                                               TextColor="#856404"/>
+                                        <Label Text="{Binding NotasEspeciales}" 
+                                               TextColor="#856404"
+                                               FontSize="12"/>
+                                    </StackLayout>
+                                </StackLayout>
+                            </Frame>
+
+                            <!-- Botones de Acción -->
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,15">
+                                <Button Grid.Column="0"
+                                        Text="✏️ Editar"
+                                        BackgroundColor="#FFC107"
+                                        TextColor="White"
+                                        FontSize="12"
+                                        CornerRadius="8"
+                                        Command="{Binding BindingContext.EditarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                        CommandParameter="{Binding}"/>
+
+                                <Button Grid.Column="1"
+                                        Text="✅ Completar"
+                                        BackgroundColor="#28A745"
+                                        TextColor="White"
+                                        FontSize="12"
+                                        CornerRadius="8"
+                                        Command="{Binding BindingContext.CompletarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                        CommandParameter="{Binding}"
+                                        IsEnabled="{Binding PuedeCompletar}"/>
+
+                                <Button Grid.Column="2"
+                                        Text="❌ Cancelar"
+                                        BackgroundColor="#DC3545"
+                                        TextColor="White"
+                                        FontSize="12"
+                                        CornerRadius="8"
+                                        Command="{Binding BindingContext.CancelarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+
+                        </StackLayout>
+                    </Frame>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+
+            <!-- Empty State -->
+            <CollectionView.EmptyView>
+                <StackLayout HorizontalOptions="Center" 
+                           VerticalOptions="Center"
+                           Padding="50">
+                    <Label Text="📋" 
+                           FontSize="48"
+                           HorizontalOptions="Center"
+                           TextColor="#CCC"/>
+                    <Label Text="No hay pedidos activos" 
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           TextColor="#666"
+                           HorizontalOptions="Center"
+                           Margin="0,10"/>
+                    <Label Text="Los pedidos aparecerán aquí una vez creados" 
+                           FontSize="12"
+                           TextColor="#999"
+                           HorizontalOptions="Center"
+                           HorizontalTextAlignment="Center"/>
+                </StackLayout>
+            </CollectionView.EmptyView>
+        </CollectionView>
+
+        <!-- Footer -->
+        <StackLayout Grid.Row="3" 
+                     BackgroundColor="White" 
+                     Orientation="Horizontal" 
+                     Padding="15,10">
+            <Button Text="🏠 Inicio"
+                    BackgroundColor="Transparent"
+                    TextColor="#666"
+                    Command="{Binding VolverInicioCommand}"
+                    HorizontalOptions="Start"/>
+
+            <Button Text="➕ Nuevo Pedido"
+                    BackgroundColor="#28A745"
+                    TextColor="White"
+                    FontSize="12"
+                    CornerRadius="15"
+                    Padding="15,8"
+                    Command="{Binding NuevoPedidoCommand}"
+                    HorizontalOptions="CenterAndExpand"/>
+
+            <Label Text="{Binding UltimaActualizacion, StringFormat='Act: {0:HH:mm}'}"
+                   VerticalOptions="Center"
+                   TextColor="#666"
+                   FontSize="10"
+                   HorizontalOptions="End"/>
+        </StackLayout>
+
+    </Grid>
+
+</ContentPage>

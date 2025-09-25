@@ -3,13 +3,34 @@
     x:Class="RestaurantApp.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:local="clr-namespace:RestaurantApp"
-    Shell.FlyoutBehavior="Disabled"
-    Title="RestaurantApp">
+    xmlns:local="clr-namespace:RestaurantApp.Views"
+    Title="RestaurantApp"
+    Shell.FlyoutBehavior="Disabled">
+
+    <!-- Rutas principales -->
+    <ShellContent
+        Title="Inicio"
+        ContentTemplate="{DataTemplate local:MeseroMainView}"
+        Route="inicio" />
 
     <ShellContent
-        Title="Home"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
+        Title="Nuevo Pedido"
+        ContentTemplate="{DataTemplate local:NuevoPedidoView}"
+        Route="nuevopedido" />
+
+    <ShellContent
+        Title="Pedidos Activos"
+        ContentTemplate="{DataTemplate local:PedidosActivosView}"
+        Route="pedidosactivos" />
+
+    <ShellContent
+        Title="Estado Mesas"
+        ContentTemplate="{DataTemplate local:EstadoMesasView}"
+        Route="estadomesas" />
+
+    <ShellContent
+        Title="Configuración"
+        ContentTemplate="{DataTemplate local:ConfiguracionView}"
+        Route="configuracion" />
 
 </Shell>

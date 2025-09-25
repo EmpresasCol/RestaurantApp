@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.MeseroMainView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             Title="Sistema de Pedidos"
+             BackgroundColor="#F5F5F5">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <StackLayout Grid.Row="0" BackgroundColor="#FF6B35" Padding="20,15">
+            <Label Text="Restaurante Délice" 
+                   TextColor="White" 
+                   FontSize="24" 
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"/>
+            <Label Text="Sistema de Mesero" 
+                   TextColor="White" 
+                   FontSize="16" 
+                   HorizontalOptions="Center"
+                   Opacity="0.9"/>
+        </StackLayout>
+
+        <!-- Menu Principal -->
+        <ScrollView Grid.Row="1" Padding="20">
+            <StackLayout Spacing="20">
+
+                <!-- Estadísticas Rápidas -->
+                <Frame BackgroundColor="White" 
+                       CornerRadius="15" 
+                       Padding="20"
+                       HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Resumen de Hoy" 
+                               FontSize="18" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <Grid ColumnDefinitions="*,*,*">
+                            <StackLayout Grid.Column="0" HorizontalOptions="Center">
+                                <Label Text="{Binding PedidosActivos}" 
+                                       FontSize="28" 
+                                       FontAttributes="Bold" 
+                                       TextColor="#FF6B35"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Pedidos Activos" 
+                                       FontSize="12" 
+                                       TextColor="#666"
+                                       HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <StackLayout Grid.Column="1" HorizontalOptions="Center">
+                                <Label Text="{Binding MesasAsignadas}" 
+                                       FontSize="28" 
+                                       FontAttributes="Bold" 
+                                       TextColor="#28A745"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Mesas Asignadas" 
+                                       FontSize="12" 
+                                       TextColor="#666"
+                                       HorizontalOptions="Center"/>
+                            </StackLayout>
+
+                            <StackLayout Grid.Column="2" HorizontalOptions="Center">
+                                <Label Text="{Binding VentasHoy, StringFormat='${0:N0}'}" 
+                                       FontSize="28" 
+                                       FontAttributes="Bold" 
+                                       TextColor="#17A2B8"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Ventas Hoy" 
+                                       FontSize="12" 
+                                       TextColor="#666"
+                                       HorizontalOptions="Center"/>
+                            </StackLayout>
+                        </Grid>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Opciones Principales -->
+                <StackLayout Spacing="15">
+
+                    <!-- Nuevo Pedido -->
+                    <Button Text="📝 Nuevo Pedido"
+                            BackgroundColor="#28A745"
+                            TextColor="White"
+                            FontSize="18"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="60"
+                            Clicked="OnNuevoPedidoClicked"/>
+
+                    <!-- Ver Pedidos Activos -->
+                    <Button Text="📋 Pedidos Activos"
+                            BackgroundColor="#17A2B8"
+                            TextColor="White"
+                            FontSize="18"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="60"
+                            Clicked="OnPedidosActivosClicked"/>
+
+                    <!-- Estado de Mesas -->
+                    <Button Text="🪑 Estado de Mesas"
+                            BackgroundColor="#6F42C1"
+                            TextColor="White"
+                            FontSize="18"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="60"
+                            Clicked="OnEstadoMesasClicked"/>
+
+                    <!-- Configuración -->
+                    <Button Text="⚙️ Configuración"
+                            BackgroundColor="#6C757D"
+                            TextColor="White"
+                            FontSize="18"
+                            FontAttributes="Bold"
+                            CornerRadius="12"
+                            HeightRequest="60"
+                            Clicked="OnConfiguracionClicked"/>
+                </StackLayout>
+
+                <!-- Pedidos Recientes -->
+                <Frame BackgroundColor="White" 
+                       CornerRadius="15" 
+                       Padding="20"
+                       HasShadow="True">
+                    <StackLayout>
+                        <Label Text="Últimos Pedidos" 
+                               FontSize="18" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <CollectionView ItemsSource="{Binding UltimosPedidos}"
+                                      HeightRequest="200">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="10,5" ColumnDefinitions="Auto,*,Auto,Auto">
+                                        <Frame Grid.Column="0" 
+                                               BackgroundColor="#FF6B35" 
+                                               Padding="8,4" 
+                                               CornerRadius="8"
+                                               VerticalOptions="Center">
+                                            <Label Text="{Binding NumeroMesa, StringFormat='M{0}'}" 
+                                                   TextColor="White" 
+                                                   FontAttributes="Bold"
+                                                   FontSize="12"/>
+                                        </Frame>
+
+                                        <StackLayout Grid.Column="1" 
+                                                   Padding="10,0"
+                                                   VerticalOptions="Center">
+                                            <Label Text="{Binding FechaHora, StringFormat='{0:HH:mm}'}" 
+                                                   FontAttributes="Bold"
+                                                   FontSize="14"/>
+                                            <Label Text="{Binding CantidadItems, StringFormat='{0} items'}" 
+                                                   TextColor="#666"
+                                                   FontSize="12"/>
+                                        </StackLayout>
+
+                                        <Label Grid.Column="2" 
+                                               Text="{Binding Estado}" 
+                                               TextColor="{Binding EstadoColor}"
+                                               FontAttributes="Bold"
+                                               FontSize="12"
+                                               VerticalOptions="Center"/>
+
+                                        <Label Grid.Column="3" 
+                                               Text="{Binding Total, StringFormat='${0:N0}'}" 
+                                               FontAttributes="Bold"
+                                               TextColor="#FF6B35"
+                                               VerticalOptions="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+            </StackLayout>
+        </ScrollView>
+
+        <!-- Footer -->
+        <StackLayout Grid.Row="2" 
+                     BackgroundColor="White" 
+                     Padding="15,10"
+                     Orientation="Horizontal">
+            <Label Text="{Binding NombreMesero}" 
+                   VerticalOptions="Center"
+                   FontAttributes="Bold"
+                   TextColor="#333"/>
+            <Label Text=" • " 
+                   VerticalOptions="Center"
+                   TextColor="#666"/>
+            <Label Text="{Binding FechaActual, StringFormat='{0:dd/MM/yyyy HH:mm}'}" 
+                   VerticalOptions="Center"
+                   TextColor="#666"/>
+            <Label HorizontalOptions="EndAndExpand"
+                   VerticalOptions="Center"
+                   TextColor="#28A745"
+                   FontAttributes="Bold">
+                <Label.FormattedText>
+                    <FormattedString>
+                        <Span Text="🟢 " />
+                        <Span Text="En línea" />
+                    </FormattedString>
+                </Label.FormattedText>
+            </Label>
+        </StackLayout>
+
+    </Grid>
+
+</ContentPage>
