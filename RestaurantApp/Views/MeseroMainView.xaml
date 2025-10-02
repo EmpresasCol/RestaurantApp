@@ -25,58 +25,6 @@
         <ScrollView Grid.Row="1" Padding="20">
             <StackLayout Spacing="20">
 
-                <!-- Estadísticas Rápidas -->
-                <Frame BackgroundColor="White" 
-                       CornerRadius="15" 
-                       Padding="20"
-                       HasShadow="True">
-                    <StackLayout>
-                        <Label Text="Resumen de Hoy" 
-                               FontSize="18" 
-                               FontAttributes="Bold" 
-                               TextColor="#333"
-                               Margin="0,0,0,15"/>
-
-                        <Grid ColumnDefinitions="*,*,*">
-                            <StackLayout Grid.Column="0" HorizontalOptions="Center">
-                                <Label Text="{Binding PedidosActivos}" 
-                                       FontSize="28" 
-                                       FontAttributes="Bold" 
-                                       TextColor="#FF6B35"
-                                       HorizontalOptions="Center"/>
-                                <Label Text="Pedidos Activos" 
-                                       FontSize="12" 
-                                       TextColor="#666"
-                                       HorizontalOptions="Center"/>
-                            </StackLayout>
-
-                            <StackLayout Grid.Column="1" HorizontalOptions="Center">
-                                <Label Text="{Binding MesasAsignadas}" 
-                                       FontSize="28" 
-                                       FontAttributes="Bold" 
-                                       TextColor="#28A745"
-                                       HorizontalOptions="Center"/>
-                                <Label Text="Mesas Asignadas" 
-                                       FontSize="12" 
-                                       TextColor="#666"
-                                       HorizontalOptions="Center"/>
-                            </StackLayout>
-
-                            <StackLayout Grid.Column="2" HorizontalOptions="Center">
-                                <Label Text="{Binding VentasHoy, StringFormat='${0:N0}'}" 
-                                       FontSize="28" 
-                                       FontAttributes="Bold" 
-                                       TextColor="#17A2B8"
-                                       HorizontalOptions="Center"/>
-                                <Label Text="Ventas Hoy" 
-                                       FontSize="12" 
-                                       TextColor="#666"
-                                       HorizontalOptions="Center"/>
-                            </StackLayout>
-                        </Grid>
-                    </StackLayout>
-                </Frame>
-
                 <!-- Opciones Principales -->
                 <StackLayout Spacing="15">
 
@@ -99,16 +47,6 @@
                             CornerRadius="12"
                             HeightRequest="60"
                             Clicked="OnPedidosActivosClicked"/>
-
-                    <!-- Estado de Mesas -->
-                    <Button Text="🪑 Estado de Mesas"
-                            BackgroundColor="#6F42C1"
-                            TextColor="White"
-                            FontSize="18"
-                            FontAttributes="Bold"
-                            CornerRadius="12"
-                            HeightRequest="60"
-                            Clicked="OnEstadoMesasClicked"/>
 
                     <!-- Configuración -->
                     <Button Text="⚙️ Configuración"

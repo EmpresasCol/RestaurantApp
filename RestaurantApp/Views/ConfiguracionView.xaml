@@ -45,53 +45,6 @@
                     </StackLayout>
                 </Frame>
 
-                <!-- Configuración de la App -->
-                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
-                    <StackLayout>
-                        <Label Text="Configuración de la App" 
-                               FontSize="16" 
-                               FontAttributes="Bold" 
-                               TextColor="#333"
-                               Margin="0,0,0,15"/>
-
-                        <!-- Servidor API -->
-                        <Grid ColumnDefinitions="*,*" RowSpacing="10" ColumnSpacing="10">
-                            <Label Grid.Row="0" Grid.Column="0" Text="Servidor API:" FontAttributes="Bold"/>
-                            <Entry Grid.Row="0" Grid.Column="1" 
-                                   Text="{Binding UrlServidor}" 
-                                   Placeholder="http://localhost:5176"
-                                   Completed="OnUrlServidorCompleted"/>
-                        </Grid>
-
-                        <!-- Switches de configuración -->
-                        <StackLayout Spacing="15" Margin="0,20,0,0">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Grid.Column="0" Text="Modo Offline" VerticalOptions="Center"/>
-                                <Switch Grid.Column="1" 
-                                        IsToggled="{Binding ModoOffline}"
-                                        Toggled="OnModoOfflineChanged"/>
-                            </Grid>
-
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Grid.Column="0" Text="Notificaciones" VerticalOptions="Center"/>
-                                <Switch Grid.Column="1" IsToggled="{Binding NotificacionesActivas}"/>
-                            </Grid>
-
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Grid.Column="0" Text="Sonidos" VerticalOptions="Center"/>
-                                <Switch Grid.Column="1" IsToggled="{Binding SonidosActivos}"/>
-                            </Grid>
-
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Label Grid.Column="0" Text="Modo Oscuro" VerticalOptions="Center"/>
-                                <Switch Grid.Column="1" 
-                                        IsToggled="{Binding ModoOscuro}"
-                                        Toggled="OnModoOscuroChanged"/>
-                            </Grid>
-                        </StackLayout>
-                    </StackLayout>
-                </Frame>
-
                 <!-- Estadísticas del Día -->
                 <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
                     <StackLayout>

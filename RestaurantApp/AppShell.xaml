@@ -24,11 +24,6 @@
         Route="pedidosactivos" />
 
     <ShellContent
-        Title="Estado Mesas"
-        ContentTemplate="{DataTemplate local:EstadoMesasView}"
-        Route="estadomesas" />
-
-    <ShellContent
         Title="Configuración"
         ContentTemplate="{DataTemplate local:ConfiguracionView}"
         Route="configuracion" />

@@ -72,9 +72,6 @@
 	  <MauiXaml Update="Views\ConfiguracionView.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>
-	  <MauiXaml Update="Views\EstadoMesasView.xaml">
-	    <Generator>MSBuild:Compile</Generator>
-	  </MauiXaml>
 	  <MauiXaml Update="Views\MeseroMainView.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>

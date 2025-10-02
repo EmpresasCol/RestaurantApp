@@ -1,71 +1,37 @@
 using RestaurantApp.ViewModels;
 
-namespace RestaurantApp.Views;
-
-public partial class MeseroMainView : ContentPage
+namespace RestaurantApp.Views
 {
-    public MeseroMainView()
+    public partial class MeseroMainView : ContentPage
     {
-        InitializeComponent();
-        BindingContext = new MeseroMainViewModel();
-    }
+        public MeseroMainView()
+        {
+            InitializeComponent();
+            BindingContext = new MeseroMainViewModel();
+        }
 
-    private async void OnNuevoPedidoClicked(object sender, EventArgs e)
-    {
-        try
+        protected override void OnAppearing()
+        {
+            base.OnAppearing();
+            if (BindingContext is MeseroMainViewModel viewModel)
+            {
+                viewModel.ActualizarDatos();
+            }
+        }
+
+        private async void OnNuevoPedidoClicked(object sender, EventArgs e)
         {
             await Shell.Current.GoToAsync("//nuevopedido");
         }
-        catch (Exception ex)
-        {
-            await DisplayAlert("Error", $"No se pudo navegar: {ex.Message}", "OK");
-        }
-    }
 
-    private async void OnPedidosActivosClicked(object sender, EventArgs e)
-    {
-        try
+        private async void OnPedidosActivosClicked(object sender, EventArgs e)
         {
             await Shell.Current.GoToAsync("//pedidosactivos");
         }
-        catch (Exception ex)
-        {
-            await DisplayAlert("Error", $"No se pudo navegar: {ex.Message}", "OK");
-        }
-    }
 
-    private async void OnEstadoMesasClicked(object sender, EventArgs e)
-    {
-        try
-        {
-            await Shell.Current.GoToAsync("//estadomesas");
-        }
-        catch (Exception ex)
-        {
-            await DisplayAlert("Error", $"No se pudo navegar: {ex.Message}", "OK");
-        }
-    }
-
-    private async void OnConfiguracionClicked(object sender, EventArgs e)
-    {
-        try
+        private async void OnConfiguracionClicked(object sender, EventArgs e)
         {
             await Shell.Current.GoToAsync("//configuracion");
-        }
-        catch (Exception ex)
-        {
-            await DisplayAlert("Error", $"No se pudo navegar: {ex.Message}", "OK");
-        }
-    }
-
-    protected override void OnAppearing()
-    {
-        base.OnAppearing();
-
-        // Actualizar datos cuando la página aparece
-        if (BindingContext is MeseroMainViewModel viewModel)
-        {
-            viewModel.ActualizarDatos();
         }
     }
 }
