@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon } from 'lucide-react';
+import Facturacion from './Facturacion';  
 
 // Datos del menú
 const platillos = [
@@ -408,125 +409,11 @@ function App() {
 
   // Facturación
   const renderFacturacion = () => {
-    const formatearFecha = (fecha) => {
-      return new Intl.DateTimeFormat('es-CO', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }).format(fecha);
-    };
-
-    const totalesDelDia = {
-      ventasTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.total, 0),
-      transacciones: facturas.filter(f => f.estado === 'pagada').length,
-      impuestosTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.impuestos, 0)
-    };
-
     return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 py-4">
-            <div className="flex items-center gap-3">
-              <Receipt className="text-blue-600" size={32} />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">Sistema de Facturación</h1>
-                <p className="text-gray-600">Restaurante Délice</p>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-6">
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600">Ventas del Día</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {formatearPrecio(totalesDelDia.ventasTotal)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600">Transacciones</p>
-                  <p className="text-2xl font-bold text-blue-600">{totalesDelDia.transacciones}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-600">Impuestos</p>
-                  <p className="text-2xl font-bold text-orange-600">
-                    {formatearPrecio(totalesDelDia.impuestosTotal)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {facturas.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-              <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay facturas aún</h3>
-              <p className="text-gray-500">Las facturas aparecerán aquí cuando los clientes hagan pedidos</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mesa</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {facturas.map((factura) => (
-                    <tr key={factura.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{factura.id}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">Mesa {factura.mesa}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{factura.cliente.nombre}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-green-600">{formatearPrecio(factura.total)}</td>
-                      <td className="px-6 py-4 text-sm">
-                        <select 
-                          value={factura.estado} 
-                          onChange={(e) => {
-                            const nuevoEstado = e.target.value;
-                            let metodoPago = factura.metodoPago;
-                            if (nuevoEstado === 'pagada' && factura.estado === 'pendiente') {
-                              metodoPago = prompt('Método de pago (efectivo/tarjeta/transferencia):', 'efectivo') || 'efectivo';
-                            }
-                            cambiarEstadoFactura(factura.id, nuevoEstado, metodoPago);
-                          }}
-                          className={`px-2 py-1 text-xs font-semibold rounded-full border-none cursor-pointer ${
-                            factura.estado === 'pagada' ? 'bg-green-100 text-green-800' :
-                            factura.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          <option value="pendiente">Pendiente</option>
-                          <option value="pagada">Pagada</option>
-                          <option value="cancelada">Cancelada</option>
-                        </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      <Facturacion 
+        facturas={facturas} 
+        onCambiarEstadoFactura={cambiarEstadoFactura}
+      />
     );
   };
 
