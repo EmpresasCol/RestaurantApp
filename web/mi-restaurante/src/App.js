@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon } from 'lucide-react';
 import Facturacion from './Facturacion';  
 
+
+console.log('API URL:', process.env.REACT_APP_API_URL);
+
+
 // Datos del menú
 const platillos = [
   {

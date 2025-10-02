@@ -4,8 +4,9 @@
     {
         public int Id { get; set; }
         public int PlatilloId { get; set; }
-        public string PlatilloNombre { get; set; }
+        public string PlatilloNombre { get; set; } = string.Empty;
         public int Cantidad { get; set; }
-        public string Estado { get; set; }
+        public decimal Precio { get; set; }
+        public string Estado { get; set; } = string.Empty;
     }
 }
