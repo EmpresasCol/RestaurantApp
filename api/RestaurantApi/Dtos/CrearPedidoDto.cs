@@ -10,5 +10,6 @@
     {
         public int PlatilloId { get; set; }
         public int Cantidad { get; set; }
+        public string? Nota { get; set; }  
     }
 }

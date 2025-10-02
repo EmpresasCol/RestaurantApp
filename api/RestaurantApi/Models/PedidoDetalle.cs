@@ -13,6 +13,7 @@
         public int PedidoId { get; set; }
         public int PlatilloId { get; set; }
         public int Cantidad { get; set; }
+        public string? Nota { get; set; }  
         public EstadoDetalle Estado { get; set; }
 
         // Relaciones

@@ -45,7 +45,7 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Usuario>> PostUsuario(Usuario usuario)
+        public async Task<ActionResult<Usuarios>> PostUsuario(Usuarios usuario)
         {
             _context.Usuarios.Add(usuario);
             await _context.SaveChangesAsync();
@@ -53,7 +53,7 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutUsuario(int id, Usuario usuario)
+        public async Task<IActionResult> PutUsuario(int id, Usuarios usuario)
         {
             if (id != usuario.Id) return BadRequest();
             _context.Entry(usuario).State = EntityState.Modified;

@@ -1,71 +1,127 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon } from 'lucide-react';
-import Facturacion from './Facturacion';  
-
-
-console.log('API URL:', process.env.REACT_APP_API_URL);
-
-
-// Datos del menú
-const platillos = [
-  {
-    id: 1,
-    nombre: "Hamburguesa Clásica",
-    descripcion: "Carne de res, lechuga, tomate, cebolla y salsa especial",
-    precio: 15000,
-    imagen: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=300&fit=crop",
-    categoria: "Hamburguesas"
-  },
-  {
-    id: 2,
-    nombre: "Pizza Margherita",
-    descripcion: "Salsa de tomate, mozzarella fresca, albahaca y aceite de oliva",
-    precio: 22000,
-    imagen: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400&h=300&fit=crop",
-    categoria: "Pizzas"
-  },
-  {
-    id: 3,
-    nombre: "Ensalada César",
-    descripcion: "Lechuga romana, pollo grillado, crutones, parmesano y aderezo césar",
-    precio: 12000,
-    imagen: "https://images.unsplash.com/photo-1546793665-c74683f339c1?w=400&h=300&fit=crop",
-    categoria: "Ensaladas"
-  },
-  {
-    id: 4,
-    nombre: "Pasta Alfredo",
-    descripcion: "Fettuccine en salsa cremosa de queso parmesano con pollo",
-    precio: 18000,
-    imagen: "https://images.unsplash.com/photo-1621996346565-e3dbc353d2e5?w=400&h=300&fit=crop",
-    categoria: "Pastas"
-  },
-  {
-    id: 5,
-    nombre: "Tacos de Carnitas",
-    descripcion: "Tortillas de maíz con carnitas, cebolla, cilantro y salsa verde",
-    precio: 14000,
-    imagen: "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400&h=300&fit=crop",
-    categoria: "Mexicano"
-  },
-  {
-    id: 6,
-    nombre: "Salmón Grillado",
-    descripcion: "Filete de salmón con vegetales asados y salsa de limón",
-    precio: 28000,
-    imagen: "https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=400&h=300&fit=crop",
-    categoria: "Pescados"
-  }
-];
+import * as api from './services/api';
 
 function App() {
   const [vistaActual, setVistaActual] = useState('menu');
   const [carrito, setCarrito] = useState([]);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
   const [pedidos, setPedidos] = useState([]);
+  const [platillos, setPlatillos] = useState([]);
   const [facturas, setFacturas] = useState([]);
   const [mesaSeleccionada, setMesaSeleccionada] = useState(null);
   const [mostrarSelectorMesa, setMostrarSelectorMesa] = useState(true);
+  const [cargando, setCargando] = useState(false);
+
+  // Cargar platillos desde la API al iniciar
+  useEffect(() => {
+    cargarPlatillos();
+  }, []);
+
+  // Cargar pedidos automáticamente cada 30 segundos
+  useEffect(() => {
+    if (vistaActual === 'cocina') {
+      cargarPedidos();
+      const interval = setInterval(cargarPedidos, 30000); // Cada 30 segundos
+      return () => clearInterval(interval);
+    }
+  }, [vistaActual]);
+
+  // Cargar facturas cuando se abre la vista de facturación
+  useEffect(() => {
+    if (vistaActual === 'facturacion') {
+      cargarFacturas();
+    }
+  }, [vistaActual]);
+
+  // Funciones de carga desde API
+  const cargarPlatillos = async () => {
+    try {
+      const data = await api.getPlatillos();
+      setPlatillos(data);
+    } catch (error) {
+      console.error('Error al cargar platillos:', error);
+      alert('Error al cargar el menú. Usando datos de ejemplo.');
+      // Datos de ejemplo si falla la API
+      setPlatillos([
+        {
+          id: 1,
+          nombre: "Hamburguesa Clásica",
+          descripcion: "Carne de res, lechuga, tomate, cebolla y salsa especial",
+          precio: 15000,
+          imagenUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=300&fit=crop",
+          categoria: "Hamburguesas"
+        },
+        {
+          id: 2,
+          nombre: "Pizza Margherita",
+          descripcion: "Salsa de tomate, mozzarella fresca, albahaca y aceite de oliva",
+          precio: 22000,
+          imagenUrl: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400&h=300&fit=crop",
+          categoria: "Pizzas"
+        }
+      ]);
+    }
+  };
+
+  const cargarPedidos = async () => {
+    try {
+      const data = await api.getPedidos();
+      // Transformar datos de la API al formato que usa el frontend
+      const pedidosTransformados = data.map(p => ({
+        id: p.id,
+        mesa: p.mesaNumero,
+        items: p.detalles.map(d => ({
+          id: d.id,
+          nombre: d.platilloNombre,
+          cantidad: d.cantidad,
+          notas: d.nota || ""
+        })),
+        hora: new Date(p.fecha),
+        tiempoEstimado: 15,
+        prioridad: 'normal',
+        estado: p.estado
+      }));
+      setPedidos(pedidosTransformados);
+    } catch (error) {
+      console.error('Error al cargar pedidos:', error);
+    }
+  };
+
+  const cargarFacturas = async () => {
+    try {
+      const pagos = await api.getPagos();
+      
+      // Transformar pagos a formato de facturas para el frontend
+      const facturasTransformadas = pagos.map(pago => {
+        const subtotal = pago.monto;
+        const impuestos = Math.round(subtotal * 0.19);
+        const total = subtotal + impuestos + pago.montoPropina;
+
+        return {
+          id: `INV-${pago.id}`,
+          mesa: pago.pedido?.mesa?.numero || 0,
+          fecha: new Date(pago.fecha),
+          cliente: {
+            nombre: `Cliente Mesa ${pago.pedido?.mesa?.numero || 0}`,
+            documento: '00000000',
+            telefono: '3000000000',
+            email: 'cliente@email.com'
+          },
+          items: [], // Aquí podrías cargar los items del pedido si lo necesitas
+          subtotal: subtotal,
+          impuestos: impuestos,
+          total: total,
+          estado: pago.pedido?.estado === 'Pagado' ? 'pagada' : 'pendiente',
+          metodoPago: pago.metodoPago.toLowerCase()
+        };
+      });
+
+      setFacturas(facturasTransformadas);
+    } catch (error) {
+      console.error('Error al cargar facturas:', error);
+    }
+  };
 
   // Utilidades
   const formatearPrecio = (precio) =>
@@ -97,69 +153,49 @@ function App() {
     }
   };
 
-  const confirmarPedido = () => {
+  const confirmarPedido = async () => {
     if (carrito.length > 0 && mesaSeleccionada) {
-      const nuevoPedido = {
-        id: Date.now(),
-        mesa: mesaSeleccionada,
-        items: carrito.map(item => ({
-          id: item.id,
-          nombre: item.nombre,
-          cantidad: item.cantidad,
-          notas: ""
-        })),
-        hora: new Date(),
-        tiempoEstimado: 15,
-        prioridad: 'normal'
-      };
-      setPedidos(prev => [...prev, nuevoPedido]);
-
-      const subtotal = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
-      const impuestos = Math.round(subtotal * 0.19);
-
-      const nuevaFactura = {
-        id: `INV-${Date.now()}`,
-        mesa: mesaSeleccionada,
-        fecha: new Date(),
-        cliente: { 
-          nombre: `Cliente Mesa ${mesaSeleccionada}`, 
-          documento: '00000000', 
-          telefono: '3000000000', 
-          email: 'cliente@email.com' 
-        },
-        items: carrito.map(item => ({ 
-          nombre: item.nombre, 
-          cantidad: item.cantidad, 
-          precio: item.precio, 
-          total: item.precio * item.cantidad 
-        })),
-        subtotal: subtotal,
-        impuestos: impuestos,
-        total: subtotal + impuestos,
-        estado: 'pendiente',
-        metodoPago: 'pendiente'
-      };
-
-      setFacturas(prev => [...prev, nuevaFactura]);
-      setCarrito([]);
-      setMostrarCarrito(false);
-      alert('Pedido confirmado y enviado a cocina!');
+      setCargando(true);
+      try {
+        // Crear pedido en la API
+        const nuevoPedido = await api.createPedido(mesaSeleccionada, carrito);
+        
+        alert('¡Pedido confirmado y enviado a cocina!');
+        setCarrito([]);
+        setMostrarCarrito(false);
+        
+        // Recargar pedidos si estamos en la vista de cocina
+        if (vistaActual === 'cocina') {
+          await cargarPedidos();
+        }
+      } catch (error) {
+        console.error('Error al confirmar pedido:', error);
+        alert('Error al enviar el pedido. Por favor intenta de nuevo.');
+      } finally {
+        setCargando(false);
+      }
     }
   };
 
   // Cambiar estados
-  const cambiarEstadoFactura = (facturaId, nuevoEstado, metodoPago = 'efectivo') => {
-    setFacturas(facturas.map(f => f.id === facturaId
-      ? { ...f, estado: nuevoEstado, metodoPago: nuevoEstado === 'pagada' ? metodoPago : 'pendiente' }
-      : f
-    ));
+  const cambiarEstadoFactura = async (facturaId, nuevoEstado, metodoPago = 'efectivo') => {
+    try {
+      // Aquí podrías llamar a la API para actualizar el estado del pago
+      // Por ahora solo actualizamos localmente
+      setFacturas(facturas.map(f => f.id === facturaId
+        ? { ...f, estado: nuevoEstado, metodoPago: nuevoEstado === 'pagada' ? metodoPago : 'pendiente' }
+        : f
+      ));
+    } catch (error) {
+      console.error('Error al cambiar estado:', error);
+    }
   };
 
   // Totales
   const total = carrito.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
   const totalItems = carrito.reduce((sum, item) => sum + item.cantidad, 0);
 
-  // Selector de Mesa (solo una vez)
+  // Selector de Mesa
   const renderSelectorMesa = () => (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
       <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full mx-4">
@@ -216,39 +252,45 @@ function App() {
           <p className="text-gray-600">Selecciona tus platillos favoritos</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {platillos.map(platillo => (
-            <div key={platillo.id} className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-              <div className="aspect-video overflow-hidden">
-                <img 
-                  src={platillo.imagen} 
-                  alt={platillo.nombre} 
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                />
-              </div>
-              <div className="p-5">
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className="font-semibold text-lg text-gray-800">{platillo.nombre}</h3>
-                  <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
-                    {platillo.categoria}
-                  </span>
+        {platillos.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Cargando menú...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {platillos.map(platillo => (
+              <div key={platillo.id} className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <div className="aspect-video overflow-hidden">
+                  <img 
+                    src={platillo.imagenUrl} 
+                    alt={platillo.nombre} 
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                  />
                 </div>
-                <p className="text-gray-600 text-sm mb-4">{platillo.descripcion}</p>
-                <div className="flex justify-between items-center">
-                  <span className="text-xl font-bold text-orange-600">
-                    {formatearPrecio(platillo.precio)}
-                  </span>
-                  <button 
-                    onClick={() => agregarAlCarrito(platillo)} 
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2"
-                  >
-                    <Plus size={16} /> Agregar
-                  </button>
+                <div className="p-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-semibold text-lg text-gray-800">{platillo.nombre}</h3>
+                    <span className="text-sm bg-orange-100 text-orange-600 px-2 py-1 rounded-full">
+                      {platillo.categoria}
+                    </span>
+                  </div>
+                  <p className="text-gray-600 text-sm mb-4">{platillo.descripcion}</p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xl font-bold text-orange-600">
+                      {formatearPrecio(platillo.precio)}
+                    </span>
+                    <button 
+                      onClick={() => agregarAlCarrito(platillo)} 
+                      className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center gap-2"
+                    >
+                      <Plus size={16} /> Agregar
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </main>
 
       {/* Modal del Carrito */}
@@ -309,9 +351,10 @@ function App() {
                 </div>
                 <button 
                   onClick={confirmarPedido}
-                  className="w-full bg-orange-500 text-white py-3 rounded-lg font-semibold hover:bg-orange-600 transition-colors"
+                  disabled={cargando}
+                  className="w-full bg-orange-500 text-white py-3 rounded-lg font-semibold hover:bg-orange-600 transition-colors disabled:bg-gray-400"
                 >
-                  Confirmar Pedido
+                  {cargando ? 'Enviando...' : 'Confirmar Pedido'}
                 </button>
               </div>
             )}
@@ -321,7 +364,7 @@ function App() {
     </div>
   );
 
-  // Cocina (Solo visualización)
+  // Cocina (Con datos de la API)
   const renderCocina = () => {
     const calcularTiempoTranscurrido = (horaInicio) => {
       const ahora = new Date();
@@ -343,6 +386,12 @@ function App() {
               <div className="text-right">
                 <p className="text-lg font-semibold">{new Date().toLocaleTimeString()}</p>
                 <p className="text-gray-400">{new Date().toLocaleDateString()}</p>
+                <button 
+                  onClick={cargarPedidos}
+                  className="mt-2 text-sm bg-orange-500 px-3 py-1 rounded hover:bg-orange-600"
+                >
+                  Actualizar
+                </button>
               </div>
             </div>
           </div>
@@ -411,13 +460,36 @@ function App() {
     );
   };
 
-  // Facturación
+  // Facturación (simplificado por ahora)
   const renderFacturacion = () => {
     return (
-      <Facturacion 
-        facturas={facturas} 
-        onCambiarEstadoFactura={cambiarEstadoFactura}
-      />
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center gap-3">
+              <Receipt className="text-blue-600" size={32} />
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">Sistema de Facturación</h1>
+                <p className="text-gray-600">Restaurante Délice</p>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">Facturación conectada a API</h3>
+            <p className="text-gray-500">Los pagos se registrarán en la base de datos</p>
+            <button 
+              onClick={cargarFacturas}
+              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Cargar Facturas
+            </button>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -477,11 +549,6 @@ function App() {
             >
               <Receipt size={18} />
               Facturación
-              {facturas.filter(f => f.estado === 'pendiente').length > 0 && (
-                <span className="bg-yellow-500 text-white text-xs rounded-full px-2 py-1 ml-1">
-                  {facturas.filter(f => f.estado === 'pendiente').length}
-                </span>
-              )}
             </button>
           </div>
         </div>

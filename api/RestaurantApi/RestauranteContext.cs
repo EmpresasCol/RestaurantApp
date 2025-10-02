@@ -7,39 +7,61 @@ namespace RestaurantApi
     {
         public RestauranteContext(DbContextOptions<RestauranteContext> options) : base(options) { }
 
-        public DbSet<Usuario> Usuarios { get; set; }
+        public DbSet<Usuarios> Usuarios { get; set; }
         public DbSet<Mesa> Mesas { get; set; }
         public DbSet<Platillo> Platillos { get; set; }
         public DbSet<Pedido> Pedidos { get; set; }
         public DbSet<PedidoDetalle> PedidoDetalles { get; set; }
         public DbSet<Pago> Pagos { get; set; }
+        public DbSet<Factura> Facturas { get; set; }  // ← AGREGADO
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // Tabla Usuarios
-            modelBuilder.Entity<Usuario>()
+            // Configuración de enums como strings
+            modelBuilder.Entity<Usuarios>()
                 .Property(u => u.Rol)
-                .HasConversion<string>(); // Para mapear ENUM de C# a VARCHAR/ENUM en MySQL
+                .HasConversion<string>();
 
-            // Tabla Mesas
             modelBuilder.Entity<Mesa>()
                 .Property(m => m.Estado)
                 .HasConversion<string>();
 
-            // Tabla Pedidos
             modelBuilder.Entity<Pedido>()
                 .Property(p => p.Estado)
                 .HasConversion<string>();
 
-            // Tabla PedidoDetalles
             modelBuilder.Entity<PedidoDetalle>()
                 .Property(pd => pd.Estado)
                 .HasConversion<string>();
 
-            // Tabla Pagos
             modelBuilder.Entity<Pago>()
                 .Property(p => p.MetodoPago)
                 .HasConversion<string>();
+
+            // Configuración de propiedades decimal
+            modelBuilder.Entity<Platillo>()
+                .Property(p => p.Precio)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<Pago>()
+                .Property(p => p.Monto)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<Pago>()
+                .Property(p => p.MontoPropina)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<Factura>()
+                .Property(f => f.Subtotal)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<Factura>()
+                .Property(f => f.Propina)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<Factura>()
+                .Property(f => f.Total)
+                .HasColumnType("decimal(10,2)");
         }
     }
 }

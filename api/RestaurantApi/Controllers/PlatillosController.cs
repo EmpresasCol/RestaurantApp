@@ -24,9 +24,10 @@ namespace RestaurantApi.Controllers
             {
                 Id = p.Id,
                 Nombre = p.Nombre,
-                Descripcion = p.Descripcion,
+                Descripcion = p.Descripcion ?? "",
                 Precio = p.Precio,
-                ImagenUrl = p.ImagenUrl
+                ImagenUrl = p.ImagenUrl ?? "",
+                Categoria = "General"
             }).ToList();
         }
 
@@ -40,9 +41,10 @@ namespace RestaurantApi.Controllers
             {
                 Id = platillo.Id,
                 Nombre = platillo.Nombre,
-                Descripcion = platillo.Descripcion,
+                Descripcion = platillo.Descripcion ?? "",
                 Precio = platillo.Precio,
-                ImagenUrl = platillo.ImagenUrl
+                ImagenUrl = platillo.ImagenUrl ?? "",
+                Categoria = "General"
             };
         }
 
