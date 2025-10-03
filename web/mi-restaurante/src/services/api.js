@@ -95,25 +95,56 @@ export const updatePedido = async (id, estado) => {
 };
 
 // ==================== PAGOS ====================
+// ==================== PAGOS ====================
 export const createPago = async (pedidoId, monto, metodoPago, propina = 0) => {
   try {
+    console.log('📤 Creando pago:', {
+      pedidoId,
+      monto,
+      metodoPago,
+      propina
+    });
+
     const pagoData = {
       pedidoId: pedidoId,
       monto: monto,
       montoPropina: propina,
-      metodoPago: metodoPago
+      metodoPago: metodoPago // Ya viene como string: "Efectivo", "Tarjeta", "QR"
     };
+
+    console.log('📦 Datos a enviar:', pagoData);
 
     const response = await fetch(`${API_URL}/pagos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify(pagoData)
     });
 
-    if (!response.ok) throw new Error('Error al crear pago');
-    return await response.json();
+    console.log('📡 Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('📥 Respuesta del servidor:', errorText);
+      
+      let errorObj;
+      try {
+        errorObj = JSON.parse(errorText);
+      } catch {
+        errorObj = { message: errorText };
+      }
+      
+      console.log('❌ Error response completa:', errorObj);
+      throw new Error(`Error al crear pago: ${errorText}`);
+    }
+
+    const resultado = await response.json();
+    console.log('✅ Pago creado exitosamente:', resultado);
+    return resultado;
   } catch (error) {
-    console.error('Error en createPago:', error);
+    console.error('❌ Error en createPago:', error);
     throw error;
   }
 };

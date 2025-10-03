@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon } from 'lucide-react';
 import * as api from './services/api';
+import Facturacion from './Facturacion';  // ← DEBE ESTAR ESTA LÍNEA
 
 function App() {
   const [vistaActual, setVistaActual] = useState('menu');
@@ -494,15 +495,14 @@ function App() {
   };
 
   // Vista actual
-  const renderVistaActual = () => {
-    switch (vistaActual) {
-      case 'menu': return renderMenuCliente();
-      case 'cocina': return renderCocina();
-      case 'facturacion': return renderFacturacion();
-      default: return renderMenuCliente();
-    }
-  };
-
+const renderVistaActual = () => {
+  switch (vistaActual) {
+    case 'menu': return renderMenuCliente();
+    case 'cocina': return renderCocina();
+    case 'facturacion': return <Facturacion />;  // ← DEBE ESTAR ASÍ
+    default: return renderMenuCliente();
+  }
+};
   return (
     <div className="min-h-screen">
       {mostrarSelectorMesa && renderSelectorMesa()}

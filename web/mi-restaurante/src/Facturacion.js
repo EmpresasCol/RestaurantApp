@@ -1,14 +1,87 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check } from 'lucide-react';
+import * as api from './services/api';
 
-function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
+function Facturacion() {
   const [filtroFecha, setFiltroFecha] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('todas');
   const [busqueda, setBusqueda] = useState('');
   const [facturaExpandida, setFacturaExpandida] = useState(null);
   const [menuAbierto, setMenuAbierto] = useState(null);
   const [modalPago, setModalPago] = useState(null);
+  const [pedidos, setPedidos] = useState([]);
+  const [pagos, setPagos] = useState([]);
+  const [cargando, setCargando] = useState(false);
 
+  // Cargar pedidos al iniciar y cada 30 segundos
+  useEffect(() => {
+    cargarDatos();
+    const interval = setInterval(cargarDatos, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const cargarDatos = async () => {
+    try {
+      const [pedidosData, pagosData] = await Promise.all([
+        api.getPedidos(),
+        api.getPagos()
+      ]);
+      setPedidos(pedidosData);
+      setPagos(pagosData);
+    } catch (error) {
+      console.error('Error al cargar datos:', error);
+    }
+  };
+
+// Transformar pedidos a formato de facturas
+const facturas = pedidos.map(pedido => {
+  // Calcular totales
+  const subtotal = pedido.detalles.reduce((sum, d) => sum + (d.precio * d.cantidad), 0);
+  const impuestos = Math.round(subtotal * 0.19);
+  const total = subtotal + impuestos;
+
+  // Buscar si existe un pago para este pedido
+  const pago = pagos.find(p => p.pedidoId === pedido.id);
+
+  // Determinar estado
+  let estado = 'pendiente';
+  if (pedido.estado === 'Pagado') {
+    estado = 'pagada';
+  } else if (pedido.estado === 'Cancelado') {
+    estado = 'cancelada';
+  }
+
+  // Determinar método de pago de forma segura
+  let metodoPago = 'pendiente';
+  if (pago && pago.metodoPago) {
+    metodoPago = String(pago.metodoPago).toLowerCase();
+  }
+
+  return {
+    id: `INV-${pedido.id}`,
+    pedidoId: pedido.id,
+    mesa: pedido.mesaNumero,
+    fecha: new Date(pedido.fecha),
+    cliente: {
+      nombre: `Cliente Mesa ${pedido.mesaNumero}`,
+      documento: '00000000',
+      telefono: '3000000000',
+      email: 'cliente@email.com'
+    },
+    items: pedido.detalles.map(d => ({
+      nombre: d.platilloNombre,
+      cantidad: d.cantidad,
+      precio: d.precio,
+      total: d.precio * d.cantidad
+    })),
+    subtotal: subtotal,
+    impuestos: impuestos,
+    total: total,
+    estado: estado,
+    metodoPago: metodoPago,
+    pagoId: pago?.id
+  };
+});
   const formatearPrecio = (precio) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
@@ -38,7 +111,7 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
                        factura.fecha.toISOString().split('T')[0] === filtroFecha;
     
     return cumpleBusqueda && cumpleEstado && cumpleFecha;
-  }).sort((a, b) => b.fecha - a.fecha); // Ordenar del más reciente al más antiguo
+  }).sort((a, b) => b.fecha - a.fecha);
 
   const totalesDelDia = {
     ventasTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.total, 0),
@@ -273,11 +346,64 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
     }
   };
 
-  const confirmarPago = (metodoPago) => {
-    if (modalPago && onCambiarEstadoFactura) {
-      onCambiarEstadoFactura(modalPago.id, 'pagada', metodoPago);
-    }
+const confirmarPago = async (metodoPago) => {
+  if (!modalPago) return;
+  
+  setCargando(true);
+  try {
+    console.log('💳 Procesando pago...', {
+      pedidoId: modalPago.pedidoId,
+      subtotal: modalPago.subtotal,
+      metodoPago: metodoPago
+    });
+
+    // Crear el pago en la API
+    // metodoPago ya viene capitalizado: "Efectivo", "Tarjeta", "QR"
+    await api.createPago(
+      modalPago.pedidoId,
+      modalPago.subtotal,
+      metodoPago,  // "Efectivo", "Tarjeta", "QR"
+      0 // propina
+    );
+
+    // Actualizar el estado del pedido a Pagado
+    await api.updatePedido(modalPago.pedidoId, 'Pagado');
+
+    // Recargar los datos
+    await cargarDatos();
+    
     setModalPago(null);
+    alert('¡Pago registrado exitosamente!');
+  } catch (error) {
+    console.error('Error al registrar pago:', error);
+    alert('Error al registrar el pago. Por favor intenta de nuevo.');
+  } finally {
+    setCargando(false);
+  }
+};
+
+  const cambiarEstado = async (factura, nuevoEstado) => {
+    setCargando(true);
+    try {
+      if (nuevoEstado === 'pagada') {
+        // Abrir modal de pago
+        setModalPago(factura);
+      } else if (nuevoEstado === 'cancelada') {
+        // Actualizar el estado del pedido
+        await api.updatePedido(factura.pedidoId, 'Cancelado');
+        await cargarDatos();
+      } else if (nuevoEstado === 'pendiente') {
+        // Volver a estado en proceso
+        await api.updatePedido(factura.pedidoId, 'EnProceso');
+        await cargarDatos();
+      }
+      setMenuAbierto(null);
+    } catch (error) {
+      console.error('Error al cambiar estado:', error);
+      alert('Error al cambiar el estado. Por favor intenta de nuevo.');
+    } finally {
+      setCargando(false);
+    }
   };
 
   const toggleMenu = (facturaId) => {
@@ -296,15 +422,24 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
                 <p className="text-gray-600">Restaurante Délice</p>
               </div>
             </div>
-            {facturas.length > 0 && (
+            <div className="flex gap-2">
               <button
-                onClick={exportarExcel}
-                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                onClick={cargarDatos}
+                disabled={cargando}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
               >
-                <Download size={20} />
-                Exportar CSV
+                {cargando ? 'Actualizando...' : 'Actualizar'}
               </button>
-            )}
+              {facturas.length > 0 && (
+                <button
+                  onClick={exportarExcel}
+                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <Download size={20} />
+                  Exportar CSV
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -349,8 +484,14 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
         {facturas.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay facturas aún</h3>
-            <p className="text-gray-500">Las facturas aparecerán aquí cuando los clientes hagan pedidos</p>
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay pedidos aún</h3>
+            <p className="text-gray-500">Los pedidos aparecerán aquí automáticamente cuando se generen</p>
+            <button
+              onClick={cargarDatos}
+              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Recargar
+            </button>
           </div>
         ) : (
           <>
@@ -476,7 +617,7 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
                           <div className="flex">
                             <button
                               onClick={() => marcarComoPagada(factura)}
-                              disabled={factura.estado === 'pagada'}
+                              disabled={factura.estado === 'pagada' || cargando}
                               className={`flex items-center gap-2 px-4 py-2 rounded-l-lg font-medium text-sm transition-colors ${
                                 factura.estado === 'pagada'
                                   ? 'bg-green-600 text-white cursor-not-allowed'
@@ -491,6 +632,7 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
                                 e.stopPropagation();
                                 toggleMenu(factura.id);
                               }}
+                              disabled={cargando}
                               className={`px-2 py-2 rounded-r-lg border-l border-white/30 transition-colors ${
                                 factura.estado === 'pagada'
                                   ? 'bg-green-600 text-white hover:bg-green-700'
@@ -514,34 +656,21 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
                                 }}
                               >
                                 <button
-                                  onClick={() => {
-                                    if (onCambiarEstadoFactura) {
-                                      onCambiarEstadoFactura(factura.id, 'pendiente', 'pendiente');
-                                    }
-                                    setMenuAbierto(null);
-                                  }}
+                                  onClick={() => cambiarEstado(factura, 'pendiente')}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
                                 >
                                   <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
                                   Pendiente
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    setMenuAbierto(null);
-                                    setModalPago(factura);
-                                  }}
+                                  onClick={() => cambiarEstado(factura, 'pagada')}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
                                 >
                                   <span className="w-3 h-3 rounded-full bg-green-500"></span>
                                   Pagada
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    if (onCambiarEstadoFactura) {
-                                      onCambiarEstadoFactura(factura.id, 'cancelada', 'cancelada');
-                                    }
-                                    setMenuAbierto(null);
-                                  }}
+                                  onClick={() => cambiarEstado(factura, 'cancelada')}
                                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
                                 >
                                   <span className="w-3 h-3 rounded-full bg-red-500"></span>
@@ -567,8 +696,7 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
                             <div className="flex justify-between items-center">
                               <span className="text-gray-600">Mesa:</span>
                               <span className="font-semibold text-gray-900">Mesa {factura.mesa}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
+                            </div><div className="flex justify-between items-center">
                               <span className="text-gray-600">Fecha:</span>
                               <span className="font-medium text-gray-800 text-xs">{formatearFecha(factura.fecha)}</span>
                             </div>
@@ -678,8 +806,9 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
 
             <div className="space-y-3 mb-6">
               <button
-                onClick={() => confirmarPago('efectivo')}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 shadow-lg"
+                onClick={() => confirmarPago('Efectivo')}
+                disabled={cargando}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
@@ -694,8 +823,9 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
               </button>
 
               <button
-                onClick={() => confirmarPago('tarjeta')}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg"
+                onClick={() => confirmarPago('Tarjeta')}
+                disabled={cargando}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
@@ -710,15 +840,16 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
               </button>
 
               <button
-                onClick={() => confirmarPago('transferencia')}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
+                onClick={() => confirmarPago('QR')}
+                disabled={cargando}
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
                     <span className="text-2xl">📱</span>
                   </div>
                   <div className="text-left">
-                    <p className="font-bold text-lg">Transferencia</p>
+                    <p className="font-bold text-lg">QR / Transferencia</p>
                     <p className="text-sm text-purple-100">Pago digital</p>
                   </div>
                 </div>
@@ -728,7 +859,8 @@ function Facturacion({ facturas = [], onCambiarEstadoFactura }) {
 
             <button
               onClick={() => setModalPago(null)}
-              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              disabled={cargando}
+              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
             >
               Cancelar
             </button>
