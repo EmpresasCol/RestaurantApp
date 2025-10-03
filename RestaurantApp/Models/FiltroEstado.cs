@@ -15,7 +15,8 @@
                 new FiltroEstado { Texto = "Todos", Valor = "Todos", ColorFondo = Colors.Gray },
                 new FiltroEstado { Texto = "En Proceso", Valor = "EnProceso", ColorFondo = Colors.Orange },
                 new FiltroEstado { Texto = "Listos", Valor = "Listo", ColorFondo = Colors.Green },
-                new FiltroEstado { Texto = "Pagados", Valor = "Pagado", ColorFondo = Colors.Blue },
+                new FiltroEstado { Texto = "Entregados", Valor = "Entregado", ColorFondo = Colors.Blue }, // NUEVO
+                new FiltroEstado { Texto = "Pagados", Valor = "Pagado", ColorFondo = Colors.Purple },
                 new FiltroEstado { Texto = "Cancelados", Valor = "Cancelado", ColorFondo = Colors.Red }
             };
         }

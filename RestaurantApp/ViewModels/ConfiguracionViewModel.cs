@@ -1,11 +1,14 @@
 ﻿// ViewModels/ConfiguracionViewModel.cs
 using RestaurantApp.Helpers;
 using System.Windows.Input;
+using RestaurantApp.Services;
 
 namespace RestaurantApp.ViewModels
-{
+{   
     public class ConfiguracionViewModel : BaseViewModel
     {
+        private readonly SincronizacionService _sincronizacionService;
+        private readonly HttpService _httpService;
         private string _nombreMesero;
         private string _idEmpleado;
         private string _turnoSeleccionado;
@@ -24,6 +27,7 @@ namespace RestaurantApp.ViewModels
         private Color _colorConexion;
         private string _infoDispositivo;
 
+
         public ConfiguracionViewModel()
         {
             Title = "Configuración";
@@ -31,9 +35,15 @@ namespace RestaurantApp.ViewModels
             // Inicializar comandos
             InicializarComandos();
 
+            _httpService = new HttpService();
+            _sincronizacionService = new SincronizacionService();
+
             // Cargar configuración por defecto
             CargarConfiguracionPorDefecto();
         }
+
+
+
 
         // Propiedades de información personal
         public string NombreMesero
@@ -260,18 +270,27 @@ namespace RestaurantApp.ViewModels
                 EstadoConexion = "Sincronizando...";
                 ColorConexion = Colors.Orange;
 
-                // Simular proceso de sincronización
-                await Task.Delay(2000);
-
                 if (!ModoOffline)
                 {
-                    await SincronizarDatos();
-                    UltimaSincronizacion = DateTime.Now;
-                    EstadoConexion = "Sincronizado";
-                    ColorConexion = Colors.Green;
+                    var resultado = await _sincronizacionService.SincronizarTodosLosDatosAsync();
 
-                    await Application.Current.MainPage.DisplayAlert("Éxito",
-                        "Sincronización completada correctamente", "OK");
+                    if (resultado)
+                    {
+                        UltimaSincronizacion = DateTime.Now;
+                        EstadoConexion = "Sincronizado";
+                        ColorConexion = Colors.Green;
+
+                        await Application.Current.MainPage.DisplayAlert("Éxito",
+                            "Sincronización completada correctamente", "OK");
+                    }
+                    else
+                    {
+                        EstadoConexion = "Error de sincronización";
+                        ColorConexion = Colors.Red;
+
+                        await Application.Current.MainPage.DisplayAlert("Error",
+                            "No se pudo completar la sincronización", "OK");
+                    }
                 }
                 else
                 {
@@ -544,13 +563,10 @@ namespace RestaurantApp.ViewModels
                 EstadoConexion = "Verificando...";
                 ColorConexion = Colors.Orange;
 
-                using var httpClient = new HttpClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(5);
+                // Usar el servicio HTTP para verificar conexión
+                var conectado = await _httpService.CheckConnectionAsync();
 
-                // Intentar conectar al servidor
-                var response = await httpClient.GetAsync($"{UrlServidor}/api/health");
-
-                if (response.IsSuccessStatusCode)
+                if (conectado)
                 {
                     EstadoConexion = "Conectado";
                     ColorConexion = Colors.Green;
@@ -561,15 +577,11 @@ namespace RestaurantApp.ViewModels
                     ColorConexion = Colors.Orange;
                 }
             }
-            catch (TaskCanceledException)
-            {
-                EstadoConexion = "Timeout";
-                ColorConexion = Colors.Red;
-            }
-            catch (Exception)
+            catch (Exception ex)
             {
                 EstadoConexion = "Error de conexión";
                 ColorConexion = Colors.Red;
+                System.Diagnostics.Debug.WriteLine($"Error verificando conexión: {ex.Message}");
             }
         }
 

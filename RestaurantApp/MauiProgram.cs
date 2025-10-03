@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿// RestaurantApp/MauiProgram.cs
+using Microsoft.Extensions.Logging;
+using RestaurantApp.Services;
 
 namespace RestaurantApp
 {
@@ -15,7 +17,15 @@ namespace RestaurantApp
                     fonts.AddFont("OpenSans-Semibold.ttf", "OpenSansSemibold");
                 });
 
-            // Registrar servicios
+            // Registrar servicios HTTP y de datos
+            builder.Services.AddSingleton<HttpService>();
+            builder.Services.AddSingleton<MesaService>();
+            builder.Services.AddSingleton<PlatilloService>();
+            builder.Services.AddSingleton<PedidoService>();
+            builder.Services.AddSingleton<UsuarioService>();
+            builder.Services.AddSingleton<SincronizacionService>();
+
+            // Registrar páginas
             builder.Services.AddSingleton<MainPage>();
 
             // Registrar Views

@@ -1,49 +1,29 @@
+// RestaurantApp/Views/NuevoPedidoView.xaml.cs
 using RestaurantApp.ViewModels;
 
-namespace RestaurantApp.Views;
-
-public partial class NuevoPedidoView : ContentPage
+namespace RestaurantApp.Views
 {
-    private NuevoPedidoViewModel _viewModel;
-
-    public NuevoPedidoView()
+    public partial class NuevoPedidoView : ContentPage
     {
-        InitializeComponent();
-        _viewModel = new NuevoPedidoViewModel();
-        BindingContext = _viewModel;
-    }
+        private NuevoPedidoViewModel _viewModel;
 
-    private async void OnVerCarritoClicked(object sender, EventArgs e)
-    {
-        // El carrito ya está visible en el panel derecho
-        // Pero podríamos mostrar una modal en móviles
-        var totalItems = _viewModel.TotalItems;
-        var totalPedido = _viewModel.TotalPedido;
-
-        if (totalItems > 0)
+        public NuevoPedidoView()
         {
-            await DisplayAlert("Carrito",
-                $"Items: {totalItems}\nTotal: ${totalPedido:N0}", "OK");
+            InitializeComponent();
+            _viewModel = new NuevoPedidoViewModel();
+            BindingContext = _viewModel;
         }
-        else
+
+        protected override void OnAppearing()
         {
-            await DisplayAlert("Carrito", "El carrito está vacío", "OK");
+            base.OnAppearing();
+            _ = _viewModel.ActualizarDatos();
         }
-    }
 
-    protected override void OnAppearing()
-    {
-        base.OnAppearing();
-
-        // Actualizar datos cuando la vista aparece
-        _viewModel?.ActualizarDatos();
-    }
-
-    protected override void OnDisappearing()
-    {
-        base.OnDisappearing();
-
-        // Guardar estado temporal si es necesario
-        _viewModel?.GuardarEstadoTemporal();
+        protected override void OnDisappearing()
+        {
+            base.OnDisappearing();
+            _viewModel.GuardarEstadoTemporal();
+        }
     }
 }

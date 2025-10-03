@@ -123,5 +123,21 @@ namespace RestaurantApp.Models
             OnPropertyChanged(propertyName);
             return true;
         }
+        public static Usuario ObtenerUsuarioActual()
+        {
+            if (!Preferences.Get("SesionActiva", false))
+                return null;
+
+            return new Usuario
+            {
+                Id = Preferences.Get("UsuarioId", 0),
+                Nombre = Preferences.Get("NombreMesero", ""),
+                NombreUsuario = Preferences.Get("NombreUsuario", ""),
+                Tipo = Enum.TryParse<TipoUsuario>(
+                    Preferences.Get("TipoUsuario", "Mesero"),
+                    out var tipo) ? tipo : TipoUsuario.Mesero,
+                EstaActivo = true
+            };
+        }
     }
 }

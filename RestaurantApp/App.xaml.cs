@@ -1,10 +1,20 @@
-﻿namespace RestaurantApp
+﻿// RestaurantApp/App.xaml.cs
+namespace RestaurantApp
 {
     public partial class App : Application
     {
         public App()
         {
             InitializeComponent();
+
+            // Verificar si hay sesión activa
+            var sesionActiva = Preferences.Get("SesionActiva", false);
+
+            if (!sesionActiva)
+            {
+                // Si no hay sesión, crear usuario por defecto
+                CrearUsuarioPorDefecto();
+            }
 
             // Configurar Shell como MainPage
             MainPage = new AppShell();
@@ -21,6 +31,15 @@
             window.MinimumHeight = 600;
 
             return window;
+        }
+
+        private void CrearUsuarioPorDefecto()
+        {
+            // Crear usuario por defecto para pruebas
+            Preferences.Set("UsuarioId", 1);
+            Preferences.Set("NombreMesero", "Juan Pérez");
+            Preferences.Set("TipoUsuario", "Mesero");
+            Preferences.Set("SesionActiva", true);
         }
     }
 }

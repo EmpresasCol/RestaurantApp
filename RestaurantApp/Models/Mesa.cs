@@ -15,14 +15,42 @@ namespace RestaurantApp.Models
         private int _cantidadPedidosPendientes;
         private DateTime? _horaOcupacion;
         private string _ubicacion;
+        private bool _estaSeleccionada;
+        private Color _borderColor;
+        private double _opacidadMesa;
 
         public Mesa()
         {
             Pedidos = new List<Pedido>();
+            BorderColor = Colors.Transparent;
+            OpacidadMesa = 1.0;
             ActualizarColorEstado();
         }
 
         // Propiedades principales
+        public bool EstaSeleccionada
+        {
+            get => _estaSeleccionada;
+            set
+            {
+                if (SetProperty(ref _estaSeleccionada, value))
+                {
+                    ActualizarVisualizacionSeleccion();
+                }
+            }
+        }
+
+        public Color BorderColor
+        {
+            get => _borderColor;
+            set => SetProperty(ref _borderColor, value);
+        }
+
+        public double OpacidadMesa
+        {
+            get => _opacidadMesa;
+            set => SetProperty(ref _opacidadMesa, value);
+        }
         public int Id
         {
             get => _id;
@@ -169,6 +197,19 @@ namespace RestaurantApp.Models
             backingStore = value;
             OnPropertyChanged(propertyName);
             return true;
+        }
+        private void ActualizarVisualizacionSeleccion()
+        {
+            if (EstaSeleccionada)
+            {
+                BorderColor = Colors.Blue;
+                OpacidadMesa = 1.0;
+            }
+            else
+            {
+                BorderColor = Colors.Transparent;
+                OpacidadMesa = Estado == EstadoMesa.Disponible ? 1.0 : 0.6;
+            }
         }
     }
 }

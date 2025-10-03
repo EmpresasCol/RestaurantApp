@@ -201,34 +201,44 @@
                             </Frame>
 
                             <!-- Botones de Acción -->
-                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,15">
+                            <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8" Margin="0,15">
                                 <Button Grid.Column="0"
-                                        Text="✏️ Editar"
-                                        BackgroundColor="#FFC107"
-                                        TextColor="White"
-                                        FontSize="12"
-                                        CornerRadius="8"
-                                        Command="{Binding BindingContext.EditarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
-                                        CommandParameter="{Binding}"/>
+                                    Text="✏️"
+                                    BackgroundColor="#FFC107"
+                                    TextColor="White"
+                                    FontSize="18"
+                                    CornerRadius="8"
+                                    Command="{Binding BindingContext.EditarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                    CommandParameter="{Binding}"/>
 
                                 <Button Grid.Column="1"
-                                        Text="✅ Completar"
-                                        BackgroundColor="#28A745"
-                                        TextColor="White"
-                                        FontSize="12"
-                                        CornerRadius="8"
-                                        Command="{Binding BindingContext.CompletarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
-                                        CommandParameter="{Binding}"
-                                        IsEnabled="{Binding PuedeCompletar}"/>
+                                    Text="✅"
+                                    BackgroundColor="#28A745"
+                                    TextColor="White"
+                                    FontSize="18"
+                                    CornerRadius="8"
+                                    Command="{Binding BindingContext.CompletarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                    CommandParameter="{Binding}"
+                                    IsEnabled="{Binding PuedeCompletar}"/>
 
                                 <Button Grid.Column="2"
-                                        Text="❌ Cancelar"
-                                        BackgroundColor="#DC3545"
-                                        TextColor="White"
-                                        FontSize="12"
-                                        CornerRadius="8"
-                                        Command="{Binding BindingContext.CancelarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
-                                        CommandParameter="{Binding}"/>
+                                    Text="🍽️"
+                                    BackgroundColor="#17A2B8"
+                                    TextColor="White"
+                                    FontSize="18"
+                                    CornerRadius="8"
+                                    Command="{Binding BindingContext.EntregarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                    CommandParameter="{Binding}"
+                                    IsEnabled="{Binding PuedeEntregar}"/>
+
+                                <Button Grid.Column="3"
+                                    Text="❌"
+                                    BackgroundColor="#DC3545"
+                                    TextColor="White"
+                                    FontSize="18"
+                                    CornerRadius="8"
+                                    Command="{Binding BindingContext.CancelarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                    CommandParameter="{Binding}"/>
                             </Grid>
 
                         </StackLayout>

@@ -1,4 +1,6 @@
-﻿using RestaurantApp.Models;
+﻿// RestaurantApp/ViewModels/PedidosActivosViewModel.cs
+using RestaurantApp.Models;
+using RestaurantApp.Services;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using RestaurantApp.Helpers;
@@ -7,6 +9,9 @@ namespace RestaurantApp.ViewModels
 {
     public class PedidosActivosViewModel : BaseViewModel
     {
+        private readonly PedidoService _pedidoService;
+        private readonly MesaService _mesaService;
+
         private int _cantidadPedidosActivos;
         private FiltroEstado _filtroSeleccionado;
         private DateTime _ultimaActualizacion;
@@ -15,6 +20,10 @@ namespace RestaurantApp.ViewModels
         public PedidosActivosViewModel()
         {
             Title = "Pedidos Activos";
+
+            // Inicializar servicios
+            _pedidoService = new PedidoService();
+            _mesaService = new MesaService();
 
             // Inicializar colecciones
             PedidosFiltrados = new ObservableCollection<Pedido>();
@@ -26,7 +35,10 @@ namespace RestaurantApp.ViewModels
 
             // Cargar datos iniciales
             CargarFiltros();
-            CargarPedidos();
+            _ = CargarPedidos();
+
+            // Iniciar actualización automática
+            IniciarActualizacionAutomatica();
         }
 
         // Propiedades principales
@@ -62,12 +74,14 @@ namespace RestaurantApp.ViewModels
         public ICommand CancelarPedidoCommand { get; private set; }
         public ICommand ActualizarCommand { get; private set; }
         public ICommand NuevoPedidoCommand { get; private set; }
+        public ICommand EntregarPedidoCommand { get; private set; }
 
         private void InicializarComandos()
         {
             SeleccionarFiltroCommand = new Command<FiltroEstado>(SeleccionarFiltro);
             EditarPedidoCommand = new AsyncCommand<Pedido>(EditarPedido);
             CompletarPedidoCommand = new AsyncCommand<Pedido>(CompletarPedido);
+            EntregarPedidoCommand = new AsyncCommand<Pedido>(EntregarPedido); // NUEVO
             CancelarPedidoCommand = new AsyncCommand<Pedido>(CancelarPedido);
             ActualizarCommand = new AsyncCommand(Actualizar);
             NuevoPedidoCommand = new Command(async () => await Shell.Current.GoToAsync("//nuevopedido"));
@@ -91,89 +105,29 @@ namespace RestaurantApp.ViewModels
         {
             await ExecuteAsync(async () =>
             {
-                // En implementación real, consultar API
-                _todosPedidos = await ObtenerPedidosDesdeFuente();
-                CantidadPedidosActivos = _todosPedidos.Count(p => p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
-                UltimaActualizacion = DateTime.Now;
+                try
+                {
+                    // Obtener pedidos desde la API
+                    _todosPedidos = await _pedidoService.ObtenerTodosAsync();
 
-                AplicarFiltro();
+                    CantidadPedidosActivos = _todosPedidos.Count(p =>
+                        p.Estado != EstadoPedido.Pagado &&
+                        p.Estado != EstadoPedido.Cancelado);
 
-                // Actualizar tiempos transcurridos
-                ActualizarTiemposTranscurridos();
+                    UltimaActualizacion = DateTime.Now;
+
+                    AplicarFiltro();
+
+                    // Actualizar tiempos transcurridos
+                    ActualizarTiemposTranscurridos();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error cargando pedidos: {ex.Message}");
+                    await Application.Current.MainPage.DisplayAlert("Error",
+                        "No se pudieron cargar los pedidos. Verifica tu conexión.", "OK");
+                }
             });
-        }
-
-        private async Task<List<Pedido>> ObtenerPedidosDesdeFuente()
-        {
-            // Simular delay de red
-            await Task.Delay(500);
-
-            return GenerarPedidosPrueba();
-        }
-
-        private List<Pedido> GenerarPedidosPrueba()
-        {
-            var pedidos = new List<Pedido>();
-            var random = new Random();
-            var estados = new[] { EstadoPedido.EnProceso, EstadoPedido.Listo, EstadoPedido.Pagado };
-
-            for (int i = 1; i <= 6; i++)
-            {
-                var estado = estados[random.Next(estados.Length)];
-                var fechaHora = DateTime.Now.AddMinutes(-random.Next(5, 180));
-
-                var pedido = new Pedido
-                {
-                    Id = i,
-                    Mesa = new Mesa { Id = i, Numero = random.Next(1, 13) },
-                    FechaHora = fechaHora,
-                    Estado = estado,
-                    NotasEspeciales = i % 3 == 0 ? "Sin cebolla, extra salsa" : null,
-                    Items = GenerarItemsPedidoPrueba(random.Next(1, 5))
-                };
-
-                pedido.CalcularTotal();
-                pedido.ActualizarTiempoTranscurrido();
-
-                pedidos.Add(pedido);
-            }
-
-            return pedidos.Where(p => p.Estado != EstadoPedido.Pagado).ToList();
-        }
-
-        private List<ItemPedido> GenerarItemsPedidoPrueba(int cantidad)
-        {
-            var items = new List<ItemPedido>();
-            var platillos = new[]
-            {
-                new { Nombre = "Hamburguesa", Precio = 15000m },
-                new { Nombre = "Pizza", Precio = 22000m },
-                new { Nombre = "Ensalada", Precio = 12000m },
-                new { Nombre = "Pasta", Precio = 18000m },
-                new { Nombre = "Coca Cola", Precio = 3000m }
-            };
-
-            var random = new Random();
-
-            for (int i = 0; i < cantidad; i++)
-            {
-                var platillo = platillos[random.Next(platillos.Length)];
-                items.Add(new ItemPedido
-                {
-                    Id = i + 1,
-                    Platillo = new Platillo { Nombre = platillo.Nombre, Precio = platillo.Precio },
-                    Cantidad = random.Next(1, 4),
-                    PrecioUnitario = platillo.Precio,
-                    EstadoItem = i == 0 ? EstadoItemPedido.EnPreparacion : EstadoItemPedido.Pendiente
-                });
-            }
-
-            foreach (var item in items)
-            {
-                item.CalcularSubtotal();
-            }
-
-            return items;
         }
 
         // Métodos de filtrado
@@ -268,7 +222,6 @@ namespace RestaurantApp.ViewModels
 
         private async Task CambiarMesa(Pedido pedido)
         {
-            // Implementar selector de mesa
             await Application.Current.MainPage.DisplayAlert("Cambiar Mesa",
                 "Funcionalidad de cambio de mesa pendiente", "OK");
         }
@@ -284,12 +237,63 @@ namespace RestaurantApp.ViewModels
 
             if (confirmar)
             {
-                pedido.Completar();
-                await GuardarCambiosPedido(pedido);
-                await Actualizar();
+                try
+                {
+                    // Actualizar estado en la API
+                    await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Listo");
 
-                await Application.Current.MainPage.DisplayAlert("Éxito",
-                    "Pedido marcado como completado", "OK");
+                    pedido.Completar();
+                    await Actualizar();
+
+                    await Application.Current.MainPage.DisplayAlert("Éxito",
+                        "Pedido marcado como completado", "OK");
+                }
+                catch (Exception ex)
+                {
+                    await Application.Current.MainPage.DisplayAlert("Error",
+                        $"Error al completar pedido: {ex.Message}", "OK");
+                }
+            }
+        }
+        private async Task EntregarPedido(Pedido pedido)
+        {
+            if (pedido == null) return;
+
+            // Verificar que el pedido esté listo
+            if (pedido.Estado != EstadoPedido.Listo)
+            {
+                await Application.Current.MainPage.DisplayAlert("No disponible",
+                    "Solo se pueden entregar pedidos que estén listos", "OK");
+                return;
+            }
+
+            bool confirmar = await Application.Current.MainPage.DisplayAlert(
+                "Confirmar Entrega",
+                $"¿Marcar como entregado el pedido de la mesa {pedido.Mesa.Numero}?",
+                "Sí", "No");
+
+            if (confirmar)
+            {
+                try
+                {
+                    // Actualizar estado en la API a "Entregado"
+                    await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Entregado");
+
+                    pedido.Entregar();
+
+                    // Remover de la lista de activos
+                    _todosPedidos.Remove(pedido);
+                    AplicarFiltro();
+                    CantidadPedidosActivos--;
+
+                    await Application.Current.MainPage.DisplayAlert("Entregado",
+                        "Pedido marcado como entregado", "OK");
+                }
+                catch (Exception ex)
+                {
+                    await Application.Current.MainPage.DisplayAlert("Error",
+                        $"Error al entregar pedido: {ex.Message}", "OK");
+                }
             }
         }
 
@@ -304,23 +308,44 @@ namespace RestaurantApp.ViewModels
 
             if (confirmar)
             {
-                pedido.Cancelar();
-                await GuardarCambiosPedido(pedido);
+                try
+                {
+                    // Cancelar en la API
+                    var resultado = await _pedidoService.CancelarPedidoAsync(pedido.Id);
 
-                // Remover de la lista
-                _todosPedidos.Remove(pedido);
-                AplicarFiltro();
-                CantidadPedidosActivos--;
+                    if (resultado)
+                    {
+                        // Actualizar estado de la mesa
+                        await _mesaService.ActualizarEstadoAsync(pedido.Mesa.Id, "Disponible");
 
-                await Application.Current.MainPage.DisplayAlert("Cancelado",
-                    "Pedido cancelado correctamente", "OK");
+                        // Remover de la lista
+                        _todosPedidos.Remove(pedido);
+                        AplicarFiltro();
+                        CantidadPedidosActivos--;
+
+                        await Application.Current.MainPage.DisplayAlert("Cancelado",
+                            "Pedido cancelado correctamente", "OK");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    await Application.Current.MainPage.DisplayAlert("Error",
+                        $"Error al cancelar pedido: {ex.Message}", "OK");
+                }
             }
         }
 
         private async Task GuardarCambiosPedido(Pedido pedido)
         {
-            // En implementación real, enviar cambios a API
-            await Task.Delay(200); // Simular llamada a API
+            try
+            {
+                // En implementación real, enviar cambios a API
+                await Task.Delay(200); // Simular llamada a API
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error guardando cambios: {ex.Message}");
+            }
         }
 
         private async Task Actualizar()
@@ -359,50 +384,6 @@ namespace RestaurantApp.ViewModels
         ~PedidosActivosViewModel()
         {
             DetenerActualizacionAutomatica();
-        }
-    }
-
-    // Comando async genérico con parámetro
-    public class AsyncCommand<T> : ICommand
-    {
-        private readonly Func<T, Task> _execute;
-        private readonly Func<T, bool> _canExecute;
-        private bool _isExecuting;
-
-        public AsyncCommand(Func<T, Task> execute, Func<T, bool> canExecute = null)
-        {
-            _execute = execute;
-            _canExecute = canExecute;
-        }
-
-        public bool CanExecute(object parameter)
-        {
-            return !_isExecuting && (_canExecute?.Invoke((T)parameter) ?? true);
-        }
-
-        public async void Execute(object parameter)
-        {
-            if (CanExecute(parameter))
-            {
-                try
-                {
-                    _isExecuting = true;
-                    await _execute((T)parameter);
-                }
-                finally
-                {
-                    _isExecuting = false;
-                }
-            }
-
-            RaiseCanExecuteChanged();
-        }
-
-        public event EventHandler CanExecuteChanged;
-
-        public void RaiseCanExecuteChanged()
-        {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 }

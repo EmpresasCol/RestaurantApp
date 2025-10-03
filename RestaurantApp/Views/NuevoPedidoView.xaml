@@ -2,8 +2,17 @@
 <ContentPage x:Class="RestaurantApp.Views.NuevoPedidoView"
              xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:RestaurantApp.Converters"
              Title="Nuevo Pedido"
              BackgroundColor="#F8F9FA">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:IntToBoolConverter x:Key="IntToBoolConverter"/>
+            <converters:IntToBoolInverseConverter x:Key="IntToBoolInverseConverter"/>
+            <converters:IsNotNullConverter x:Key="IsNotNullConverter"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
 
     <Grid RowDefinitions="Auto,*,Auto">
 
@@ -57,36 +66,65 @@
                                TextColor="#333"
                                Margin="0,0,0,15"/>
 
-                        <CollectionView ItemsSource="{Binding MesasDisponibles}"
-                                      SelectedItem="{Binding MesaSeleccionada}"
-                                      SelectionMode="Single">
+                        <CollectionView ItemsSource="{Binding MesasDisponibles}">
                             <CollectionView.ItemsLayout>
-                                <GridItemsLayout Orientation="Vertical" Span="6" VerticalItemSpacing="8" HorizontalItemSpacing="8"/>
+                                <GridItemsLayout Orientation="Vertical" 
+                                Span="6" 
+                                VerticalItemSpacing="8" 
+                                HorizontalItemSpacing="8"/>
                             </CollectionView.ItemsLayout>
                             <CollectionView.ItemTemplate>
                                 <DataTemplate>
                                     <Frame BackgroundColor="{Binding ColorEstado}"
-                                           Padding="12"
-                                           CornerRadius="10"
-                                           HasShadow="True"
-                                           HeightRequest="60"
-                                           WidthRequest="60">
-                                        <StackLayout HorizontalOptions="Center" VerticalOptions="Center">
+                           Padding="0"
+                           CornerRadius="10"
+                           HasShadow="True"
+                           HeightRequest="60"
+                           WidthRequest="60"
+                           BorderColor="{Binding BorderColor}"
+                           Opacity="{Binding OpacidadMesa}">
+                                        <Frame.GestureRecognizers>
+                                            <TapGestureRecognizer 
+                                Command="{Binding BindingContext.SeleccionarMesaCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                CommandParameter="{Binding}"/>
+                                        </Frame.GestureRecognizers>
+                                        <StackLayout HorizontalOptions="Center" VerticalOptions="Center" Padding="12">
                                             <Label Text="{Binding Numero}" 
-                                                   TextColor="White"
-                                                   FontAttributes="Bold"
-                                                   FontSize="18"
-                                                   HorizontalOptions="Center"/>
+                                   TextColor="White"
+                                   FontAttributes="Bold"
+                                   FontSize="18"
+                                   HorizontalOptions="Center"/>
                                             <Label Text="{Binding CapacidadTexto}" 
-                                                   TextColor="White"
-                                                   FontSize="10"
-                                                   HorizontalOptions="Center"
-                                                   Opacity="0.8"/>
+                                   TextColor="White"
+                                   FontSize="10"
+                                   HorizontalOptions="Center"
+                                   Opacity="0.8"/>
                                         </StackLayout>
                                     </Frame>
                                 </DataTemplate>
                             </CollectionView.ItemTemplate>
                         </CollectionView>
+
+                        <!-- Indicador de mesa seleccionada -->
+                        <Frame BackgroundColor="#E3F2FD" 
+               CornerRadius="8" 
+               Padding="15" 
+               Margin="0,15,0,0"
+               IsVisible="{Binding MesaSeleccionada, Converter={StaticResource IsNotNullConverter}}">
+                            <Label HorizontalOptions="Center">
+                                <Label.FormattedText>
+                                    <FormattedString>
+                                        <Span Text="✓ Mesa seleccionada: " 
+                              TextColor="#1976D2"
+                              FontSize="14"/>
+                                        <Span Text="{Binding MesaSeleccionada.Numero}" 
+                              TextColor="#1976D2"
+                              FontSize="14"
+                              FontAttributes="Bold"/>
+                                    </FormattedString>
+                                </Label.FormattedText>
+                            </Label>
+                        </Frame>
                     </StackLayout>
                 </Frame>
 

@@ -118,6 +118,7 @@ namespace RestaurantApp.Models
         public decimal IVA => Subtotal * 0.19m;
         public int CantidadItems => Items.Sum(i => i.Cantidad);
         public string EstadoTexto => Estado.ToString();
+        public bool PuedeEntregar => Estado == EstadoPedido.Listo;
 
         // Métodos
         private void ActualizarEstadoColor()
@@ -126,9 +127,9 @@ namespace RestaurantApp.Models
             {
                 EstadoPedido.EnProceso => Colors.Orange,
                 EstadoPedido.Listo => Colors.Green,
-                EstadoPedido.Pagado => Colors.Blue,
+                EstadoPedido.Entregado => Colors.Blue,  
+                EstadoPedido.Pagado => Colors.Purple,
                 EstadoPedido.Cancelado => Colors.Red,
-                EstadoPedido.Entregado => Colors.Gray,
                 _ => Colors.Gray
             };
         }
@@ -166,6 +167,10 @@ namespace RestaurantApp.Models
         public void Cancelar()
         {
             Estado = EstadoPedido.Cancelado;
+        }
+        public void Entregar()
+        {
+            Estado = EstadoPedido.Entregado;
         }
 
         // INotifyPropertyChanged implementation
