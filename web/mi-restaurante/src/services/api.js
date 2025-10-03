@@ -95,7 +95,6 @@ export const updatePedido = async (id, estado) => {
 };
 
 // ==================== PAGOS ====================
-// ==================== PAGOS ====================
 export const createPago = async (pedidoId, monto, metodoPago, propina = 0) => {
   try {
     console.log('📤 Creando pago:', {
