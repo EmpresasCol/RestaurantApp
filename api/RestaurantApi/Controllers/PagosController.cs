@@ -21,7 +21,7 @@ namespace RestaurantApi.Controllers
         {
             var pagos = await _context.Pagos
                 .Include(p => p.Pedido)
-                    .ThenInclude(p => p.Mesa)
+                    .ThenInclude(p => p!.Mesa)  // ← Agregar ! para indicar que no es null
                 .OrderByDescending(p => p.Fecha)
                 .ToListAsync();
 
@@ -104,7 +104,17 @@ namespace RestaurantApi.Controllers
                 return BadRequest();
 
             _context.Entry(pago).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Pagos.Any(e => e.Id == id))
+                    return NotFound();
+                throw;
+            }
 
             return NoContent();
         }

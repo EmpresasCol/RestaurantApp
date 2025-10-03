@@ -24,7 +24,7 @@ namespace RestaurantApi.Controllers
             {
                 Id = u.Id,
                 Nombre = u.Nombre,
-                Usuario = u.Usuario,
+                NombreUsuario = u.NombreUsuario,
                 Rol = u.Rol.ToString()
             }).ToList();
         }
@@ -39,13 +39,13 @@ namespace RestaurantApi.Controllers
             {
                 Id = usuario.Id,
                 Nombre = usuario.Nombre,
-                Usuario = usuario.Usuario,
+                NombreUsuario = usuario.NombreUsuario,
                 Rol = usuario.Rol.ToString()
             };
         }
 
         [HttpPost]
-        public async Task<ActionResult<Usuarios>> PostUsuario(Usuarios usuario)
+        public async Task<ActionResult<Usuario>> PostUsuario(Usuario usuario)
         {
             _context.Usuarios.Add(usuario);
             await _context.SaveChangesAsync();
@@ -53,11 +53,23 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutUsuario(int id, Usuarios usuario)
+        public async Task<IActionResult> PutUsuario(int id, Usuario usuario)
         {
             if (id != usuario.Id) return BadRequest();
+
             _context.Entry(usuario).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Usuarios.Any(e => e.Id == id))
+                    return NotFound();
+                throw;
+            }
+
             return NoContent();
         }
 
