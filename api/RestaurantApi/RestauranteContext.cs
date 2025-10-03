@@ -7,18 +7,18 @@ namespace RestaurantApi
     {
         public RestauranteContext(DbContextOptions<RestauranteContext> options) : base(options) { }
 
-        public DbSet<Usuarios> Usuarios { get; set; }
+        public DbSet<Usuario> Usuarios { get; set; }  // ← Singular Usuario, Plural Usuarios
         public DbSet<Mesa> Mesas { get; set; }
         public DbSet<Platillo> Platillos { get; set; }
         public DbSet<Pedido> Pedidos { get; set; }
         public DbSet<PedidoDetalle> PedidoDetalles { get; set; }
         public DbSet<Pago> Pagos { get; set; }
-        public DbSet<Factura> Facturas { get; set; }  // ← AGREGADO
+        public DbSet<Factura> Facturas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             // Configuración de enums como strings
-            modelBuilder.Entity<Usuarios>()
+            modelBuilder.Entity<Usuario>()
                 .Property(u => u.Rol)
                 .HasConversion<string>();
 

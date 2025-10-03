@@ -31,16 +31,17 @@ namespace RestaurantApi.Controllers
             {
                 Id = p.Id,
                 MesaId = p.MesaId,
-                MesaNumero = p.Mesa?.Numero ?? 0,
+                MesaNumero = p.Mesa?.Numero ?? 0,  // ← Operador ?? para manejar null
                 Estado = p.Estado.ToString(),
                 Fecha = p.Fecha,
                 Detalles = p.Detalles.Select(d => new PedidoDetalleDto
                 {
                     Id = d.Id,
                     PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "",
+                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",  // ← Manejar null
                     Cantidad = d.Cantidad,
-                    Precio = d.Platillo?.Precio ?? 0,
+                    Precio = d.Platillo?.Precio ?? 0,  // ← Manejar null
+                    Nota = d.Nota,
                     Estado = d.Estado.ToString()
                 }).ToList()
             }).ToList();
@@ -70,9 +71,10 @@ namespace RestaurantApi.Controllers
                 {
                     Id = d.Id,
                     PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "",
+                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
                     Cantidad = d.Cantidad,
                     Precio = d.Platillo?.Precio ?? 0,
+                    Nota = d.Nota,
                     Estado = d.Estado.ToString()
                 }).ToList()
             };
@@ -86,7 +88,7 @@ namespace RestaurantApi.Controllers
             var pedido = new Pedido
             {
                 MesaId = crearPedido.MesaId,
-                UsuarioId = 1, // Por ahora usuario fijo, luego puedes implementar autenticación
+                UsuarioId = 1, // Por ahora usuario fijo
                 Estado = EstadoPedido.EnProceso,
                 Fecha = DateTime.Now
             };
@@ -102,6 +104,7 @@ namespace RestaurantApi.Controllers
                     PedidoId = pedido.Id,
                     PlatilloId = detalle.PlatilloId,
                     Cantidad = detalle.Cantidad,
+                    Nota = detalle.Nota,
                     Estado = EstadoDetalle.Pendiente
                 };
                 _context.PedidoDetalles.Add(pedidoDetalle);
@@ -116,6 +119,9 @@ namespace RestaurantApi.Controllers
                     .ThenInclude(d => d.Platillo)
                 .FirstOrDefaultAsync(p => p.Id == pedido.Id);
 
+            if (pedidoCreado == null)
+                return NotFound();
+
             var resultado = new PedidoDto
             {
                 Id = pedidoCreado.Id,
@@ -127,9 +133,10 @@ namespace RestaurantApi.Controllers
                 {
                     Id = d.Id,
                     PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "",
+                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
                     Cantidad = d.Cantidad,
                     Precio = d.Platillo?.Precio ?? 0,
+                    Nota = d.Nota,
                     Estado = d.Estado.ToString()
                 }).ToList()
             };
@@ -148,14 +155,28 @@ namespace RestaurantApi.Controllers
             // Actualizar estado
             if (!string.IsNullOrEmpty(actualizarPedido.Estado))
             {
-                if (Enum.TryParse<EstadoPedido>(actualizarPedido.Estado, out var estado))
+                if (Enum.TryParse<EstadoPedido>(actualizarPedido.Estado, true, out var estadoEnum))
                 {
-                    pedido.Estado = estado;
+                    pedido.Estado = estadoEnum;
+                }
+                else
+                {
+                    return BadRequest($"Estado inválido: {actualizarPedido.Estado}. Estados válidos: EnProceso, Listo, Pagado, Cancelado");
                 }
             }
 
             _context.Entry(pedido).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Pedidos.Any(e => e.Id == id))
+                    return NotFound();
+                throw;
+            }
 
             return NoContent();
         }

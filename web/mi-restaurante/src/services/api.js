@@ -81,15 +81,35 @@ export const createPedido = async (mesaId, items) => {
 
 export const updatePedido = async (id, estado) => {
   try {
+    console.log('🔄 Actualizando pedido:', { id, estado });
+
     const response = await fetch(`${API_URL}/pedidos/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
       body: JSON.stringify({ estado: estado })
     });
-    if (!response.ok) throw new Error('Error al actualizar pedido');
-    return response;
+
+    console.log('📡 Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error del servidor:', errorText);
+      throw new Error(`Error al actualizar pedido: ${errorText}`);
+    }
+
+    // ⭐ CAMBIO IMPORTANTE: Manejar respuesta 204 (No Content)
+    if (response.status === 204) {
+      console.log('✅ Pedido actualizado exitosamente (204 No Content)');
+      return { success: true }; // Retornar un objeto simple
+    }
+
+    console.log('✅ Pedido actualizado exitosamente');
+    return await response.json(); // Solo intentar parsear JSON si hay contenido
   } catch (error) {
-    console.error('Error en updatePedido:', error);
+    console.error('❌ Error en updatePedido:', error);
     throw error;
   }
 };
