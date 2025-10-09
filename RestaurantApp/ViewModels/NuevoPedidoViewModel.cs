@@ -3,6 +3,7 @@ using RestaurantApp.Models;
 using RestaurantApp.Services;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using RestaurantApp.Config;
 using RestaurantApp.Helpers;
 
 namespace RestaurantApp.ViewModels
@@ -366,6 +367,7 @@ namespace RestaurantApp.ViewModels
             OnPropertyChanged(nameof(TienePedidoActual));
         }
 
+
         private async Task ConfirmarPedido()
         {
             if (!PuedeConfirmarPedido)
@@ -373,12 +375,25 @@ namespace RestaurantApp.ViewModels
 
             try
             {
+                System.Diagnostics.Debug.WriteLine("=== INICIO CONFIRMACIÓN PEDIDO ===");
+                System.Diagnostics.Debug.WriteLine($"URL Base: {ApiConfig.BaseUrl}");
+                System.Diagnostics.Debug.WriteLine($"Mesa Seleccionada: {MesaSeleccionada?.Id}");
+                System.Diagnostics.Debug.WriteLine($"Cantidad de Items: {ItemsPedidoActual.Count}");
+
+                // Verificar conexión primero
+                System.Diagnostics.Debug.WriteLine("Verificando conexión...");
+                var httpService = new HttpService();
+                var conectado = await httpService.CheckConnectionAsync();
+
+                System.Diagnostics.Debug.WriteLine($"Conexión: {(conectado ? "EXITOSA" : "FALLIDA")}");
+
                 // Obtener usuario actual
                 var usuarioId = _usuarioService.ObtenerUsuarioIdActual();
+                System.Diagnostics.Debug.WriteLine($"Usuario ID: {usuarioId}");
+
                 if (usuarioId == 0)
                 {
-                    await Application.Current.MainPage.DisplayAlert("Error",
-                        "No hay sesión activa. Por favor inicie sesión.", "OK");
+                    System.Diagnostics.Debug.WriteLine("ERROR: No hay sesión activa");
                     return;
                 }
 
@@ -395,11 +410,18 @@ namespace RestaurantApp.ViewModels
                     }).ToList()
                 };
 
+                System.Diagnostics.Debug.WriteLine($"Request JSON: {System.Text.Json.JsonSerializer.Serialize(request)}");
+                System.Diagnostics.Debug.WriteLine("Enviando pedido...");
+
                 // Enviar pedido a la API
                 var pedidoCreado = await _pedidoService.CrearPedidoAsync(request);
 
+                System.Diagnostics.Debug.WriteLine($"Pedido creado con ID: {pedidoCreado.Id}");
+
                 // Actualizar estado de la mesa
                 await _mesaService.ActualizarEstadoAsync(MesaSeleccionada.Id, "Ocupada");
+
+                System.Diagnostics.Debug.WriteLine("=== PEDIDO CONFIRMADO EXITOSAMENTE ===");
 
                 // Mostrar confirmación
                 await Application.Current.MainPage.DisplayAlert("Éxito",
@@ -411,8 +433,23 @@ namespace RestaurantApp.ViewModels
             }
             catch (Exception ex)
             {
-                await Application.Current.MainPage.DisplayAlert("Error",
-                    $"Error al confirmar pedido: {ex.Message}", "OK");
+                // Solo mostrar el error exacto del sistema
+                System.Diagnostics.Debug.WriteLine($"========== ERROR ==========");
+                System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().FullName}");
+                System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"StackTrace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    System.Diagnostics.Debug.WriteLine($"InnerException Type: {ex.InnerException.GetType().FullName}");
+                    System.Diagnostics.Debug.WriteLine($"InnerException Message: {ex.InnerException.Message}");
+                    System.Diagnostics.Debug.WriteLine($"InnerException StackTrace: {ex.InnerException.StackTrace}");
+                }
+                System.Diagnostics.Debug.WriteLine($"===========================");
+
+                // Mostrar el error en pantalla también
+                await Application.Current.MainPage.DisplayAlert("ERROR",
+                    $"{ex.GetType().Name}\n\n{ex.Message}\n\n{ex.InnerException?.Message}",
+                    "OK");
             }
         }
 

@@ -1,4 +1,5 @@
-﻿using RestaurantApp.Models;
+﻿// RestaurantApp/Services/PedidoService.cs
+using RestaurantApp.Models;
 
 namespace RestaurantApp.Services
 {
@@ -15,7 +16,7 @@ namespace RestaurantApp.Services
         {
             try
             {
-                var pedidos = await _httpService.GetAsync<List<PedidoDto>>(ApiConfig.Endpoints.Pedidos);
+                var pedidos = await _httpService.GetAsync<List<PedidoDto>>("api/Pedidos");
                 return pedidos.Select(dto => ConvertirDtoAModelo(dto)).ToList();
             }
             catch (Exception ex)
@@ -27,68 +28,26 @@ namespace RestaurantApp.Services
 
         public async Task<Pedido> ObtenerPorIdAsync(int id)
         {
-            try
-            {
-                var pedido = await _httpService.GetAsync<PedidoDto>(
-                    $"{ApiConfig.Endpoints.Pedidos}/{id}"
-                );
-                return ConvertirDtoAModelo(pedido);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error obteniendo pedido: {ex.Message}");
-                throw;
-            }
+            var pedido = await _httpService.GetAsync<PedidoDto>($"api/Pedidos/{id}");
+            return ConvertirDtoAModelo(pedido);
         }
 
         public async Task<Pedido> CrearPedidoAsync(CrearPedidoRequest request)
         {
-            try
-            {
-                var pedido = await _httpService.PostAsync<PedidoDto>(
-                    ApiConfig.Endpoints.Pedidos,
-                    request
-                );
-                return ConvertirDtoAModelo(pedido);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error creando pedido: {ex.Message}");
-                throw;
-            }
+            var pedido = await _httpService.PostAsync<PedidoDto>("api/Pedidos", request);
+            return ConvertirDtoAModelo(pedido);
         }
 
         public async Task<Pedido> ActualizarEstadoAsync(int id, string estado)
         {
-            try
-            {
-                var data = new { Estado = estado };
-                var pedido = await _httpService.PutAsync<PedidoDto>(
-                    $"{ApiConfig.Endpoints.Pedidos}/{id}/estado",
-                    data
-                );
-                return ConvertirDtoAModelo(pedido);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error actualizando estado pedido: {ex.Message}");
-                throw;
-            }
+            var data = new { Estado = estado };
+            var pedido = await _httpService.PutAsync<PedidoDto>($"api/Pedidos/{id}/estado", data);
+            return ConvertirDtoAModelo(pedido);
         }
 
         public async Task<bool> CancelarPedidoAsync(int id)
         {
-            try
-            {
-                return await _httpService.DeleteAsync(
-                    $"{ApiConfig.Endpoints.Pedidos}/{id}"
-                );
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error cancelando pedido: {ex.Message}");
-                throw;
-            }
+            return await _httpService.DeleteAsync($"api/Pedidos/{id}");
         }
 
         private Pedido ConvertirDtoAModelo(PedidoDto dto)
@@ -100,13 +59,11 @@ namespace RestaurantApp.Services
                 NotasEspeciales = ""
             };
 
-            // Convertir estado
             if (Enum.TryParse<EstadoPedido>(dto.Estado, out var estadoEnum))
             {
                 pedido.Estado = estadoEnum;
             }
 
-            // Mesa
             if (dto.Mesa != null)
             {
                 pedido.Mesa = new Mesa
@@ -116,7 +73,6 @@ namespace RestaurantApp.Services
                 };
             }
 
-            // Items
             if (dto.Detalles != null)
             {
                 pedido.Items = dto.Detalles.Select(d => new ItemPedido
@@ -138,12 +94,10 @@ namespace RestaurantApp.Services
             }
 
             pedido.ActualizarTiempoTranscurrido();
-
             return pedido;
         }
     }
 
-    // DTOs para la comunicación con la API
     public class PedidoDto
     {
         public int Id { get; set; }

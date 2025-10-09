@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿// api/RestaurantApi/Controllers/MesasController.cs
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 using RestaurantApi.Dtos;
@@ -57,6 +58,32 @@ namespace RestaurantApi.Controllers
             _context.Entry(mesa).State = EntityState.Modified;
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+        // NUEVO ENDPOINT
+        [HttpPut("{id}/estado")]
+        public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoMesaDto dto)
+        {
+            var mesa = await _context.Mesas.FindAsync(id);
+
+            if (mesa == null)
+                return NotFound($"Mesa con ID {id} no encontrada");
+
+            // Validar que el estado sea válido
+            if (!Enum.TryParse<EstadoMesa>(dto.Estado, true, out var estadoEnum))
+            {
+                return BadRequest($"Estado inválido: {dto.Estado}. Estados válidos: Disponible, Ocupada, EsperandoPago");
+            }
+
+            mesa.Estado = estadoEnum;
+            await _context.SaveChangesAsync();
+
+            return Ok(new MesaDto
+            {
+                Id = mesa.Id,
+                Numero = mesa.Numero,
+                Estado = mesa.Estado.ToString()
+            });
         }
 
         [HttpDelete("{id}")]

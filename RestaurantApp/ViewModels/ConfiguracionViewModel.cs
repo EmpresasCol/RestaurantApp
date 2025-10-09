@@ -1,7 +1,7 @@
-﻿// ViewModels/ConfiguracionViewModel.cs
-using RestaurantApp.Helpers;
+﻿using RestaurantApp.Helpers;
 using System.Windows.Input;
 using RestaurantApp.Services;
+using RestaurantApp.Config;
 
 namespace RestaurantApp.ViewModels
 {   
@@ -67,8 +67,12 @@ namespace RestaurantApp.ViewModels
         // Propiedades de configuración de la app
         public string UrlServidor
         {
-            get => _urlServidor;
-            set => SetProperty(ref _urlServidor, value);
+            get => ApiConfig.BaseUrl;
+            set
+            {
+                ApiConfig.BaseUrl = value.TrimEnd('/') + "/";
+                OnPropertyChanged();
+            }
         }
 
         public bool ModoOffline
@@ -270,6 +274,8 @@ namespace RestaurantApp.ViewModels
                 EstadoConexion = "Sincronizando...";
                 ColorConexion = Colors.Orange;
 
+                await Task.Delay(2000);
+
                 if (!ModoOffline)
                 {
                     var resultado = await _sincronizacionService.SincronizarTodosLosDatosAsync();
@@ -308,36 +314,6 @@ namespace RestaurantApp.ViewModels
             }
         }
 
-        private async Task SincronizarDatos()
-        {
-            // En implementación real, sincronizar con API
-            using var httpClient = new HttpClient();
-
-            // Enviar configuración al servidor
-            var configData = new
-            {
-                EmpleadoId = IdEmpleado,
-                Nombre = NombreMesero,
-                Turno = TurnoSeleccionado,
-                Estadisticas = new
-                {
-                    PedidosTomados,
-                    MesasAtendidas,
-                    VentasGeneradas
-                },
-                FechaSincronizacion = DateTime.Now
-            };
-
-            var json = System.Text.Json.JsonSerializer.Serialize(configData);
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
-            var response = await httpClient.PostAsync($"{UrlServidor}/api/sincronizacion", content);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception("Error del servidor durante la sincronización");
-            }
-        }
 
         private async Task LimpiarCache()
         {
@@ -453,12 +429,14 @@ namespace RestaurantApp.ViewModels
             }
         }
 
+        // RestaurantApp/ViewModels/ConfiguracionViewModel.cs
+        // REEMPLAZA ESTE MÉTODO COMPLETO:
+
         private async Task SincronizarConfiguracionConServidor()
         {
             try
             {
-                using var httpClient = new HttpClient();
-                httpClient.Timeout = TimeSpan.FromSeconds(10);
+                System.Diagnostics.Debug.WriteLine($"[CONFIG] Enviando a: {ApiConfig.BaseUrl}api/configuracion");
 
                 var configData = new
                 {
@@ -476,19 +454,14 @@ namespace RestaurantApp.ViewModels
                     }
                 };
 
-                var json = System.Text.Json.JsonSerializer.Serialize(configData);
-                var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+                // Usar HttpService en lugar de HttpClient directo
+                await _httpService.PostAsync<object>("api/configuracion", configData);
 
-                var response = await httpClient.PostAsync($"{UrlServidor}/api/configuracion", content);
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    System.Diagnostics.Debug.WriteLine("Error enviando configuración al servidor");
-                }
+                System.Diagnostics.Debug.WriteLine("[CONFIG] Configuración enviada correctamente");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error sincronizando configuración: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[CONFIG] Error sincronizando configuración: {ex.Message}");
                 // No lanzar excepción para no interrumpir el guardado local
             }
         }
@@ -563,8 +536,8 @@ namespace RestaurantApp.ViewModels
                 EstadoConexion = "Verificando...";
                 ColorConexion = Colors.Orange;
 
-                // Usar el servicio HTTP para verificar conexión
-                var conectado = await _httpService.CheckConnectionAsync();
+                var httpService = new HttpService();
+                var conectado = await httpService.CheckConnectionAsync();
 
                 if (conectado)
                 {

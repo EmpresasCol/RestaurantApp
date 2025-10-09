@@ -14,52 +14,21 @@ namespace RestaurantApp.Services
 
         public async Task<Usuario> LoginAsync(string usuario, string clave)
         {
-            try
-            {
-                var data = new { Usuario = usuario, Clave = clave };
-                var usuarioDto = await _httpService.PostAsync<UsuarioDto>(
-                    $"{ApiConfig.Endpoints.Usuarios}/login",
-                    data
-                );
-                return ConvertirDtoAModelo(usuarioDto);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error en login: {ex.Message}");
-                throw new Exception("Usuario o contraseña incorrectos");
-            }
+            var data = new { Usuario = usuario, Clave = clave };
+            var usuarioDto = await _httpService.PostAsync<UsuarioDto>("api/usuarios/login", data);
+            return ConvertirDtoAModelo(usuarioDto);
         }
 
         public async Task<Usuario> ObtenerPorIdAsync(int id)
         {
-            try
-            {
-                var usuario = await _httpService.GetAsync<UsuarioDto>(
-                    $"{ApiConfig.Endpoints.Usuarios}/{id}"
-                );
-                return ConvertirDtoAModelo(usuario);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error obteniendo usuario: {ex.Message}");
-                throw;
-            }
+            var usuario = await _httpService.GetAsync<UsuarioDto>($"api/usuarios/{id}");
+            return ConvertirDtoAModelo(usuario);
         }
 
         public async Task<List<Usuario>> ObtenerTodosAsync()
         {
-            try
-            {
-                var usuarios = await _httpService.GetAsync<List<UsuarioDto>>(
-                    ApiConfig.Endpoints.Usuarios
-                );
-                return usuarios.Select(dto => ConvertirDtoAModelo(dto)).ToList();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error obteniendo usuarios: {ex.Message}");
-                return new List<Usuario>();
-            }
+            var usuarios = await _httpService.GetAsync<List<UsuarioDto>>("api/usuarios");
+            return usuarios.Select(dto => ConvertirDtoAModelo(dto)).ToList();
         }
 
         private Usuario ConvertirDtoAModelo(UsuarioDto dto)
@@ -73,13 +42,11 @@ namespace RestaurantApp.Services
                 FechaIngreso = DateTime.Now
             };
 
-            // Convertir rol
             if (Enum.TryParse<TipoUsuario>(dto.Rol, out var tipoEnum))
             {
                 usuario.Tipo = tipoEnum;
             }
 
-            // Extraer apellido si existe
             var nombreCompleto = dto.Nombre.Split(' ');
             if (nombreCompleto.Length > 1)
             {
@@ -117,7 +84,6 @@ namespace RestaurantApp.Services
         }
     }
 
-    // DTO para la comunicación con la API
     public class UsuarioDto
     {
         public int Id { get; set; }

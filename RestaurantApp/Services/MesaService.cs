@@ -1,4 +1,5 @@
-﻿using RestaurantApp.Models;
+﻿// RestaurantApp/Services/MesaService.cs
+using RestaurantApp.Models;
 
 namespace RestaurantApp.Services
 {
@@ -15,47 +16,27 @@ namespace RestaurantApp.Services
         {
             try
             {
-                var mesas = await _httpService.GetAsync<List<MesaDto>>(ApiConfig.Endpoints.Mesas);
+                var mesas = await _httpService.GetAsync<List<MesaDto>>("api/mesas");
                 return mesas.Select(dto => ConvertirDtoAModelo(dto)).ToList();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error obteniendo mesas: {ex.Message}");
-                // Retornar datos de prueba si falla la conexión
                 return GenerarMesasPrueba();
             }
         }
 
         public async Task<Mesa> ObtenerPorIdAsync(int id)
         {
-            try
-            {
-                var mesa = await _httpService.GetAsync<MesaDto>($"{ApiConfig.Endpoints.Mesas}/{id}");
-                return ConvertirDtoAModelo(mesa);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error obteniendo mesa: {ex.Message}");
-                throw;
-            }
+            var mesa = await _httpService.GetAsync<MesaDto>($"api/mesas/{id}");
+            return ConvertirDtoAModelo(mesa);
         }
 
         public async Task<Mesa> ActualizarEstadoAsync(int id, string estado)
         {
-            try
-            {
-                var data = new { Estado = estado };
-                var mesa = await _httpService.PutAsync<MesaDto>(
-                    $"{ApiConfig.Endpoints.Mesas}/{id}/estado",
-                    data
-                );
-                return ConvertirDtoAModelo(mesa);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error actualizando estado mesa: {ex.Message}");
-                throw;
-            }
+            var data = new { Estado = estado };
+            var mesa = await _httpService.PutAsync<MesaDto>($"api/mesas/{id}/estado", data);
+            return ConvertirDtoAModelo(mesa);
         }
 
         private Mesa ConvertirDtoAModelo(MesaDto dto)
@@ -66,7 +47,6 @@ namespace RestaurantApp.Services
                 Numero = dto.Numero
             };
 
-            // Convertir estado string a enum
             if (Enum.TryParse<EstadoMesa>(dto.Estado, out var estadoEnum))
             {
                 mesa.Estado = estadoEnum;
@@ -96,7 +76,6 @@ namespace RestaurantApp.Services
         }
     }
 
-    // DTO para la comunicación con la API
     public class MesaDto
     {
         public int Id { get; set; }
