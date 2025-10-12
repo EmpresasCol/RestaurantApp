@@ -7,8 +7,10 @@ import GeneradorQR from './GeneradorQR';
 import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import ReportesFinancieros from './Reportes';
 
-
+import Reportes from './Reportes';
+import { BarChart3 } from 'lucide-react';
 
 // Componente principal con lógica de autenticación
 function AppContent() {
@@ -484,10 +486,17 @@ function AppContent() {
             <GeneradorQR />
           </ProtectedRoute>
         );
+        case 'reportes':
+          return (
+            <ProtectedRoute permisos={['caja']}>
+              <Reportes />
+            </ProtectedRoute>
+          );
       default:
         return renderMenuCliente();
     }
   };
+  
 
   // Mostrar pantalla de carga mientras se verifica la autenticación
   if (cargandoAuth) {
@@ -570,6 +579,19 @@ function AppContent() {
                 <QrCode size={18} />
                 Generar QR
               </button>
+
+              <button 
+              onClick={() => setVistaActual('reportes')} 
+              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                vistaActual === 'reportes' 
+                  ? 'border-orange-500 text-orange-500 bg-gray-700' 
+                  : 'border-transparent hover:text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              <BarChart3 size={18} />
+              Reportes
+            </button>
+            
             </div>
 
             {/* Usuario y Logout */}
