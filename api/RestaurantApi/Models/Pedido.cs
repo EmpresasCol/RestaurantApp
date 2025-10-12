@@ -4,9 +4,9 @@
     {
         EnProceso,
         Listo,
+        Entregado,  
         Pagado,
-        Cancelado,
-        Entregado
+        Cancelado
     }
 
     public class Pedido

@@ -16,6 +16,43 @@ namespace RestaurantApi.Controllers
             _context = context;
         }
 
+        [HttpPost("login")]
+        public async Task<ActionResult<LoginResponseDto>> Login(LoginRequestDto request)
+        {
+            try
+            {
+                // Buscar usuario por nombre de usuario
+                var usuario = await _context.Usuarios
+                    .FirstOrDefaultAsync(u => u.NombreUsuario == request.Usuario);
+
+                if (usuario == null)
+                {
+                    return Unauthorized(new { message = "Usuario no encontrado" });
+                }
+
+                // Verificar contraseña (en producción deberías usar hash)
+                if (usuario.ClaveHash != request.Clave)
+                {
+                    return Unauthorized(new { message = "Contraseña incorrecta" });
+                }
+
+                // Retornar datos del usuario
+                var response = new LoginResponseDto
+                {
+                    Id = usuario.Id,
+                    Nombre = usuario.Nombre,
+                    NombreUsuario = usuario.NombreUsuario,
+                    Rol = usuario.Rol.ToString()
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Error en el servidor: {ex.Message}" });
+            }
+        }
+
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UsuarioDto>>> GetUsuarios()
         {
@@ -73,6 +110,7 @@ namespace RestaurantApi.Controllers
             return NoContent();
         }
 
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUsuario(int id)
         {
@@ -83,5 +121,7 @@ namespace RestaurantApi.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+
     }
 }

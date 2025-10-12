@@ -1,4 +1,30 @@
+// src/services/api.js
 const API_URL = process.env.REACT_APP_API_URL || 'https://localhost:7137/api';
+
+// ==================== AUTENTICACIÓN ====================
+export const login = async (usuario, clave) => {
+  try {
+    console.log('🔐 Intentando login con:', { usuario });
+    
+    const response = await fetch(`${API_URL}/usuarios/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, clave })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Credenciales inválidas' }));
+      throw new Error(errorData.message || 'Credenciales inválidas');
+    }
+
+    const data = await response.json();
+    console.log('✅ Login exitoso:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error en login:', error);
+    throw error;
+  }
+};
 
 // ==================== PLATILLOS ====================
 export const getPlatillos = async () => {
@@ -62,6 +88,8 @@ export const createPedido = async (mesaId, items) => {
       }))
     };
 
+    console.log('📤 Enviando pedido:', pedidoData);
+
     const response = await fetch(`${API_URL}/pedidos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -72,13 +100,17 @@ export const createPedido = async (mesaId, items) => {
       const errorText = await response.text();
       throw new Error(`Error al crear pedido: ${errorText}`);
     }
-    return await response.json();
+
+    const resultado = await response.json();
+    console.log('✅ Pedido creado:', resultado);
+    return resultado;
   } catch (error) {
-    console.error('Error en createPedido:', error);
+    console.error('❌ Error en createPedido:', error);
     throw error;
   }
 };
 
+// ⭐ FUNCIÓN CORREGIDA
 export const updatePedido = async (id, estado) => {
   try {
     console.log('🔄 Actualizando pedido:', { id, estado });
@@ -100,14 +132,16 @@ export const updatePedido = async (id, estado) => {
       throw new Error(`Error al actualizar pedido: ${errorText}`);
     }
 
-    // ⭐ CAMBIO IMPORTANTE: Manejar respuesta 204 (No Content)
+    // ⭐ El backend retorna 204 No Content (sin body)
     if (response.status === 204) {
       console.log('✅ Pedido actualizado exitosamente (204 No Content)');
-      return { success: true }; // Retornar un objeto simple
+      return { success: true };
     }
 
-    console.log('✅ Pedido actualizado exitosamente');
-    return await response.json(); // Solo intentar parsear JSON si hay contenido
+    // Si retorna 200 con contenido
+    const data = await response.json();
+    console.log('✅ Pedido actualizado:', data);
+    return data;
   } catch (error) {
     console.error('❌ Error en updatePedido:', error);
     throw error;
@@ -115,52 +149,30 @@ export const updatePedido = async (id, estado) => {
 };
 
 // ==================== PAGOS ====================
-export const createPago = async (pedidoId, monto, metodoPago, propina = 0) => {
+export const createPago = async (pedidoId, monto, metodoPago, montoPropina = 0) => {
   try {
-    console.log('📤 Creando pago:', {
-      pedidoId,
-      monto,
-      metodoPago,
-      propina
-    });
-
     const pagoData = {
       pedidoId: pedidoId,
       monto: monto,
-      montoPropina: propina,
-      metodoPago: metodoPago // Ya viene como string: "Efectivo", "Tarjeta", "QR"
+      montoPropina: montoPropina,
+      metodoPago: metodoPago
     };
 
-    console.log('📦 Datos a enviar:', pagoData);
+    console.log('💳 Enviando pago:', pagoData);
 
     const response = await fetch(`${API_URL}/pagos`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pagoData)
     });
 
-    console.log('📡 Response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.log('📥 Respuesta del servidor:', errorText);
-      
-      let errorObj;
-      try {
-        errorObj = JSON.parse(errorText);
-      } catch {
-        errorObj = { message: errorText };
-      }
-      
-      console.log('❌ Error response completa:', errorObj);
       throw new Error(`Error al crear pago: ${errorText}`);
     }
 
     const resultado = await response.json();
-    console.log('✅ Pago creado exitosamente:', resultado);
+    console.log('✅ Pago creado:', resultado);
     return resultado;
   } catch (error) {
     console.error('❌ Error en createPago:', error);

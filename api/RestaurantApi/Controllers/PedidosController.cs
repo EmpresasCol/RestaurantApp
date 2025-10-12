@@ -155,13 +155,16 @@ namespace RestaurantApi.Controllers
             // Actualizar estado
             if (!string.IsNullOrEmpty(actualizarPedido.Estado))
             {
+                // ⭐ Lista de estados válidos
+                var estadosValidos = new[] { "EnProceso", "Listo", "Entregado", "Pagado", "Cancelado" };
+
                 if (Enum.TryParse<EstadoPedido>(actualizarPedido.Estado, true, out var estadoEnum))
                 {
                     pedido.Estado = estadoEnum;
                 }
                 else
                 {
-                    return BadRequest($"Estado inválido: {actualizarPedido.Estado}. Estados válidos: EnProceso, Listo, Pagado, Cancelado");
+                    return BadRequest($"Estado inválido: {actualizarPedido.Estado}. Estados válidos: {string.Join(", ", estadosValidos)}");
                 }
             }
 

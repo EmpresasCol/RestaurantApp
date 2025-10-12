@@ -1,3 +1,4 @@
+// src/Facturacion.js
 import React, { useState, useEffect } from 'react';
 import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check } from 'lucide-react';
 import * as api from './services/api';
@@ -26,62 +27,75 @@ function Facturacion() {
         api.getPedidos(),
         api.getPagos()
       ]);
-      setPedidos(pedidosData);
+      
+      // ⭐ Incluir también los pedidos Cancelados
+      const pedidosFiltrados = pedidosData.filter(pedido => 
+      pedido.estado === 'Entregado' || 
+      pedido.estado === 'Pagado' || 
+      pedido.estado === 'Cancelado'
+  );
+
+      
+      console.log(`📋 Total pedidos: ${pedidosData.length}, Para facturar: ${pedidosFiltrados.length}`);
+      
+      setPedidos(pedidosFiltrados);
       setPagos(pagosData);
     } catch (error) {
       console.error('Error al cargar datos:', error);
     }
   };
 
-// Transformar pedidos a formato de facturas
-const facturas = pedidos.map(pedido => {
-  // Calcular totales
-  const subtotal = pedido.detalles.reduce((sum, d) => sum + (d.precio * d.cantidad), 0);
-  const impuestos = Math.round(subtotal * 0.19);
-  const total = subtotal + impuestos;
+  // Transformar pedidos a formato de facturas
+  const facturas = pedidos.map(pedido => {
+    // Calcular totales
+    const subtotal = pedido.detalles.reduce((sum, d) => sum + (d.precio * d.cantidad), 0);
+    const impuestos = Math.round(subtotal * 0.19);
+    const total = subtotal + impuestos;
 
-  // Buscar si existe un pago para este pedido
-  const pago = pagos.find(p => p.pedidoId === pedido.id);
+    // Buscar si existe un pago para este pedido
+    const pago = pagos.find(p => p.pedidoId === pedido.id);
 
-  // Determinar estado
-  let estado = 'pendiente';
-  if (pedido.estado === 'Pagado') {
-    estado = 'pagada';
-  } else if (pedido.estado === 'Cancelado') {
-    estado = 'cancelada';
-  }
+    // Determinar estado
+    let estado = 'pendiente';
+    if (pedido.estado === 'Pagado') {
+      estado = 'pagada';
+    } else if (pedido.estado === 'Cancelado') {
+      estado = 'cancelada';
+    }
 
-  // Determinar método de pago de forma segura
-  let metodoPago = 'pendiente';
-  if (pago && pago.metodoPago) {
-    metodoPago = String(pago.metodoPago).toLowerCase();
-  }
+    // Determinar método de pago de forma segura
+    let metodoPago = 'pendiente';
+    if (pago && pago.metodoPago) {
+      metodoPago = String(pago.metodoPago).toLowerCase();
+    }
 
-  return {
-    id: `INV-${pedido.id}`,
-    pedidoId: pedido.id,
-    mesa: pedido.mesaNumero,
-    fecha: new Date(pedido.fecha),
-    cliente: {
-      nombre: `Cliente Mesa ${pedido.mesaNumero}`,
-      documento: '00000000',
-      telefono: '3000000000',
-      email: 'cliente@email.com'
-    },
-    items: pedido.detalles.map(d => ({
-      nombre: d.platilloNombre,
-      cantidad: d.cantidad,
-      precio: d.precio,
-      total: d.precio * d.cantidad
-    })),
-    subtotal: subtotal,
-    impuestos: impuestos,
-    total: total,
-    estado: estado,
-    metodoPago: metodoPago,
-    pagoId: pago?.id
-  };
-});
+    return {
+      id: `Mesa ${pedido.mesaNumero}`,
+      numeroFactura: `#${pedido.id.toString().padStart(6, '0')}`,
+      pedidoId: pedido.id,
+      mesa: pedido.mesaNumero,
+      fecha: new Date(pedido.fecha),
+      cliente: {
+        nombre: `Cliente Mesa ${pedido.mesaNumero}`,
+        documento: '00000000',
+        telefono: '3000000000',
+        email: 'cliente@email.com'
+      },
+      items: pedido.detalles.map(d => ({
+        nombre: d.platilloNombre,
+        cantidad: d.cantidad,
+        precio: d.precio,
+        total: d.precio * d.cantidad
+      })),
+      subtotal: subtotal,
+      impuestos: impuestos,
+      total: total,
+      estado: estado,
+      metodoPago: metodoPago,
+      pagoId: pago?.id
+    };
+  });
+
   const formatearPrecio = (precio) => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
@@ -100,23 +114,119 @@ const facturas = pedidos.map(pedido => {
     }).format(fecha);
   };
 
-  const facturasFiltradas = facturas.filter(factura => {
-    const cumpleBusqueda = factura.id.toLowerCase().includes(busqueda.toLowerCase()) ||
-                          factura.cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-                          factura.mesa.toString().includes(busqueda);
-    
-    const cumpleEstado = filtroEstado === 'todas' || factura.estado === filtroEstado;
-    
-    const cumpleFecha = !filtroFecha || 
-                       factura.fecha.toISOString().split('T')[0] === filtroFecha;
-    
-    return cumpleBusqueda && cumpleEstado && cumpleFecha;
-  }).sort((a, b) => b.fecha - a.fecha);
+  const facturasFiltradas = facturas
+  .filter(factura => {
+    const cumpleBusqueda =
+      factura.id.toLowerCase().includes(busqueda.toLowerCase()) ||
+      factura.numeroFactura.toLowerCase().includes(busqueda.toLowerCase()) ||
+      factura.cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+      factura.mesa.toString().includes(busqueda) ||
+      factura.pedidoId.toString().includes(busqueda);
 
+    const estadoFactura = factura.estado?.toLowerCase();
+    const filtro = filtroEstado.toLowerCase();
+
+    let cumpleEstado = false;
+
+    // 🔥 Lógica de filtrado corregida:
+    if (filtro === 'todas') {
+      // En "todas" mostramos todo excepto canceladas
+      cumpleEstado = estadoFactura !== 'cancelada';
+    } else {
+      // En filtros específicos solo mostramos coincidencias exactas
+      cumpleEstado = estadoFactura === filtro;
+    }
+
+    const cumpleFecha =
+      !filtroFecha ||
+      factura.fecha.toISOString().split('T')[0] === filtroFecha;
+
+    return cumpleBusqueda && cumpleEstado && cumpleFecha;
+  })
+  .sort((a, b) => b.fecha - a.fecha);
+
+  
   const totalesDelDia = {
     ventasTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.total, 0),
     transacciones: facturas.filter(f => f.estado === 'pagada').length,
     impuestosTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.impuestos, 0)
+  };
+
+  const confirmarPago = async (metodoPago) => {
+    if (!modalPago) return;
+    
+    setCargando(true);
+    try {
+      console.log('💳 Procesando pago...', {
+        pedidoId: modalPago.pedidoId,
+        subtotal: modalPago.subtotal,
+        metodoPago: metodoPago
+      });
+
+      // Crear el pago en la API
+      await api.createPago(
+        modalPago.pedidoId,
+        modalPago.subtotal,
+        metodoPago,
+        0
+      );
+
+      // Actualizar el estado del pedido a Pagado
+      await api.updatePedido(modalPago.pedidoId, 'Pagado');
+
+      // Recargar los datos
+      await cargarDatos();
+      
+      setModalPago(null);
+      alert('¡Pago registrado exitosamente!');
+    } catch (error) {
+      console.error('Error al registrar pago:', error);
+      alert('Error al registrar el pago. Por favor intenta de nuevo.');
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const cambiarEstado = async (factura, nuevoEstado) => {
+    // 🚫 Evita cualquier cambio si ya está pagada
+    if (factura.estado === 'pagada') {
+      alert('❌ Esta factura ya fue pagada y no se puede modificar.');
+      setMenuAbierto(null);
+      return;
+    }
+  
+    setCargando(true);
+    try {
+      if (nuevoEstado === 'pagada') {
+        setModalPago(factura);
+      } else if (nuevoEstado === 'cancelada') {
+        await api.updatePedido(factura.pedidoId, 'Cancelado');
+        await cargarDatos();
+      } else if (nuevoEstado === 'pendiente') {
+        await api.updatePedido(factura.pedidoId, 'EnProceso');
+        await cargarDatos();
+      }
+      setMenuAbierto(null);
+    } catch (error) {
+      console.error('Error al cambiar estado:', error);
+      alert('Error al cambiar el estado. Por favor intenta de nuevo.');
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  const toggleMenu = (facturaId) => {
+    setMenuAbierto(menuAbierto === facturaId ? null : facturaId);
+  };
+
+  const toggleExpandir = (facturaId) => {
+    setFacturaExpandida(facturaExpandida === facturaId ? null : facturaId);
+  };
+
+  const marcarComoPagada = (factura) => {
+    if (factura.estado !== 'pagada') {
+      setModalPago(factura);
+    }
   };
 
   const imprimirFactura = (factura) => {
@@ -126,7 +236,7 @@ const facturas = pedidos.map(pedido => {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Factura ${factura.id}</title>
+          <title>Factura ${factura.numeroFactura}</title>
           <meta charset="UTF-8">
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -235,7 +345,7 @@ const facturas = pedidos.map(pedido => {
               <p>Tel: (601) 234-5678 | info@restaurantedelice.com</p>
               <div class="factura-id">
                 <div>FACTURA DE VENTA</div>
-                <div>${factura.id}</div>
+                <div>${factura.numeroFactura} - Pedido #${factura.pedidoId}</div>
               </div>
             </div>
 
@@ -243,6 +353,7 @@ const facturas = pedidos.map(pedido => {
               <h4>DATOS DE LA VENTA</h4>
               <p><span>Fecha:</span> ${formatearFecha(factura.fecha)}</p>
               <p><span>Mesa:</span> ${factura.mesa}</p>
+              <p><span>Pedido:</span> #${factura.pedidoId}</p>
               <p><span>Método de pago:</span> ${factura.metodoPago}</p>
               <p><span>Estado:</span> <strong>${factura.estado.toUpperCase()}</strong></p>
             </div>
@@ -313,10 +424,11 @@ const facturas = pedidos.map(pedido => {
 
   const exportarExcel = () => {
     const csvData = [
-      ['ID', 'Mesa', 'Fecha', 'Cliente', 'Subtotal', 'Impuestos', 'Total', 'Estado', 'Método Pago'],
+      ['Factura', 'Mesa', 'Pedido ID', 'Fecha', 'Cliente', 'Subtotal', 'Impuestos', 'Total', 'Estado', 'Método Pago'],
       ...facturasFiltradas.map(f => [
-        f.id,
+        f.numeroFactura,
         f.mesa,
+        f.pedidoId,
         formatearFecha(f.fecha),
         f.cliente.nombre,
         f.subtotal,
@@ -334,80 +446,6 @@ const facturas = pedidos.map(pedido => {
     a.download = `facturas_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const toggleExpandir = (facturaId) => {
-    setFacturaExpandida(facturaExpandida === facturaId ? null : facturaId);
-  };
-
-  const marcarComoPagada = (factura) => {
-    if (factura.estado !== 'pagada') {
-      setModalPago(factura);
-    }
-  };
-
-const confirmarPago = async (metodoPago) => {
-  if (!modalPago) return;
-  
-  setCargando(true);
-  try {
-    console.log('💳 Procesando pago...', {
-      pedidoId: modalPago.pedidoId,
-      subtotal: modalPago.subtotal,
-      metodoPago: metodoPago
-    });
-
-    // Crear el pago en la API
-    // metodoPago ya viene capitalizado: "Efectivo", "Tarjeta", "QR"
-    await api.createPago(
-      modalPago.pedidoId,
-      modalPago.subtotal,
-      metodoPago,  // "Efectivo", "Tarjeta", "QR"
-      0 // propina
-    );
-
-    // Actualizar el estado del pedido a Pagado
-    await api.updatePedido(modalPago.pedidoId, 'Pagado');
-
-    // Recargar los datos
-    await cargarDatos();
-    
-    setModalPago(null);
-    alert('¡Pago registrado exitosamente!');
-  } catch (error) {
-    console.error('Error al registrar pago:', error);
-    alert('Error al registrar el pago. Por favor intenta de nuevo.');
-  } finally {
-    setCargando(false);
-  }
-};
-
-  const cambiarEstado = async (factura, nuevoEstado) => {
-    setCargando(true);
-    try {
-      if (nuevoEstado === 'pagada') {
-        // Abrir modal de pago
-        setModalPago(factura);
-      } else if (nuevoEstado === 'cancelada') {
-        // Actualizar el estado del pedido
-        await api.updatePedido(factura.pedidoId, 'Cancelado');
-        await cargarDatos();
-      } else if (nuevoEstado === 'pendiente') {
-        // Volver a estado en proceso
-        await api.updatePedido(factura.pedidoId, 'EnProceso');
-        await cargarDatos();
-      }
-      setMenuAbierto(null);
-    } catch (error) {
-      console.error('Error al cambiar estado:', error);
-      alert('Error al cambiar el estado. Por favor intenta de nuevo.');
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const toggleMenu = (facturaId) => {
-    setMenuAbierto(menuAbierto === facturaId ? null : facturaId);
   };
 
   return (
@@ -484,11 +522,22 @@ const confirmarPago = async (metodoPago) => {
         {facturas.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay pedidos aún</h3>
-            <p className="text-gray-500">Los pedidos aparecerán aquí automáticamente cuando se generen</p>
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay pedidos listos para facturar</h3>
+            <p className="text-gray-500 mb-4">
+              Los pedidos aparecerán aquí cuando sean marcados como <strong>"Entregado"</strong> en la cocina
+            </p>
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Flujo:</strong><br/>
+                1️⃣ Cliente hace pedido<br/>
+                2️⃣ Cocina prepara<br/>
+                3️⃣ <strong>Cocina marca "Entregado"</strong><br/>
+                4️⃣ Aparece aquí para facturar
+              </p>
+            </div>
             <button
               onClick={cargarDatos}
-              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
             >
               Recargar
             </button>
@@ -563,10 +612,14 @@ const confirmarPago = async (metodoPago) => {
                       <div className="flex items-center gap-4 flex-1">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-bold text-gray-900">{factura.id}</h3>
-                            <span className="text-sm font-medium text-gray-600 bg-white px-3 py-1 rounded-full">
-                              Mesa {factura.mesa}
+                          <h3 className="text-xl font-bold text-gray-900">Mesa {factura.mesa}</h3>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Factura {factura.numeroFactura}
+                            </p>
+                            <span className="text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium ml-2">
+                              Pedido #{factura.pedidoId}
                             </span>
+
                             <span className={`px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${
                               factura.estado === 'pagada' ? 'bg-green-100 text-green-800' :
                               factura.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
@@ -612,7 +665,6 @@ const confirmarPago = async (metodoPago) => {
                           <span className="text-sm font-medium">Imprimir</span>
                         </button>
                         
-                        {/* Split Button para Estado */}
                         <div className="relative" id={`menu-container-${factura.id}`}>
                           <div className="flex">
                             <button
@@ -696,7 +748,8 @@ const confirmarPago = async (metodoPago) => {
                             <div className="flex justify-between items-center">
                               <span className="text-gray-600">Mesa:</span>
                               <span className="font-semibold text-gray-900">Mesa {factura.mesa}</span>
-                            </div><div className="flex justify-between items-center">
+                            </div>
+                            <div className="flex justify-between items-center">
                               <span className="text-gray-600">Fecha:</span>
                               <span className="font-medium text-gray-800 text-xs">{formatearFecha(factura.fecha)}</span>
                             </div>

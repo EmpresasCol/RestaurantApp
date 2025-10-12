@@ -18,11 +18,13 @@ function Cocina({ pedidos = [] }) {
 
   const mesasUnicas = [...new Set(pedidos.map(p => p.mesa))].sort((a, b) => a - b);
 
-  const pedidosFiltrados = pedidos.filter(pedido => {
+  const pedidosFiltrados = pedidos
+  .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
+  // 🔥 aplicar el filtro de mesa
+  .filter(pedido => {
     if (filtroMesa === 'todas') return true;
     return pedido.mesa.toString() === filtroMesa;
   });
-
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <header className="bg-gray-800 border-b border-gray-700">
