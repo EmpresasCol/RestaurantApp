@@ -1,18 +1,83 @@
 // src/Facturacion.js
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check } from 'lucide-react';
+import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle } from 'lucide-react';
 import * as api from './services/api';
 
+// Componente de Notificación Toast
+function Toast({ mensaje, tipo, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 animate-slide-in">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg ${
+        tipo === 'success' ? 'bg-green-500 text-white' :
+        tipo === 'error' ? 'bg-red-500 text-white' :
+        'bg-blue-500 text-white'
+      }`}>
+        {tipo === 'success' ? (
+          <CheckCircle size={24} />
+        ) : tipo === 'error' ? (
+          <AlertCircle size={24} />
+        ) : (
+          <AlertCircle size={24} />
+        )}
+        <p className="font-medium">{mensaje}</p>
+        <button 
+          onClick={onClose}
+          className="ml-2 hover:bg-white/20 rounded p-1 transition-colors"
+        >
+          <X size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Facturacion() {
-  const [filtroFecha, setFiltroFecha] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState('todas');
-  const [busqueda, setBusqueda] = useState('');
+  // Cargar filtros desde localStorage
+  const [filtroFecha, setFiltroFecha] = useState(() => {
+    return localStorage.getItem('filtroFechaFacturacion') || '';
+  });
+
+  const [filtroEstado, setFiltroEstado] = useState(() => {
+    return localStorage.getItem('filtroEstadoFacturacion') || 'todas';
+  });
+
+  const [busqueda, setBusqueda] = useState(() => {
+    return localStorage.getItem('busquedaFacturacion') || '';
+  });
+
   const [facturaExpandida, setFacturaExpandida] = useState(null);
   const [menuAbierto, setMenuAbierto] = useState(null);
+  const [menuPosicion, setMenuPosicion] = useState({ top: 0, right: 0 });
   const [modalPago, setModalPago] = useState(null);
   const [pedidos, setPedidos] = useState([]);
   const [pagos, setPagos] = useState([]);
   const [cargando, setCargando] = useState(false);
+  const [notificacion, setNotificacion] = useState(null);
+
+  // Función para mostrar notificaciones
+  const mostrarNotificacion = (mensaje, tipo = 'success') => {
+    setNotificacion({ mensaje, tipo });
+  };
+
+  // Guardar filtros en localStorage cuando cambian
+  useEffect(() => {
+    localStorage.setItem('filtroEstadoFacturacion', filtroEstado);
+  }, [filtroEstado]);
+
+  useEffect(() => {
+    localStorage.setItem('filtroFechaFacturacion', filtroFecha);
+  }, [filtroFecha]);
+
+  useEffect(() => {
+    localStorage.setItem('busquedaFacturacion', busqueda);
+  }, [busqueda]);
 
   // Cargar pedidos al iniciar y cada 30 segundos
   useEffect(() => {
@@ -27,35 +92,32 @@ function Facturacion() {
         api.getPedidos(),
         api.getPagos()
       ]);
-      
-      // ⭐ Incluir también los pedidos Cancelados
-      const pedidosFiltrados = pedidosData.filter(pedido => 
-      pedido.estado === 'Entregado' || 
-      pedido.estado === 'Pagado' || 
-      pedido.estado === 'Cancelado'
-  );
 
-      
+      // Filtrar solo pedidos listos para facturar
+      const pedidosFiltrados = pedidosData.filter(pedido => 
+        pedido.estado === 'Entregado' || 
+        pedido.estado === 'Pagado' || 
+        pedido.estado === 'Cancelado'
+      );
+
       console.log(`📋 Total pedidos: ${pedidosData.length}, Para facturar: ${pedidosFiltrados.length}`);
-      
+
       setPedidos(pedidosFiltrados);
       setPagos(pagosData);
     } catch (error) {
       console.error('Error al cargar datos:', error);
+      mostrarNotificacion('Error al cargar datos', 'error');
     }
   };
 
   // Transformar pedidos a formato de facturas
   const facturas = pedidos.map(pedido => {
-    // Calcular totales
     const subtotal = pedido.detalles.reduce((sum, d) => sum + (d.precio * d.cantidad), 0);
     const impuestos = Math.round(subtotal * 0.19);
     const total = subtotal + impuestos;
 
-    // Buscar si existe un pago para este pedido
     const pago = pagos.find(p => p.pedidoId === pedido.id);
 
-    // Determinar estado
     let estado = 'pendiente';
     if (pedido.estado === 'Pagado') {
       estado = 'pagada';
@@ -63,14 +125,13 @@ function Facturacion() {
       estado = 'cancelada';
     }
 
-    // Determinar método de pago de forma segura
     let metodoPago = 'pendiente';
     if (pago && pago.metodoPago) {
       metodoPago = String(pago.metodoPago).toLowerCase();
     }
 
     return {
-      id: `Mesa ${pedido.mesaNumero}`,
+      id: pedido.id,
       numeroFactura: `#${pedido.id.toString().padStart(6, '0')}`,
       pedidoId: pedido.id,
       mesa: pedido.mesaNumero,
@@ -115,37 +176,33 @@ function Facturacion() {
   };
 
   const facturasFiltradas = facturas
-  .filter(factura => {
-    const cumpleBusqueda =
-      factura.id.toLowerCase().includes(busqueda.toLowerCase()) ||
-      factura.numeroFactura.toLowerCase().includes(busqueda.toLowerCase()) ||
-      factura.cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-      factura.mesa.toString().includes(busqueda) ||
-      factura.pedidoId.toString().includes(busqueda);
+    .filter(factura => {
+      const cumpleBusqueda =
+        factura.numeroFactura.toLowerCase().includes(busqueda.toLowerCase()) ||
+        factura.cliente.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+        factura.mesa.toString().includes(busqueda) ||
+        factura.pedidoId.toString().includes(busqueda);
 
-    const estadoFactura = factura.estado?.toLowerCase();
-    const filtro = filtroEstado.toLowerCase();
+      const estadoFactura = factura.estado?.toLowerCase();
+      const filtro = filtroEstado.toLowerCase();
 
-    let cumpleEstado = false;
+      let cumpleEstado = false;
+      if (filtro === 'todas') {
+        cumpleEstado = true; // Mostrar todos los estados
+      } else {
+        cumpleEstado = estadoFactura === filtro;
+      }
 
-    // 🔥 Lógica de filtrado corregida:
-    if (filtro === 'todas') {
-      // En "todas" mostramos todo excepto canceladas
-      cumpleEstado = estadoFactura !== 'cancelada';
-    } else {
-      // En filtros específicos solo mostramos coincidencias exactas
-      cumpleEstado = estadoFactura === filtro;
-    }
+      const cumpleFecha =
+        !filtroFecha ||
+        factura.fecha.toISOString().split('T')[0] === filtroFecha;
 
-    const cumpleFecha =
-      !filtroFecha ||
-      factura.fecha.toISOString().split('T')[0] === filtroFecha;
+      return cumpleBusqueda && cumpleEstado && cumpleFecha;
+    })
+    .sort((a, b) => b.fecha - a.fecha);
 
-    return cumpleBusqueda && cumpleEstado && cumpleFecha;
-  })
-  .sort((a, b) => b.fecha - a.fecha);
+  console.log('🎯 Facturas filtradas:', facturasFiltradas.length, 'de', facturas.length);
 
-  
   const totalesDelDia = {
     ventasTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.total, 0),
     transacciones: facturas.filter(f => f.estado === 'pagada').length,
@@ -163,7 +220,6 @@ function Facturacion() {
         metodoPago: metodoPago
       });
 
-      // Crear el pago en la API
       await api.createPago(
         modalPago.pedidoId,
         modalPago.subtotal,
@@ -171,52 +227,70 @@ function Facturacion() {
         0
       );
 
-      // Actualizar el estado del pedido a Pagado
       await api.updatePedido(modalPago.pedidoId, 'Pagado');
 
-      // Recargar los datos
       await cargarDatos();
       
       setModalPago(null);
-      alert('¡Pago registrado exitosamente!');
+      mostrarNotificacion('¡Pago registrado exitosamente!', 'success');
     } catch (error) {
       console.error('Error al registrar pago:', error);
-      alert('Error al registrar el pago. Por favor intenta de nuevo.');
+      mostrarNotificacion('Error al registrar el pago. Intenta de nuevo.', 'error');
     } finally {
       setCargando(false);
     }
   };
 
   const cambiarEstado = async (factura, nuevoEstado) => {
-    // 🚫 Evita cualquier cambio si ya está pagada
     if (factura.estado === 'pagada') {
-      alert('❌ Esta factura ya fue pagada y no se puede modificar.');
+      mostrarNotificacion('Esta factura ya fue pagada y no se puede modificar', 'error');
       setMenuAbierto(null);
       return;
     }
-  
+
     setCargando(true);
     try {
+      console.log('🔄 Cambiando estado:', { 
+        facturaId: factura.id, 
+        pedidoId: factura.pedidoId, 
+        nuevoEstado 
+      });
+
       if (nuevoEstado === 'pagada') {
         setModalPago(factura);
       } else if (nuevoEstado === 'cancelada') {
         await api.updatePedido(factura.pedidoId, 'Cancelado');
+        console.log('✅ Pedido cancelado');
         await cargarDatos();
+        mostrarNotificacion('Pedido cancelado correctamente', 'success');
       } else if (nuevoEstado === 'pendiente') {
         await api.updatePedido(factura.pedidoId, 'EnProceso');
+        console.log('✅ Pedido vuelto a pendiente');
         await cargarDatos();
+        mostrarNotificacion('Pedido marcado como pendiente', 'success');
       }
+      
       setMenuAbierto(null);
     } catch (error) {
-      console.error('Error al cambiar estado:', error);
-      alert('Error al cambiar el estado. Por favor intenta de nuevo.');
+      console.error('❌ Error al cambiar estado:', error);
+      mostrarNotificacion(`Error al cambiar el estado: ${error.message}`, 'error');
     } finally {
       setCargando(false);
     }
   };
 
-  const toggleMenu = (facturaId) => {
-    setMenuAbierto(menuAbierto === facturaId ? null : facturaId);
+  const toggleMenu = (facturaId, event) => {
+    if (menuAbierto === facturaId) {
+      setMenuAbierto(null);
+    } else {
+      const button = event.currentTarget;
+      const rect = button.getBoundingClientRect();
+      setMenuPosicion({
+        top: rect.bottom + window.scrollY + 8,
+        right: window.innerWidth - rect.right + window.scrollX
+      });
+      setMenuAbierto(facturaId);
+    }
   };
 
   const toggleExpandir = (facturaId) => {
@@ -450,6 +524,15 @@ function Facturacion() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Notificaciones Toast */}
+      {notificacion && (
+        <Toast 
+          mensaje={notificacion.mensaje}
+          tipo={notificacion.tipo}
+          onClose={() => setNotificacion(null)}
+        />
+      )}
+
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -531,7 +614,7 @@ function Facturacion() {
                 💡 <strong>Flujo:</strong><br/>
                 1️⃣ Cliente hace pedido<br/>
                 2️⃣ Cocina prepara<br/>
-                3️⃣ <strong>Cocina marca "Entregado"</strong><br/>
+                3️⃣ <strong>Mesero marca "Entregado"</strong><br/>
                 4️⃣ Aparece aquí para facturar
               </p>
             </div>
@@ -577,9 +660,13 @@ function Facturacion() {
                 
                 <button
                   onClick={() => {
+                    console.log('🧹 Limpiando todos los filtros');
                     setBusqueda('');
                     setFiltroEstado('todas');
                     setFiltroFecha('');
+                    localStorage.removeItem('busquedaFacturacion');
+                    localStorage.setItem('filtroEstadoFacturacion', 'todas');
+                    localStorage.removeItem('filtroFechaFacturacion');
                   }}
                   className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
                 >
@@ -612,7 +699,7 @@ function Facturacion() {
                       <div className="flex items-center gap-4 flex-1">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-xl font-bold text-gray-900">Mesa {factura.mesa}</h3>
+                            <h3 className="text-xl font-bold text-gray-900">Mesa {factura.mesa}</h3>
                             <p className="text-sm text-gray-600 mt-1">
                               Factura {factura.numeroFactura}
                             </p>
@@ -665,7 +752,7 @@ function Facturacion() {
                           <span className="text-sm font-medium">Imprimir</span>
                         </button>
                         
-                        <div className="relative" id={`menu-container-${factura.id}`}>
+                        <div className="relative">
                           <div className="flex">
                             <button
                               onClick={() => marcarComoPagada(factura)}
@@ -682,7 +769,7 @@ function Facturacion() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                toggleMenu(factura.id);
+                                toggleMenu(factura.id, e);
                               }}
                               disabled={cargando}
                               className={`px-2 py-2 rounded-r-lg border-l border-white/30 transition-colors ${
@@ -701,29 +788,33 @@ function Facturacion() {
                                 className="fixed inset-0 z-30"
                                 onClick={() => setMenuAbierto(null)}
                               />
-                              <div className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-40"
+                              <div 
+                                className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
                                 style={{
-                                  top: `${document.getElementById(`menu-container-${factura.id}`)?.getBoundingClientRect().bottom + 8}px`,
-                                  left: `${document.getElementById(`menu-container-${factura.id}`)?.getBoundingClientRect().right - 192}px`
+                                  top: `${menuPosicion.top}px`,
+                                  right: `${menuPosicion.right}px`
                                 }}
                               >
                                 <button
                                   onClick={() => cambiarEstado(factura, 'pendiente')}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  disabled={cargando}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
                                   Pendiente
                                 </button>
                                 <button
                                   onClick={() => cambiarEstado(factura, 'pagada')}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  disabled={cargando}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <span className="w-3 h-3 rounded-full bg-green-500"></span>
                                   Pagada
                                 </button>
                                 <button
                                   onClick={() => cambiarEstado(factura, 'cancelada')}
-                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                  disabled={cargando}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <span className="w-3 h-3 rounded-full bg-red-500"></span>
                                   Cancelada
@@ -846,7 +937,7 @@ function Facturacion() {
               <p className="text-gray-600">Selecciona cómo pagó el cliente</p>
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-700">
-                  <span className="font-semibold">Factura:</span> {modalPago.id}
+                  <span className="font-semibold">Pedido:</span> #{modalPago.pedidoId}
                 </p>
                 <p className="text-sm text-gray-700">
                   <span className="font-semibold">Mesa:</span> {modalPago.mesa}
@@ -920,6 +1011,38 @@ function Facturacion() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+        
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+
+        @keyframes scale-in {
+          from {
+            transform: scale(0.9);
+            opacity: 0;
+          }
+          to {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        
+        .animate-scale-in {
+          animation: scale-in 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

@@ -38,6 +38,90 @@ export const getPlatillos = async () => {
   }
 };
 
+export const getPlatillo = async (id) => {
+  try {
+    const response = await fetch(`${API_URL}/platillos/${id}`);
+    if (!response.ok) throw new Error('Error al obtener platillo');
+    return await response.json();
+  } catch (error) {
+    console.error('Error en getPlatillo:', error);
+    throw error;
+  }
+};
+
+// ✅ NUEVO: Crear platillo
+export const createPlatillo = async (platilloData) => {
+  try {
+    console.log('📤 Creando platillo:', platilloData);
+    
+    const response = await fetch(`${API_URL}/platillos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(platilloData)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error al crear platillo: ${errorText}`);
+    }
+
+    const resultado = await response.json();
+    console.log('✅ Platillo creado:', resultado);
+    return resultado;
+  } catch (error) {
+    console.error('❌ Error en createPlatillo:', error);
+    throw error;
+  }
+};
+
+// ✅ MEJORADO: Actualizar platillo
+export const updatePlatillo = async (id, platilloData) => {
+  try {
+    console.log('🔄 Actualizando platillo:', { id, ...platilloData });
+    
+    const response = await fetch(`${API_URL}/platillos/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...platilloData })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error del servidor:', errorText);
+      throw new Error(errorText || 'Error al actualizar platillo');
+    }
+
+    console.log('✅ Platillo actualizado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en updatePlatillo:', error);
+    throw error;
+  }
+};
+
+// ✅ MEJORADO: Eliminar platillo
+export const deletePlatillo = async (id) => {
+  try {
+    console.log('🗑️ Eliminando platillo:', id);
+    
+    const response = await fetch(`${API_URL}/platillos/${id}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error del servidor:', errorText);
+      throw new Error(errorText || 'Error al eliminar platillo');
+    }
+
+    console.log('✅ Platillo eliminado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en deletePlatillo:', error);
+    throw error;
+  }
+};
+
 // ==================== MESAS ====================
 export const getMesas = async () => {
   try {
@@ -110,7 +194,6 @@ export const createPedido = async (mesaId, items) => {
   }
 };
 
-// ⭐ FUNCIÓN CORREGIDA
 export const updatePedido = async (id, estado) => {
   try {
     console.log('🔄 Actualizando pedido:', { id, estado });
@@ -132,13 +215,11 @@ export const updatePedido = async (id, estado) => {
       throw new Error(`Error al actualizar pedido: ${errorText}`);
     }
 
-    // ⭐ El backend retorna 204 No Content (sin body)
     if (response.status === 204) {
       console.log('✅ Pedido actualizado exitosamente (204 No Content)');
       return { success: true };
     }
 
-    // Si retorna 200 con contenido
     const data = await response.json();
     console.log('✅ Pedido actualizado:', data);
     return data;

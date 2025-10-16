@@ -21,22 +21,56 @@ namespace RestaurantApi.Controllers
         {
             try
             {
+                Console.WriteLine($"🔐 Intento de login: {request.Usuario}");
+
                 // Buscar usuario por nombre de usuario
                 var usuario = await _context.Usuarios
                     .FirstOrDefaultAsync(u => u.NombreUsuario == request.Usuario);
 
                 if (usuario == null)
                 {
+                    Console.WriteLine($"❌ Usuario no encontrado: {request.Usuario}");
                     return Unauthorized(new { message = "Usuario no encontrado" });
                 }
 
-                // Verificar contraseña (en producción deberías usar hash)
+                // Verificar contraseña (en producción usar BCrypt o similar)
                 if (usuario.ClaveHash != request.Clave)
                 {
+                    Console.WriteLine($"❌ Contraseña incorrecta para: {request.Usuario}");
                     return Unauthorized(new { message = "Contraseña incorrecta" });
                 }
 
-                // Retornar datos del usuario
+                // ⛔ BLOQUEAR MESEROS
+                if (usuario.Rol == RolUsuario.Mesero)
+                {
+                    Console.WriteLine($"⛔ Mesero intentó acceder a la web: {request.Usuario}");
+                    return Unauthorized(new
+                    {
+                        message = "Los meseros deben usar la aplicación móvil. Por favor, descarga la app en tu dispositivo móvil."
+                    });
+                }
+
+                // 🍳 BLOQUEAR LOGIN DE COCINA - DEBEN USAR URL DIRECTA
+                if (usuario.Rol == RolUsuario.Cocina)
+                {
+                    Console.WriteLine($"🍳 Usuario de cocina intentó login normal: {request.Usuario}");
+                    return Unauthorized(new
+                    {
+                        message = "COCINA_URL_DIRECTA"
+                    });
+                }
+
+                // ✅ Permitir solo: Administrador, Caja
+                if (usuario.Rol != RolUsuario.Administrador &&
+                    usuario.Rol != RolUsuario.Caja)
+                {
+                    Console.WriteLine($"⛔ Rol no permitido: {usuario.Rol}");
+                    return Unauthorized(new { message = "No tienes permisos para acceder al sistema web" });
+                }
+
+                // ✅ Login exitoso
+                Console.WriteLine($"✅ Login exitoso: {usuario.Nombre} ({usuario.Rol})");
+
                 var response = new LoginResponseDto
                 {
                     Id = usuario.Id,
@@ -49,6 +83,7 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"❌ Error en login: {ex.Message}");
                 return StatusCode(500, new { message = $"Error en el servidor: {ex.Message}" });
             }
         }
@@ -110,7 +145,6 @@ namespace RestaurantApi.Controllers
             return NoContent();
         }
 
-
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUsuario(int id)
         {
@@ -121,7 +155,5 @@ namespace RestaurantApi.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
-
-
     }
 }

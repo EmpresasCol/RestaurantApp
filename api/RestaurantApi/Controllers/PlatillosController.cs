@@ -27,7 +27,7 @@ namespace RestaurantApi.Controllers
                 Descripcion = p.Descripcion ?? "",
                 Precio = p.Precio,
                 ImagenUrl = p.ImagenUrl ?? "",
-                Categoria = "General"
+                Categoria = p.Categoria ?? "General"
             }).ToList();
         }
 
@@ -44,7 +44,7 @@ namespace RestaurantApi.Controllers
                 Descripcion = platillo.Descripcion ?? "",
                 Precio = platillo.Precio,
                 ImagenUrl = platillo.ImagenUrl ?? "",
-                Categoria = "General"
+                Categoria = platillo.Categoria ?? "General"
             };
         }
 
@@ -59,21 +59,76 @@ namespace RestaurantApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPlatillo(int id, Platillo platillo)
         {
-            if (id != platillo.Id) return BadRequest();
-            _context.Entry(platillo).State = EntityState.Modified;
-            await _context.SaveChangesAsync();
-            return NoContent();
+            if (id != platillo.Id)
+            {
+                return BadRequest(new { message = "El ID no coincide" });
+            }
+
+            var platilloExistente = await _context.Platillos.FindAsync(id);
+
+            if (platilloExistente == null)
+            {
+                return NotFound(new { message = $"Platillo con ID {id} no encontrado" });
+            }
+
+            try
+            {
+                platilloExistente.Nombre = platillo.Nombre;
+                platilloExistente.Descripcion = platillo.Descripcion;
+                platilloExistente.Precio = platillo.Precio;
+                platilloExistente.ImagenUrl = platillo.ImagenUrl;
+                platilloExistente.Categoria = platillo.Categoria;
+
+                await _context.SaveChangesAsync();
+
+                return NoContent();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!PlatilloExists(id))
+                {
+                    return NotFound(new { message = "El platillo ya no existe" });
+                }
+                return BadRequest(new { message = "Error de concurrencia al actualizar" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = $"Error al actualizar: {ex.InnerException?.Message ?? ex.Message}" });
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePlatillo(int id)
         {
             var platillo = await _context.Platillos.FindAsync(id);
-            if (platillo == null) return NotFound();
+            if (platillo == null)
+            {
+                return NotFound(new { message = $"Platillo con ID {id} no encontrado" });
+            }
 
-            _context.Platillos.Remove(platillo);
-            await _context.SaveChangesAsync();
-            return NoContent();
+            var tieneDetalles = await _context.PedidoDetalles
+                .AnyAsync(d => d.PlatilloId == id);
+
+            if (tieneDetalles)
+            {
+                return BadRequest(new { message = "No se puede eliminar este platillo porque está siendo usado en pedidos existentes." });
+            }
+
+            try
+            {
+                _context.Platillos.Remove(platillo);
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = $"Error al eliminar: {ex.Message}" });
+            }
+        }
+
+        private bool PlatilloExists(int id)
+        {
+            return _context.Platillos.Any(e => e.Id == id);
         }
     }
 }

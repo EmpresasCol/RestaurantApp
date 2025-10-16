@@ -4,9 +4,10 @@ namespace RestaurantApi.Models
 {
     public enum RolUsuario
     {
-        Mesero,
-        Cocina,
-        Caja
+        Administrador,  
+        Mesero,         
+        Cocina,         
+        Caja            
     }
 
     public class Usuario
