@@ -468,28 +468,32 @@ namespace RestaurantApp.ViewModels
 
         private async Task CerrarSesion()
         {
-            bool confirmar = await Application.Current.MainPage.DisplayAlert("Confirmar",
-                "¿Desea cerrar la sesión?\n\nSe perderán los datos no guardados.", "Sí", "No");
+            bool confirmar = await Application.Current.MainPage.DisplayAlert(
+                "Cerrar Sesión",
+                "¿Estás seguro de que deseas cerrar sesión?",
+                "Sí, cerrar", "Cancelar");
 
             if (confirmar)
             {
                 try
                 {
-                    // Guardar configuración antes de cerrar
-                    await GuardarConfiguracion();
+                    System.Diagnostics.Debug.WriteLine("[CERRAR_SESION] Cerrando sesión...");
 
-                    // Limpiar datos de sesión
-                    Preferences.Remove("SesionActiva");
+                    // Limpiar preferencias
+                    var usuarioService = new UsuarioService();
+                    usuarioService.CerrarSesion();
+
+                    // Limpiar datos temporales
                     Preferences.Remove("PedidoTemporal");
 
-                    await Application.Current.MainPage.DisplayAlert("Sesión Cerrada",
-                        "La sesión ha sido cerrada correctamente", "OK");
+                    System.Diagnostics.Debug.WriteLine("[CERRAR_SESION] Sesión cerrada correctamente");
 
-                    // En implementación real, navegar a pantalla de login
-                    await Shell.Current.GoToAsync("//inicio");
+                    // Navegar al login
+                    await Shell.Current.GoToAsync("//login");
                 }
                 catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[CERRAR_SESION] Error: {ex.Message}");
                     await Application.Current.MainPage.DisplayAlert("Error",
                         $"Error al cerrar sesión: {ex.Message}", "OK");
                 }

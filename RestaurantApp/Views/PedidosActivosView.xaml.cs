@@ -17,7 +17,13 @@ namespace RestaurantApp.Views
         protected override void OnAppearing()
         {
             base.OnAppearing();
+
+            _ = _viewModel.CargarPedidos();
+
+            // Iniciar actualización automática
             _viewModel.IniciarActualizacionAutomatica();
+
+            System.Diagnostics.Debug.WriteLine("[PedidosActivosView] Vista apareció - Recargando pedidos");
         }
 
         protected override void OnDisappearing()

@@ -30,25 +30,60 @@
                            Opacity="0.9"/>
                 </StackLayout>
 
-                <Frame Grid.Column="1" 
-                       BackgroundColor="White" 
-                       Padding="8,5" 
-                       CornerRadius="15"
-                       Margin="0,0,10,0">
-                    <Label Text="{Binding TotalItems, StringFormat='{0} items'}" 
-                           TextColor="#FF6B35" 
-                           FontAttributes="Bold"
-                           FontSize="12"/>
-                </Frame>
+                <Frame BackgroundColor="#FF6B35" 
+       CornerRadius="0" 
+       Padding="20" 
+       HasShadow="True"
+       Margin="0,0,0,20">
+                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto,Auto">
 
-                <Frame Grid.Column="2" 
-                       BackgroundColor="White" 
-                       Padding="8,5" 
-                       CornerRadius="15">
-                    <Label Text="{Binding TotalPedido, StringFormat='${0:N0}'}" 
-                           TextColor="#FF6B35" 
-                           FontAttributes="Bold"
-                           FontSize="14"/>
+                        <!-- Título -->
+                        <Label Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
+               Text="Nuevo Pedido" 
+               FontSize="24" 
+               FontAttributes="Bold" 
+               TextColor="White"/>
+
+                        <!-- Mesa Seleccionada -->
+                        <Label Grid.Row="1" Grid.Column="0"
+               FontSize="14" 
+               TextColor="White"
+               VerticalOptions="Center">
+                            <Label.FormattedText>
+                                <FormattedString>
+                                    <Span Text="Mesa: " />
+                                    <Span Text="{Binding MesaSeleccionada.Numero, FallbackValue='Sin seleccionar'}" 
+                          FontAttributes="Bold"/>
+                                </FormattedString>
+                            </Label.FormattedText>
+                        </Label>
+
+                        <!-- Resumen del pedido -->
+                        <Frame Grid.Row="1" Grid.Column="1"
+               BackgroundColor="White"
+               Padding="10"
+               CornerRadius="8"
+               Margin="10,0">
+                            <Label TextColor="#FF6B35" FontAttributes="Bold">
+                                <Label.FormattedText>
+                                    <FormattedString>
+                                        <Span Text="{Binding CantidadItemsPedido}" FontSize="16"/>
+                                        <Span Text=" items" FontSize="12"/>
+                                    </FormattedString>
+                                </Label.FormattedText>
+                            </Label>
+                        </Frame>
+
+                        <Frame Grid.Row="1" Grid.Column="2"
+               BackgroundColor="White"
+               Padding="10"
+               CornerRadius="8">
+                            <Label Text="{Binding TotalPedido, StringFormat='${0:N0}'}"
+                   TextColor="#FF6B35"
+                   FontSize="16"
+                   FontAttributes="Bold"/>
+                        </Frame>
+                    </Grid>
                 </Frame>
             </Grid>
         </StackLayout>
@@ -61,10 +96,10 @@
                 <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
                     <StackLayout>
                         <Label Text="🪑 Seleccionar Mesa" 
-                               FontSize="18" 
-                               FontAttributes="Bold" 
-                               TextColor="#333"
-                               Margin="0,0,0,15"/>
+               FontSize="18" 
+               FontAttributes="Bold" 
+               TextColor="#333"
+               Margin="0,0,0,15"/>
 
                         <CollectionView ItemsSource="{Binding MesasDisponibles}">
                             <CollectionView.ItemsLayout>
@@ -82,7 +117,8 @@
                            HeightRequest="60"
                            WidthRequest="60"
                            BorderColor="{Binding BorderColor}"
-                           Opacity="{Binding OpacidadMesa}">
+                           Opacity="{Binding OpacidadMesa}"
+                           IsEnabled="{Binding EstaHabilitadaParaSeleccion}">
                                         <Frame.GestureRecognizers>
                                             <TapGestureRecognizer 
                                 Command="{Binding BindingContext.SeleccionarMesaCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
@@ -125,6 +161,25 @@
                                 </Label.FormattedText>
                             </Label>
                         </Frame>
+
+                        <!-- Leyenda de estados -->
+                        <StackLayout Orientation="Horizontal" 
+                     Spacing="15" 
+                     HorizontalOptions="Center"
+                     Margin="0,15,0,0">
+                            <StackLayout Orientation="Horizontal" Spacing="5">
+                                <BoxView Color="Green" WidthRequest="15" HeightRequest="15" CornerRadius="3"/>
+                                <Label Text="Disponible" FontSize="11" TextColor="#666" VerticalOptions="Center"/>
+                            </StackLayout>
+                            <StackLayout Orientation="Horizontal" Spacing="5">
+                                <BoxView Color="Orange" WidthRequest="15" HeightRequest="15" CornerRadius="3"/>
+                                <Label Text="Ocupada" FontSize="11" TextColor="#666" VerticalOptions="Center"/>
+                            </StackLayout>
+                            <StackLayout Orientation="Horizontal" Spacing="5">
+                                <BoxView Color="Red" WidthRequest="15" HeightRequest="15" CornerRadius="3"/>
+                                <Label Text="Por pagar" FontSize="11" TextColor="#666" VerticalOptions="Center"/>
+                            </StackLayout>
+                        </StackLayout>
                     </StackLayout>
                 </Frame>
 

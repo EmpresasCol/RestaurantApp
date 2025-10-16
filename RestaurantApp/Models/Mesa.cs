@@ -144,13 +144,12 @@ namespace RestaurantApp.Models
             ColorEstado = Estado switch
             {
                 EstadoMesa.Disponible => Colors.Green,
-                EstadoMesa.Ocupada => Colors.Red,
-                EstadoMesa.EsperandoPago => Colors.Orange,
-                EstadoMesa.Limpieza => Colors.Blue,
-                EstadoMesa.Reservada => Colors.Purple,
-                EstadoMesa.FueraDeServicio => Colors.Gray,
+                EstadoMesa.Ocupada => Colors.Orange,
+                EstadoMesa.EsperandoPago => Colors.Red,
                 _ => Colors.Gray
             };
+
+            ActualizarVisualizacionSeleccion();
         }
 
         public void ActualizarTiempoOcupada()
@@ -208,7 +207,7 @@ namespace RestaurantApp.Models
             else
             {
                 BorderColor = Colors.Transparent;
-                OpacidadMesa = Estado == EstadoMesa.Disponible ? 1.0 : 0.6;
+                OpacidadMesa = Estado == EstadoMesa.Disponible ? 1.0 : 0.5;
             }
         }
     }

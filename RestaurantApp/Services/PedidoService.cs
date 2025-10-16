@@ -1,5 +1,4 @@
-﻿// RestaurantApp/Services/PedidoService.cs
-using RestaurantApp.Models;
+﻿using RestaurantApp.Models;
 
 namespace RestaurantApp.Services
 {
@@ -64,21 +63,21 @@ namespace RestaurantApp.Services
                 pedido.Estado = estadoEnum;
             }
 
-            if (dto.Mesa != null)
+            pedido.Mesa = new Mesa
             {
-                pedido.Mesa = new Mesa
-                {
-                    Id = dto.Mesa.Id,
-                    Numero = dto.Mesa.Numero
-                };
-            }
+                Id = dto.MesaId,
+                Numero = dto.MesaNumero > 0 ? dto.MesaNumero : dto.MesaId,
+                Estado = EstadoMesa.Ocupada
+            };
 
-            if (dto.Detalles != null)
+            // Convertir detalles
+            if (dto.Detalles != null && dto.Detalles.Count > 0)
             {
                 pedido.Items = dto.Detalles.Select(d => new ItemPedido
                 {
                     Id = d.Id,
                     PedidoId = dto.Id,
+                    PlatilloId = d.PlatilloId,
                     Platillo = new Platillo
                     {
                         Id = d.PlatilloId,
@@ -102,6 +101,7 @@ namespace RestaurantApp.Services
     {
         public int Id { get; set; }
         public int MesaId { get; set; }
+        public int MesaNumero { get; set; }
         public MesaDto Mesa { get; set; }
         public int UsuarioId { get; set; }
         public string Estado { get; set; }
@@ -112,7 +112,6 @@ namespace RestaurantApp.Services
     public class PedidoDetalleDto
     {
         public int Id { get; set; }
-        public int PedidoId { get; set; }
         public int PlatilloId { get; set; }
         public string PlatilloNombre { get; set; }
         public int Cantidad { get; set; }

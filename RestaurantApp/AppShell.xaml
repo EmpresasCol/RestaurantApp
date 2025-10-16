@@ -4,28 +4,39 @@
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:RestaurantApp.Views"
-    Title="RestaurantApp"
     Shell.FlyoutBehavior="Disabled">
 
-    <!-- Rutas principales -->
+    <!-- Login (pantalla inicial) -->
     <ShellContent
-        Title="Inicio"
+        Route="login"
+        ContentTemplate="{DataTemplate local:LoginView}"
+        Shell.NavBarIsVisible="False"/>
+
+    <!-- MeseroMainView (pantalla principal) -->
+    <ShellContent
+        Route="mesero"
         ContentTemplate="{DataTemplate local:MeseroMainView}"
-        Route="inicio" />
+        Shell.NavBarIsVisible="True"/>
+
+    <!-- Rutas adicionales (ocultas) -->
+    <ShellContent
+        Route="inicio"
+        ContentTemplate="{DataTemplate local:MeseroMainView}"
+        FlyoutItemIsVisible="False"/>
 
     <ShellContent
-        Title="Nuevo Pedido"
+        Route="nuevopedido"
         ContentTemplate="{DataTemplate local:NuevoPedidoView}"
-        Route="nuevopedido" />
+        FlyoutItemIsVisible="False"/>
 
     <ShellContent
-        Title="Pedidos Activos"
+        Route="pedidosactivos"
         ContentTemplate="{DataTemplate local:PedidosActivosView}"
-        Route="pedidosactivos" />
+        FlyoutItemIsVisible="False"/>
 
     <ShellContent
-        Title="Configuración"
+        Route="configuracion"
         ContentTemplate="{DataTemplate local:ConfiguracionView}"
-        Route="configuracion" />
+        FlyoutItemIsVisible="False"/>
 
 </Shell>

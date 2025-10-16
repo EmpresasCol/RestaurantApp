@@ -1,5 +1,4 @@
-﻿// RestaurantApp/Services/UsuarioService.cs
-using RestaurantApp.Models;
+﻿using RestaurantApp.Models;
 
 namespace RestaurantApp.Services
 {
@@ -12,65 +11,71 @@ namespace RestaurantApp.Services
             _httpService = new HttpService();
         }
 
-        public async Task<Usuario> LoginAsync(string usuario, string clave)
+        public async Task<ResultadoAutenticacion> AutenticarAsync(string usuario, string clave)
         {
-            var data = new { Usuario = usuario, Clave = clave };
-            var usuarioDto = await _httpService.PostAsync<UsuarioDto>("api/usuarios/login", data);
-            return ConvertirDtoAModelo(usuarioDto);
-        }
-
-        public async Task<Usuario> ObtenerPorIdAsync(int id)
-        {
-            var usuario = await _httpService.GetAsync<UsuarioDto>($"api/usuarios/{id}");
-            return ConvertirDtoAModelo(usuario);
-        }
-
-        public async Task<List<Usuario>> ObtenerTodosAsync()
-        {
-            var usuarios = await _httpService.GetAsync<List<UsuarioDto>>("api/usuarios");
-            return usuarios.Select(dto => ConvertirDtoAModelo(dto)).ToList();
-        }
-
-        private Usuario ConvertirDtoAModelo(UsuarioDto dto)
-        {
-            var usuario = new Usuario
+            try
             {
-                Id = dto.Id,
-                Nombre = dto.Nombre,
-                NombreUsuario = dto.Usuario,
-                EstaActivo = true,
-                FechaIngreso = DateTime.Now
-            };
+                var request = new LoginRequestDto
+                {
+                    Usuario = usuario,
+                    Clave = clave
+                };
 
-            if (Enum.TryParse<TipoUsuario>(dto.Rol, out var tipoEnum))
-            {
-                usuario.Tipo = tipoEnum;
+                var response = await _httpService.PostAsync<LoginResponseDto>("api/usuarios/login", request);
+
+                if (response != null)
+                {
+                    return new ResultadoAutenticacion
+                    {
+                        Exito = true,
+                        Usuario = response
+                    };
+                }
+
+                return new ResultadoAutenticacion
+                {
+                    Exito = false,
+                    MensajeError = "Error en el servidor"
+                };
             }
-
-            var nombreCompleto = dto.Nombre.Split(' ');
-            if (nombreCompleto.Length > 1)
+            catch (HttpRequestException ex)
             {
-                usuario.Nombre = nombreCompleto[0];
-                usuario.Apellido = string.Join(" ", nombreCompleto.Skip(1));
-            }
+                if (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    return new ResultadoAutenticacion
+                    {
+                        Exito = false,
+                        MensajeError = "Usuario o contraseña incorrectos"
+                    };
+                }
 
-            return usuario;
+                return new ResultadoAutenticacion
+                {
+                    Exito = false,
+                    MensajeError = "Error de conexión"
+                };
+            }
+            catch
+            {
+                return new ResultadoAutenticacion
+                {
+                    Exito = false,
+                    MensajeError = "Error inesperado"
+                };
+            }
         }
 
-        public void GuardarSesion(Usuario usuario)
+        public void GuardarSesion(LoginResponseDto usuario)
         {
-            Preferences.Set("UsuarioId", usuario.Id);
-            Preferences.Set("NombreMesero", usuario.NombreCompleto);
-            Preferences.Set("TipoUsuario", usuario.Tipo.ToString());
             Preferences.Set("SesionActiva", true);
+            Preferences.Set("UsuarioId", usuario.Id);
+            Preferences.Set("UsuarioNombre", usuario.Nombre);
+            Preferences.Set("UsuarioRol", usuario.Rol);
         }
 
         public void CerrarSesion()
         {
-            Preferences.Remove("UsuarioId");
-            Preferences.Remove("NombreMesero");
-            Preferences.Remove("TipoUsuario");
-            Preferences.Set("SesionActiva", false);
+            Preferences.Clear();
         }
 
         public bool HaySesionActiva()
@@ -82,13 +87,15 @@ namespace RestaurantApp.Services
         {
             return Preferences.Get("UsuarioId", 0);
         }
-    }
 
-    public class UsuarioDto
-    {
-        public int Id { get; set; }
-        public string Nombre { get; set; }
-        public string Usuario { get; set; }
-        public string Rol { get; set; }
+        public string ObtenerUsuarioNombreActual()
+        {
+            return Preferences.Get("UsuarioNombre", string.Empty);
+        }
+
+        public string ObtenerUsuarioRolActual()
+        {
+            return Preferences.Get("UsuarioRol", string.Empty);
+        }
     }
 }

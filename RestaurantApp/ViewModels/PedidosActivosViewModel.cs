@@ -1,5 +1,4 @@
-﻿// RestaurantApp/ViewModels/PedidosActivosViewModel.cs
-using RestaurantApp.Models;
+﻿using RestaurantApp.Models;
 using RestaurantApp.Services;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
@@ -21,27 +20,21 @@ namespace RestaurantApp.ViewModels
         {
             Title = "Pedidos Activos";
 
-            // Inicializar servicios
             _pedidoService = new PedidoService();
             _mesaService = new MesaService();
 
-            // Inicializar colecciones
             PedidosFiltrados = new ObservableCollection<Pedido>();
             FiltrosEstado = new ObservableCollection<FiltroEstado>();
             _todosPedidos = new List<Pedido>();
 
-            // Inicializar comandos
             InicializarComandos();
 
-            // Cargar datos iniciales
             CargarFiltros();
             _ = CargarPedidos();
 
-            // Iniciar actualización automática
             IniciarActualizacionAutomatica();
         }
 
-        // Propiedades principales
         public ObservableCollection<Pedido> PedidosFiltrados { get; }
         public ObservableCollection<FiltroEstado> FiltrosEstado { get; }
 
@@ -80,8 +73,8 @@ namespace RestaurantApp.ViewModels
         {
             SeleccionarFiltroCommand = new Command<FiltroEstado>(SeleccionarFiltro);
             EditarPedidoCommand = new AsyncCommand<Pedido>(EditarPedido);
+            EntregarPedidoCommand = new AsyncCommand<Pedido>(EntregarPedido);
             CompletarPedidoCommand = new AsyncCommand<Pedido>(CompletarPedido);
-            EntregarPedidoCommand = new AsyncCommand<Pedido>(EntregarPedido); // NUEVO
             CancelarPedidoCommand = new AsyncCommand<Pedido>(CancelarPedido);
             ActualizarCommand = new AsyncCommand(Actualizar);
             NuevoPedidoCommand = new Command(async () => await Shell.Current.GoToAsync("//nuevopedido"));
@@ -101,7 +94,7 @@ namespace RestaurantApp.ViewModels
             FiltroSeleccionado = FiltrosEstado.FirstOrDefault();
         }
 
-        private async Task CargarPedidos()
+        public async Task CargarPedidos()
         {
             await ExecuteAsync(async () =>
             {
@@ -174,161 +167,196 @@ namespace RestaurantApp.ViewModels
         {
             if (pedido == null) return;
 
-            var opciones = new[] { "Agregar item", "Modificar notas", "Cambiar mesa" };
-            var accion = await Application.Current.MainPage.DisplayActionSheet(
-                $"Editar pedido Mesa {pedido.Mesa.Numero}",
-                "Cancelar",
-                null,
-                opciones);
 
-            switch (accion)
+            var tiempoTranscurrido = DateTime.Now - pedido.FechaHora;
+            if (tiempoTranscurrido.TotalMinutes > 5)
             {
-                case "Agregar item":
-                    await AgregarItemAPedido(pedido);
-                    break;
-                case "Modificar notas":
-                    await ModificarNotas(pedido);
-                    break;
-                case "Cambiar mesa":
-                    await CambiarMesa(pedido);
-                    break;
+                await Application.Current.MainPage.DisplayAlert("No permitido",
+                    "No se puede editar un pedido después de 5 minutos de creado", "OK");
+                return;
             }
-        }
 
-        private async Task AgregarItemAPedido(Pedido pedido)
-        {
-            await Application.Current.MainPage.DisplayAlert("Agregar Item",
-                "Funcionalidad de agregar item pendiente de implementar", "OK");
-
-            // En implementación real:
-            // - Navegar a selección de productos
-            // - Agregar items al pedido existente
-            // - Actualizar total
-        }
-
-        private async Task ModificarNotas(Pedido pedido)
-        {
-            var nuevasNotas = await Application.Current.MainPage.DisplayPromptAsync(
-                "Modificar Notas",
-                "Ingrese las nuevas notas:",
-                initialValue: pedido.NotasEspeciales ?? "");
-
-            if (nuevasNotas != null)
+            if (pedido.Estado != EstadoPedido.EnProceso)
             {
-                pedido.NotasEspeciales = nuevasNotas;
-                await GuardarCambiosPedido(pedido);
+                await Application.Current.MainPage.DisplayAlert("No permitido",
+                    "Solo se pueden editar pedidos en proceso", "OK");
+                return;
             }
-        }
 
-        private async Task CambiarMesa(Pedido pedido)
-        {
-            await Application.Current.MainPage.DisplayAlert("Cambiar Mesa",
-                "Funcionalidad de cambio de mesa pendiente", "OK");
+            await Application.Current.MainPage.DisplayAlert("Editar",
+                $"Función de edición para pedido #{pedido.Id}\n(Por implementar)", "OK");
+
+
+            await Shell.Current.GoToAsync($"editarpedido?id={pedido.Id}");
         }
 
         private async Task CompletarPedido(Pedido pedido)
         {
             if (pedido == null) return;
 
-            bool confirmar = await Application.Current.MainPage.DisplayAlert(
-                "Confirmar",
-                $"¿Marcar como completado el pedido de la mesa {pedido.Mesa.Numero}?",
-                "Sí", "No");
-
-            if (confirmar)
-            {
-                try
-                {
-                    // Actualizar estado en la API
-                    await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Listo");
-
-                    pedido.Completar();
-                    await Actualizar();
-
-                    await Application.Current.MainPage.DisplayAlert("Éxito",
-                        "Pedido marcado como completado", "OK");
-                }
-                catch (Exception ex)
-                {
-                    await Application.Current.MainPage.DisplayAlert("Error",
-                        $"Error al completar pedido: {ex.Message}", "OK");
-                }
-            }
-        }
-        private async Task EntregarPedido(Pedido pedido)
-        {
-            if (pedido == null) return;
-
-            // Verificar que el pedido esté listo
-            if (pedido.Estado != EstadoPedido.Listo)
+            // Verificar que el pedido esté entregado
+            if (pedido.Estado != EstadoPedido.Entregado)
             {
                 await Application.Current.MainPage.DisplayAlert("No disponible",
-                    "Solo se pueden entregar pedidos que estén listos", "OK");
+                    "Solo se pueden completar pedidos que ya fueron entregados", "OK");
                 return;
             }
 
             bool confirmar = await Application.Current.MainPage.DisplayAlert(
-                "Confirmar Entrega",
-                $"¿Marcar como entregado el pedido de la mesa {pedido.Mesa.Numero}?",
-                "Sí", "No");
+                "Completar Pedido",
+                $"¿El pago del pedido de la mesa {pedido.Mesa.Numero} fue realizado?\n\nTotal: ${pedido.Total:N0}",
+                "Sí, cobrado", "No");
 
             if (confirmar)
             {
                 try
                 {
-                    // Actualizar estado en la API a "Entregado"
-                    await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Entregado");
+                    System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Cambiando estado de pedido {pedido.Id} a Pagado");
 
-                    pedido.Entregar();
+                    // Actualizar estado en la API a "Pagado"
+                    await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Pagado");
+
+                    pedido.Completar();
+
+                    // Actualizar estado de la mesa a Disponible
+                    await _mesaService.ActualizarEstadoAsync(pedido.Mesa.Id, "Disponible");
 
                     // Remover de la lista de activos
                     _todosPedidos.Remove(pedido);
                     AplicarFiltro();
                     CantidadPedidosActivos--;
 
-                    await Application.Current.MainPage.DisplayAlert("Entregado",
-                        "Pedido marcado como entregado", "OK");
+                    await Application.Current.MainPage.DisplayAlert("✅ Completado",
+                        $"Pedido de la mesa {pedido.Mesa.Numero} completado.\nLa mesa está disponible nuevamente.", "OK");
                 }
                 catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Error: {ex.Message}");
+                    await Application.Current.MainPage.DisplayAlert("Error",
+                        $"Error al completar pedido: {ex.Message}", "OK");
+                }
+            }
+        }
+
+        private async Task EntregarPedido(Pedido pedido)
+        {
+            if (pedido == null) return;
+
+            System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Iniciando para pedido ID: {pedido.Id}");
+            System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Estado actual: {pedido.Estado}");
+
+            // Verificar que el pedido esté en proceso
+            if (pedido.Estado != EstadoPedido.EnProceso)
+            {
+                await Application.Current.MainPage.DisplayAlert("No disponible",
+                    "Solo se pueden entregar pedidos en proceso", "OK");
+                return;
+            }
+
+            // Si mesa es null, cargarla
+            if (pedido.Mesa == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Mesa es null, cargando desde servicio...");
+                try
+                {
+                    pedido.Mesa = await _mesaService.ObtenerPorIdAsync(pedido.MesaId);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Error cargando mesa: {ex.Message}");
+                }
+            }
+
+            var numeroMesa = pedido.Mesa?.Numero ?? pedido.MesaId;
+
+            bool confirmar = await Application.Current.MainPage.DisplayAlert(
+                "Confirmar Entrega",
+                $"¿Confirmar que el pedido de la mesa {numeroMesa} fue entregado?",
+                "Sí, entregar", "No");
+
+            if (confirmar)
+            {
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Cambiando estado de pedido {pedido.Id} a Entregado");
+
+                    // Actualizar estado en la API a "Entregado"
+                    var pedidoActualizado = await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Entregado");
+
+                    if (pedidoActualizado != null)
+                    {
+                        pedido.Entregar();
+
+                        System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Pedido {pedido.Id} actualizado exitosamente");
+
+                        await Application.Current.MainPage.DisplayAlert("✅ Entregado",
+                            $"Pedido de la mesa {numeroMesa} marcado como entregado.\nAhora puedes proceder al cobro.", "OK");
+
+                        // Actualizar la vista
+                        AplicarFiltro();
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Error: La API retornó null");
+                        await Application.Current.MainPage.DisplayAlert("Error",
+                            "No se pudo actualizar el pedido en el servidor", "OK");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ENTREGAR] Error: {ex.Message}");
                     await Application.Current.MainPage.DisplayAlert("Error",
                         $"Error al entregar pedido: {ex.Message}", "OK");
                 }
             }
         }
 
+
         private async Task CancelarPedido(Pedido pedido)
         {
             if (pedido == null) return;
 
-            bool confirmar = await Application.Current.MainPage.DisplayAlert(
-                "Confirmar Cancelación",
-                $"¿Está seguro de cancelar el pedido de la mesa {pedido.Mesa.Numero}?\nEsta acción no se puede deshacer.",
-                "Sí, cancelar", "No");
+            // Verificar que se pueda cancelar (EnProceso o Entregado)
+            if (pedido.Estado != EstadoPedido.EnProceso && pedido.Estado != EstadoPedido.Entregado)
+            {
+                await Application.Current.MainPage.DisplayAlert("No permitido",
+                    "Solo se pueden cancelar pedidos en proceso o entregados", "OK");
+                return;
+            }
+            // Pedir motivo de cancelación
+            string motivo = await Application.Current.MainPage.DisplayPromptAsync(
+                "Cancelar Pedido",
+                "¿Por qué deseas cancelar este pedido?",
+                "Cancelar Pedido",
+                "Volver",
+                "Escribe el motivo...",
+                maxLength: 100);
 
-            if (confirmar)
+            if (!string.IsNullOrEmpty(motivo))
             {
                 try
                 {
-                    // Cancelar en la API
-                    var resultado = await _pedidoService.CancelarPedidoAsync(pedido.Id);
+                    System.Diagnostics.Debug.WriteLine($"[CANCELAR] Cancelando pedido {pedido.Id}. Motivo: {motivo}");
 
-                    if (resultado)
-                    {
-                        // Actualizar estado de la mesa
-                        await _mesaService.ActualizarEstadoAsync(pedido.Mesa.Id, "Disponible");
+                    // Actualizar estado en la API a "Cancelado"
+                    await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Cancelado");
 
-                        // Remover de la lista
-                        _todosPedidos.Remove(pedido);
-                        AplicarFiltro();
-                        CantidadPedidosActivos--;
+                    pedido.Cancelar();
 
-                        await Application.Current.MainPage.DisplayAlert("Cancelado",
-                            "Pedido cancelado correctamente", "OK");
-                    }
+                    // Remover de la lista
+                    _todosPedidos.Remove(pedido);
+                    AplicarFiltro();
+                    CantidadPedidosActivos--;
+
+                    // Si la mesa no tiene más pedidos activos, liberarla
+                    await _mesaService.ActualizarEstadoAsync(pedido.Mesa.Id, "Disponible");
+
+                    await Application.Current.MainPage.DisplayAlert("Cancelado",
+                        $"Pedido de la mesa {pedido.Mesa.Numero} cancelado.\nMotivo: {motivo}", "OK");
                 }
                 catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"[CANCELAR] Error: {ex.Message}");
                     await Application.Current.MainPage.DisplayAlert("Error",
                         $"Error al cancelar pedido: {ex.Message}", "OK");
                 }

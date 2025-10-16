@@ -220,13 +220,19 @@ namespace RestaurantApp.ViewModels
         {
             if (mesa == null) return;
 
-            // Solo permitir seleccionar mesas disponibles u ocupadas (para agregar más pedidos)
-            if (mesa.Estado != EstadoMesa.Disponible && mesa.Estado != EstadoMesa.Ocupada)
+            // Solo permitir seleccionar mesas disponibles
+            if (mesa.Estado != EstadoMesa.Disponible)
             {
                 MainThread.BeginInvokeOnMainThread(async () =>
                 {
-                    await Application.Current.MainPage.DisplayAlert("Mesa no disponible",
-                        $"La mesa {mesa.Numero} no está disponible en este momento", "OK");
+                    var mensaje = mesa.Estado switch
+                    {
+                        EstadoMesa.Ocupada => $"La mesa {mesa.Numero} está ocupada",
+                        EstadoMesa.EsperandoPago => $"La mesa {mesa.Numero} está esperando pago",
+                        _ => $"La mesa {mesa.Numero} no está disponible"
+                    };
+
+                    await Application.Current.MainPage.DisplayAlert("Mesa no disponible", mensaje, "OK");
                 });
                 return;
             }
@@ -498,11 +504,25 @@ namespace RestaurantApp.ViewModels
 
         public async Task ActualizarDatos()
         {
-            await ExecuteAsync(async () =>
+            try
             {
-                await CargarMesas();
-                await CargarProductos();
-            });
+                System.Diagnostics.Debug.WriteLine("[ActualizarDatos] Recargando mesas...");
+
+                // Recargar mesas desde el servidor
+                var mesas = await _mesaService.ObtenerTodasAsync();
+
+                MesasDisponibles.Clear();
+                foreach (var mesa in mesas.OrderBy(m => m.Numero))
+                {
+                    MesasDisponibles.Add(mesa);
+                }
+
+                System.Diagnostics.Debug.WriteLine($"[ActualizarDatos] {mesas.Count} mesas cargadas");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ActualizarDatos] Error: {ex.Message}");
+            }
         }
     }
 }

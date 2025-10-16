@@ -183,6 +183,33 @@ namespace RestaurantApi.Controllers
 
             return NoContent();
         }
+        [HttpPut("{id}/estado")]
+        public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
+        {
+            var pedido = await _context.Pedidos.FindAsync(id);
+
+            if (pedido == null)
+                return NotFound($"Pedido con ID {id} no encontrado");
+
+            // Validar que el estado sea válido
+            if (!Enum.TryParse<EstadoPedido>(dto.Estado, true, out var estadoEnum))
+            {
+                return BadRequest($"Estado inválido: {dto.Estado}. Estados válidos: EnProceso, Listo, Entregado, Pagado, Cancelado");
+            }
+
+            pedido.Estado = estadoEnum;
+            await _context.SaveChangesAsync();
+
+            return Ok(new PedidoDto
+            {
+                Id = pedido.Id,
+                MesaId = pedido.MesaId,
+                MesaNumero = pedido.Mesa?.Numero ?? 0,
+                Estado = pedido.Estado.ToString(),
+                Fecha = pedido.Fecha
+            });
+        }
+
 
         // DELETE: api/Pedidos/5
         [HttpDelete("{id}")]

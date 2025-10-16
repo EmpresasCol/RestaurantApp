@@ -6,6 +6,7 @@ namespace RestaurantApp.Models
     {
         private int _id;
         private Mesa _mesa;
+        private int _mesaId;
         private Usuario _usuario;
         private DateTime _fechaHora;
         private EstadoPedido _estado;
@@ -36,6 +37,11 @@ namespace RestaurantApp.Models
             get => _mesa;
             set => SetProperty(ref _mesa, value);
         }
+        public int MesaId 
+        {
+            get => _mesaId;
+            set => SetProperty(ref _mesaId, value);
+        }
 
         public Usuario Usuario
         {
@@ -54,7 +60,14 @@ namespace RestaurantApp.Models
                 }
             }
         }
-
+        public bool PuedeEditar
+        {
+            get
+            {
+                var tiempoTranscurrido = DateTime.Now - FechaHora;
+                return tiempoTranscurrido.TotalMinutes <= 5 && Estado == EstadoPedido.EnProceso;
+            }
+        }
         public EstadoPedido Estado
         {
             get => _estado;
@@ -118,7 +131,9 @@ namespace RestaurantApp.Models
         public decimal IVA => Subtotal * 0.19m;
         public int CantidadItems => Items.Sum(i => i.Cantidad);
         public string EstadoTexto => Estado.ToString();
-        public bool PuedeEntregar => Estado == EstadoPedido.Listo;
+        public bool PuedeMarcarComoEntregado => Estado == EstadoPedido.Listo;
+        public bool PuedeCancelar => Estado == EstadoPedido.EnProceso || Estado == EstadoPedido.Listo;
+        public bool PuedeMarcarComoPagado => Estado == EstadoPedido.Entregado;
 
         // Métodos
         private void ActualizarEstadoColor()
@@ -127,7 +142,7 @@ namespace RestaurantApp.Models
             {
                 EstadoPedido.EnProceso => Colors.Orange,
                 EstadoPedido.Listo => Colors.Green,
-                EstadoPedido.Entregado => Colors.Blue,  
+                EstadoPedido.Entregado => Colors.Blue,
                 EstadoPedido.Pagado => Colors.Purple,
                 EstadoPedido.Cancelado => Colors.Red,
                 _ => Colors.Gray
@@ -146,7 +161,10 @@ namespace RestaurantApp.Models
         {
             Total = Subtotal + IVA;
         }
-
+        public void MarcarComoListo()
+        {
+            Estado = EstadoPedido.Listo;
+        }
         public void AgregarItem(ItemPedido item)
         {
             Items.Add(item);
@@ -161,7 +179,7 @@ namespace RestaurantApp.Models
 
         public void Completar()
         {
-            Estado = EstadoPedido.Listo;
+            Estado = EstadoPedido.Pagado;
         }
 
         public void Cancelar()
