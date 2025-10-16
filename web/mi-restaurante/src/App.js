@@ -1,6 +1,6 @@
 // src/App.js 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon, QrCode, LogOut, BarChart3, Utensils } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon, QrCode, LogOut, BarChart3, Utensils, Users } from 'lucide-react';
 import * as api from './services/api';
 import Facturacion from './Facturacion';
 import GeneradorQR from './GeneradorQR';
@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Reportes from './Reportes';
 import GestionPlatillos from './GestionPlatillos';
+import GestionUsuarios from './GestionUsuarios';
 
 function AppContent() {
   const { usuario, esClienteQR, estaAutenticado, logout, cargando: cargandoAuth } = useAuth();
@@ -60,14 +61,16 @@ function AppContent() {
     }
   }, []);
 
-  useEffect(() => {
-    if ((vistaActual === 'cocina' || esPantallaCocina) && !esClienteQR) {
-      cargarPedidos();
-      // ⚡ Actualización cada 1 segundo
-      const interval = setInterval(cargarPedidos, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [vistaActual, esPantallaCocina, esClienteQR]);
+ useEffect(() => {
+  if ((vistaActual === 'cocina' || esPantallaCocina) && !esClienteQR) {
+    cargarPedidos();
+    // ⚡ Actualización cada 2 segundos
+    const interval = setInterval(cargarPedidos, 2000);
+    return () => clearInterval(interval);
+  }
+}, [vistaActual, esPantallaCocina, esClienteQR]);
+
+
 
   useEffect(() => {
     if (usuario && !esPantallaCocina) {
@@ -90,48 +93,52 @@ function AppContent() {
     }
   };
 
-  const cargarPedidos = async () => {
-    try {
-      const data = await api.getPedidos();
-      const pedidosTransformados = data
-        .filter(p => p.estado !== 'Entregado' && p.estado !== 'Pagado' && p.estado !== 'Cancelado')
-        .map(p => ({
-          id: p.id,
-          mesa: p.mesaNumero,
-          items: p.detalles.map(d => ({
-            id: d.id,
-            nombre: d.platilloNombre,
-            cantidad: d.cantidad,
-            notas: d.nota || ""
-          })),
-          hora: new Date(p.fecha),
-          estado: p.estado
-        }));
-      
-      // 💥 Detectar nuevos pedidos comparando IDs
-      if (pedidos.length > 0) {
-        const idsAnteriores = pedidos.map(p => p.id);
-        const nuevos = pedidosTransformados.filter(p => !idsAnteriores.includes(p.id));
-        
-        if (nuevos.length > 0) {
-          console.log('🔔 Nuevos pedidos detectados:', nuevos.length);
-          
-          // Marcar como nuevos temporalmente
-          setPedidosNuevos(nuevos.map(p => p.id));
-          
-          // Quitar la marca después de 10 segundos
-          setTimeout(() => {
-            setPedidosNuevos([]);
-          }, 10000);
-        }
-      }
-      
-      setPedidosAnteriores(pedidosTransformados.length);
-      setPedidos(pedidosTransformados);
-    } catch (error) {
-      console.error('Error al cargar pedidos:', error);
+
+const cargarPedidos = async () => {
+  try {
+    const data = await api.getPedidos();
+    const pedidosTransformados = data
+      .filter(p => p.estado !== 'Entregado' && p.estado !== 'Pagado' && p.estado !== 'Cancelado')
+      .map(p => ({
+        id: p.id,
+        mesa: p.mesaNumero,
+        items: p.detalles.map(d => ({
+          id: d.id,
+          nombre: d.platilloNombre,
+          cantidad: d.cantidad,
+          notas: d.nota || ""
+        })),
+        hora: new Date(p.fecha),
+        estado: p.estado
+      }));
+
+    const idsAnteriores = pedidos.map(p => p.id);
+    const nuevos = pedidosTransformados.filter(p => !idsAnteriores.includes(p.id));
+
+    if (nuevos.length > 0) {
+      console.log('🔔 Nuevos pedidos detectados:', nuevos.length);
+
+      // 💾 Guardar la hora exacta de llegada
+      const ahora = Date.now();
+      const nuevosConTiempo = nuevos.map(p => ({
+        id: p.id,
+        timestamp: ahora
+      }));
+
+      setPedidosNuevos(prev => [...prev, ...nuevosConTiempo]);
     }
-  };
+
+    // 🧹 Limpiar los que pasaron de 5 segundos
+    const ahora = Date.now();
+    setPedidosNuevos(prev => prev.filter(p => ahora - p.timestamp < 5000));
+
+    setPedidos(pedidosTransformados);
+  } catch (error) {
+    console.error('Error al cargar pedidos:', error);
+  }
+};
+
+
 
   const formatearPrecio = (precio) =>
     new Intl.NumberFormat('es-CO', { 
@@ -599,6 +606,8 @@ function AppContent() {
         return <ProtectedRoute permisos={['administrador']}><Reportes /></ProtectedRoute>;
       case 'gestion-platillos':
         return <ProtectedRoute permisos={['administrador']}><GestionPlatillos /></ProtectedRoute>;
+      case 'gestion-usuarios':
+        return <ProtectedRoute permisos={['administrador']}><GestionUsuarios /></ProtectedRoute>;
       default:
         return renderMenuCliente();
     }
@@ -650,6 +659,9 @@ function AppContent() {
                   </button>
                   <button onClick={() => setVistaActual('gestion-platillos')} className={`px-6 py-4 text-sm font-medium border-b-2 flex items-center gap-2 ${vistaActual === 'gestion-platillos' ? 'border-orange-500 text-orange-500 bg-gray-700' : 'border-transparent hover:bg-gray-700'}`}>
                     <Utensils size={18} />Platillos
+                  </button>
+                  <button onClick={() => setVistaActual('gestion-usuarios')} className={`px-6 py-4 text-sm font-medium border-b-2 flex items-center gap-2 ${vistaActual === 'gestion-usuarios' ? 'border-orange-500 text-orange-500 bg-gray-700' : 'border-transparent hover:bg-gray-700'}`}>
+                    <Users size={18} />Usuarios
                   </button>
                   <button onClick={() => setVistaActual('qr')} className={`px-6 py-4 text-sm font-medium border-b-2 flex items-center gap-2 ${vistaActual === 'qr' ? 'border-orange-500 text-orange-500 bg-gray-700' : 'border-transparent hover:bg-gray-700'}`}>
                     <QrCode size={18} />Generar QR

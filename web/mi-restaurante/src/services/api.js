@@ -305,3 +305,134 @@ export const createFactura = async (pagoId, nitCliente = null, nombreCliente = n
     throw error;
   }
 };
+
+
+// ==================== USUARIOS ====================
+export const getUsuarios = async () => {
+  try {
+    const response = await fetch(`${API_URL}/usuarios`);
+    if (!response.ok) throw new Error('Error al obtener usuarios');
+    return await response.json();
+  } catch (error) {
+    console.error('Error en getUsuarios:', error);
+    throw error;
+  }
+};
+
+export const getUsuario = async (id) => {
+  try {
+    const response = await fetch(`${API_URL}/usuarios/${id}`);
+    if (!response.ok) throw new Error('Error al obtener usuario');
+    return await response.json();
+  } catch (error) {
+    console.error('Error en getUsuario:', error);
+    throw error;
+  }
+};
+
+export const createUsuario = async (usuarioData) => {
+  try {
+    console.log('📤 Creando usuario:', usuarioData);
+    
+    // ✅ MAPEAR ROL DE STRING A NÚMERO
+    const rolMap = {
+      'Administrador': 0,
+      'Mesero': 1,
+      'Cocina': 2,
+      'Caja': 3
+    };
+    
+    const dataBackend = {
+      NombreUsuario: usuarioData.nombreUsuario,  // ✅ PascalCase
+      ClaveHash: usuarioData.clave,               // ✅ PascalCase
+      Nombre: usuarioData.nombre,                 // ✅ PascalCase
+      Rol: rolMap[usuarioData.rol]               // ✅ PascalCase
+    };
+
+    console.log('📤 Enviando al backend:', dataBackend);
+
+    const response = await fetch(`${API_URL}/usuarios`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dataBackend)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error al crear usuario: ${errorText}`);
+    }
+
+    const resultado = await response.json();
+    console.log('✅ Usuario creado:', resultado);
+    return resultado;
+  } catch (error) {
+    console.error('❌ Error en createUsuario:', error);
+    throw error;
+  }
+};
+
+export const updateUsuario = async (id, usuarioData) => {
+  try {
+    console.log('🔄 Actualizando usuario:', { id, ...usuarioData });
+    
+    // ✅ MAPEAR ROL DE STRING A NÚMERO
+    const rolMap = {
+      'Administrador': 0,
+      'Mesero': 1,
+      'Cocina': 2,
+      'Caja': 3
+    };
+    
+    const dataBackend = {
+      Id: id,                                     // ✅ PascalCase
+      NombreUsuario: usuarioData.nombreUsuario,  // ✅ PascalCase
+      Nombre: usuarioData.nombre,                // ✅ PascalCase
+      Rol: rolMap[usuarioData.rol]              // ✅ PascalCase
+    };
+
+    if (usuarioData.clave) {
+      dataBackend.ClaveHash = usuarioData.clave; // ✅ PascalCase
+    }
+
+    console.log('📤 Enviando al backend:', dataBackend);
+
+    const response = await fetch(`${API_URL}/usuarios/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dataBackend)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error del servidor:', errorText);
+      throw new Error(errorText || 'Error al actualizar usuario');
+    }
+
+    console.log('✅ Usuario actualizado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en updateUsuario:', error);
+    throw error;
+  }
+};
+export const deleteUsuario = async (id) => {
+  try {
+    console.log('🗑️ Eliminando usuario:', id);
+    
+    const response = await fetch(`${API_URL}/usuarios/${id}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Error del servidor:', errorText);
+      throw new Error(errorText || 'Error al eliminar usuario');
+    }
+
+    console.log('✅ Usuario eliminado exitosamente');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error en deleteUsuario:', error);
+    throw error;
+  }
+};

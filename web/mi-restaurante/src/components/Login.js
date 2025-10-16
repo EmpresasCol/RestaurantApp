@@ -1,6 +1,6 @@
 // src/components/Login.js
 import React, { useState } from 'react';
-import { LogIn, Lock, User, AlertCircle, Smartphone, ChefHat } from 'lucide-react';
+import { LogIn, Lock, User, AlertCircle, Smartphone, ChefHat, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 function Login() {
@@ -10,6 +10,7 @@ function Login() {
   const [cargando, setCargando] = useState(false);
   const [mostrarModalMesero, setMostrarModalMesero] = useState(false);
   const [mostrarModalCocina, setMostrarModalCocina] = useState(false);
+  const [mostrarPassword, setMostrarPassword] = useState(false); // ✅ NUEVO ESTADO
   const { login } = useAuth();
 
   const handleSubmit = async (e) => {
@@ -19,13 +20,10 @@ function Login() {
 
     try {
       await login({ username, password });
-      // El AuthContext maneja la redirección automáticamente
     } catch (err) {
-      // Si el error es porque es de cocina
       if (err.message === 'COCINA_URL_DIRECTA') {
         setMostrarModalCocina(true);
       }
-      // Si el error es porque es un mesero, mostrar modal especial
       else if (err.message.includes('mesero') || err.message.includes('móvil')) {
         setMostrarModalMesero(true);
       } else {
@@ -39,7 +37,6 @@ function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-500 via-orange-600 to-red-600 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo/Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-lg mb-4">
             <span className="text-4xl">🍽️</span>
@@ -48,7 +45,6 @@ function Login() {
           <p className="text-orange-100">Sistema de Gestión</p>
         </div>
 
-        {/* Card de Login */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
             Iniciar Sesión
@@ -86,7 +82,7 @@ function Login() {
               </div>
             </div>
 
-            {/* Campo Contraseña */}
+            {/* Campo Contraseña con Ojo */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Contraseña
@@ -97,14 +93,22 @@ function Login() {
                 </div>
                 <input
                   id="password"
-                  type="password"
+                  type={mostrarPassword ? "text" : "password"} // ✅ TOGGLE TIPO
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   placeholder="Ingrese su contraseña"
                   required
                   autoComplete="current-password"
                 />
+                {/* ✅ BOTÓN PARA MOSTRAR/OCULTAR CONTRASEÑA */}
+                <button
+                  type="button"
+                  onClick={() => setMostrarPassword(!mostrarPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {mostrarPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
 
@@ -128,7 +132,6 @@ function Login() {
             </button>
           </form>
 
-          {/* Información actualizada */}
           <div className="mt-6 pt-6 border-t border-gray-200">
             <p className="text-xs text-gray-500 text-center">
               Acceso disponible para Administrador, Caja y Cocina
@@ -139,7 +142,6 @@ function Login() {
           </div>
         </div>
 
-        {/* Footer */}
         <p className="text-center text-white text-sm mt-6 opacity-90">
           © 2024 Restaurante Délice. Todos los derechos reservados.
         </p>

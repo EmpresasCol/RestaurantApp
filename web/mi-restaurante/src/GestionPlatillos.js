@@ -1,6 +1,6 @@
 // src/GestionPlatillos.js
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, ChefHat, DollarSign, Image as ImageIcon, Tag } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, ChefHat, DollarSign, Image as ImageIcon, Tag, Upload } from 'lucide-react';
 import * as api from './services/api';
 
 function GestionPlatillos() {
@@ -11,6 +11,8 @@ function GestionPlatillos() {
   const [platilloEditando, setPlatilloEditando] = useState(null);
   const [modalAlerta, setModalAlerta] = useState(null);
   const [modalConfirmacion, setModalConfirmacion] = useState(null);
+  const [imagenPreview, setImagenPreview] = useState(null);
+  const [archivoImagen, setArchivoImagen] = useState(null);
 
   const [formData, setFormData] = useState({
     nombre: '',
@@ -20,7 +22,6 @@ function GestionPlatillos() {
     categoria: 'Platos Principales'
   });
 
-  // ✅ Categorías disponibles
   const categorias = [
     'Entradas',
     'Platos Principales', 
@@ -54,6 +55,8 @@ function GestionPlatillos() {
   const abrirModalNuevo = () => {
     setModoEdicion(false);
     setPlatilloEditando(null);
+    setImagenPreview(null);
+    setArchivoImagen(null);
     setFormData({
       nombre: '',
       descripcion: '',
@@ -67,6 +70,8 @@ function GestionPlatillos() {
   const abrirModalEditar = (platillo) => {
     setModoEdicion(true);
     setPlatilloEditando(platillo);
+    setImagenPreview(platillo.imagenUrl);
+    setArchivoImagen(null);
     setFormData({
       nombre: platillo.nombre,
       descripcion: platillo.descripcion,
@@ -81,6 +86,8 @@ function GestionPlatillos() {
     setModalAbierto(false);
     setModoEdicion(false);
     setPlatilloEditando(null);
+    setImagenPreview(null);
+    setArchivoImagen(null);
     setFormData({
       nombre: '',
       descripcion: '',
@@ -96,6 +103,40 @@ function GestionPlatillos() {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleImagenChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validar que sea una imagen
+      if (!file.type.startsWith('image/')) {
+        setModalAlerta({
+          tipo: 'error',
+          titulo: 'Error',
+          mensaje: 'Por favor selecciona un archivo de imagen válido'
+        });
+        return;
+      }
+
+      // Validar tamaño (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setModalAlerta({
+          tipo: 'error',
+          titulo: 'Error',
+          mensaje: 'La imagen no debe superar los 5MB'
+        });
+        return;
+      }
+
+      setArchivoImagen(file);
+
+      // Crear preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagenPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const validarFormulario = () => {
@@ -118,6 +159,15 @@ function GestionPlatillos() {
     return true;
   };
 
+  const convertirImagenABase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -125,11 +175,23 @@ function GestionPlatillos() {
 
     setCargando(true);
     try {
+      let imagenUrl = formData.imagenUrl;
+
+      // Si se seleccionó una nueva imagen, convertirla a base64
+      if (archivoImagen) {
+        imagenUrl = await convertirImagenABase64(archivoImagen);
+      }
+
+      // Si no hay imagen, usar una por defecto
+      if (!imagenUrl) {
+        imagenUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
+      }
+
       const platilloData = {
         nombre: formData.nombre.trim(),
         descripcion: formData.descripcion.trim(),
         precio: parseFloat(formData.precio),
-        imagenUrl: formData.imagenUrl.trim() || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop',
+        imagenUrl: imagenUrl,
         categoria: formData.categoria
       };
 
@@ -203,7 +265,6 @@ function GestionPlatillos() {
     }).format(precio);
   };
 
-  // ✅ Obtener colores por categoría
   const getColorCategoria = (categoria) => {
     const colores = {
       'Entradas': 'bg-green-100 text-green-700',
@@ -397,9 +458,52 @@ function GestionPlatillos() {
                 </div>
               </div>
 
+              {/* Sección de imagen */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  URL de la Imagen
+                  Imagen del Platillo
+                </label>
+                
+                {/* Vista previa de la imagen */}
+                {imagenPreview && (
+                  <div className="mb-4 border-2 border-gray-200 rounded-lg p-2">
+                    <img 
+                      src={imagenPreview} 
+                      alt="Vista previa"
+                      className="w-full h-48 object-cover rounded-lg"
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Botón para subir archivo */}
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 cursor-pointer">
+                    <div className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors">
+                      <Upload size={20} className="text-gray-600" />
+                      <span className="text-sm font-medium text-gray-700">
+                        {archivoImagen ? archivoImagen.name : 'Seleccionar imagen desde tu computadora'}
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImagenChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Formatos: JPG, PNG, GIF. Tamaño máximo: 5MB
+                </p>
+              </div>
+
+              {/* URL alternativa */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  O proporciona una URL de imagen
                 </label>
                 <div className="relative">
                   <ImageIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -412,24 +516,7 @@ function GestionPlatillos() {
                     placeholder="https://ejemplo.com/imagen.jpg"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Si no se proporciona, se usará una imagen predeterminada
-                </p>
               </div>
-
-              {formData.imagenUrl && (
-                <div className="border-2 border-gray-200 rounded-lg p-2">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Vista previa:</p>
-                  <img 
-                    src={formData.imagenUrl} 
-                    alt="Vista previa"
-                    className="w-full h-48 object-cover rounded-lg"
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
-                    }}
-                  />
-                </div>
-              )}
 
               <div className="flex gap-3 pt-4">
                 <button

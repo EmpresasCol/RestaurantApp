@@ -1,41 +1,69 @@
--- Crear Base de Datos -------
-CREATE DATABASE IF NOT EXISTS RestauranteBD;
+-- =====================================================
+-- BASE DE DATOS RESTAURANTE - VERSIÓN ACTUALIZADA
+-- Cambios principales: ImagenUrl ahora es LONGTEXT
+-- =====================================================
+
+-- Crear Base de Datos
+DROP DATABASE IF EXISTS RestauranteBD;
+CREATE DATABASE RestauranteBD;
 USE RestauranteBD;
-----
--- Tablas
+
+-- =====================================================
+-- TABLA: Usuarios
+-- =====================================================
 CREATE TABLE Usuarios (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
     Usuario VARCHAR(50) UNIQUE NOT NULL,
     ClaveHash VARCHAR(255) NOT NULL,
-    Rol ENUM('Administrador','Mesero','Cocina','Caja') NOT NULL
-);
+    Rol ENUM('Administrador','Mesero','Cocina','Caja') NOT NULL,
+    INDEX idx_usuario (Usuario),
+    INDEX idx_rol (Rol)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- TABLA: Mesas
+-- =====================================================
 CREATE TABLE Mesas (
     Id INT AUTO_INCREMENT PRIMARY KEY,
-    Numero INT NOT NULL,
-    Estado ENUM('Disponible','Ocupada','EsperandoPago') DEFAULT 'Disponible'
-);
+    Numero INT NOT NULL UNIQUE,
+    Estado ENUM('Disponible','Ocupada','EsperandoPago') DEFAULT 'Disponible',
+    INDEX idx_estado (Estado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- TABLA: Platillos (✅ ImagenUrl ahora es LONGTEXT)
+-- =====================================================
 CREATE TABLE Platillos (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     Nombre VARCHAR(100) NOT NULL,
     Descripcion TEXT,
     Precio DECIMAL(10,2) NOT NULL,
-    ImagenUrl VARCHAR(255),
-    Categoria VARCHAR(50) NOT NULL DEFAULT 'Platos Principales'
-);
+    ImagenUrl LONGTEXT,  -- ✅ CAMBIO PRINCIPAL: Soporta imágenes Base64
+    Categoria VARCHAR(50) NOT NULL DEFAULT 'Platos Principales',
+    INDEX idx_categoria (Categoria),
+    INDEX idx_nombre (Nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- TABLA: Pedidos
+-- =====================================================
 CREATE TABLE Pedidos (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     MesaId INT NOT NULL,
     UsuarioId INT NOT NULL,
     Estado ENUM('EnProceso','Listo','Entregado','Pagado','Cancelado') DEFAULT 'EnProceso',
     Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (MesaId) REFERENCES Mesas(Id),
-    FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id)
-);
+    FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE RESTRICT,
+    FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE RESTRICT,
+    INDEX idx_estado (Estado),
+    INDEX idx_fecha (Fecha),
+    INDEX idx_mesa (MesaId)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- TABLA: PedidoDetalles
+-- =====================================================
 CREATE TABLE PedidoDetalles (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     PedidoId INT NOT NULL,
@@ -43,10 +71,16 @@ CREATE TABLE PedidoDetalles (
     Cantidad INT NOT NULL,
     Nota TEXT,
     Estado ENUM('Pendiente','EnPreparacion','Listo') DEFAULT 'Pendiente',
-    FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id),
-    FOREIGN KEY (PlatilloId) REFERENCES Platillos(Id)
-);
+    FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id) ON DELETE CASCADE,
+    FOREIGN KEY (PlatilloId) REFERENCES Platillos(Id) ON DELETE RESTRICT,
+    INDEX idx_pedido (PedidoId),
+    INDEX idx_platillo (PlatilloId),
+    INDEX idx_estado (Estado)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- TABLA: Pagos
+-- =====================================================
 CREATE TABLE Pagos (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     PedidoId INT NOT NULL,
@@ -54,9 +88,14 @@ CREATE TABLE Pagos (
     MontoPropina DECIMAL(10,2) DEFAULT 0.00,
     MetodoPago ENUM('Efectivo','Tarjeta','QR','Otro') NOT NULL,
     Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id)
-);
+    FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id) ON DELETE RESTRICT,
+    INDEX idx_fecha (Fecha),
+    INDEX idx_metodo (MetodoPago)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- =====================================================
+-- TABLA: Facturas
+-- =====================================================
 CREATE TABLE Facturas (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     PagoId INT NOT NULL,
@@ -68,10 +107,14 @@ CREATE TABLE Facturas (
     Total DECIMAL(10,2) NOT NULL,
     ArchivoUrl VARCHAR(255),
     FechaEmision DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (PagoId) REFERENCES Pagos(Id)
-);
+    FOREIGN KEY (PagoId) REFERENCES Pagos(Id) ON DELETE RESTRICT,
+    INDEX idx_numero (NumeroFactura),
+    INDEX idx_fecha (FechaEmision)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Datos Iniciales
+-- =====================================================
+-- DATOS INICIALES: Usuarios
+-- =====================================================
 INSERT INTO Usuarios (Nombre, Usuario, ClaveHash, Rol) VALUES
 ('Admin Principal', 'admin', '123456', 'Administrador'),
 ('Juan Pérez', 'juan.mesero', '123456', 'Mesero'),
@@ -81,6 +124,9 @@ INSERT INTO Usuarios (Nombre, Usuario, ClaveHash, Rol) VALUES
 ('Pedro Rodríguez', 'pedro.caja', '123456', 'Caja'),
 ('Laura Fernández', 'laura.caja', '123456', 'Caja');
 
+-- =====================================================
+-- DATOS INICIALES: Mesas
+-- =====================================================
 INSERT INTO Mesas (Numero, Estado) VALUES
 (1, 'Disponible'),
 (2, 'Ocupada'),
@@ -95,6 +141,9 @@ INSERT INTO Mesas (Numero, Estado) VALUES
 (11, 'Disponible'),
 (12, 'Disponible');
 
+-- =====================================================
+-- DATOS INICIALES: Platillos
+-- =====================================================
 INSERT INTO Platillos (Nombre, Descripcion, Precio, ImagenUrl, Categoria) VALUES
 ('Hamburguesa Clásica', 'Hamburguesa de carne con lechuga, tomate, queso y papas fritas', 25000.00, 'https://cdn.pixabay.com/photo/2016/03/05/19/02/hamburger-1238246_1280.jpg', 'Platos Principales'),
 ('Pizza Margarita', 'Pizza con salsa de tomate, mozzarella fresca y albahaca', 35000.00, 'https://cdn.pixabay.com/photo/2017/12/09/08/18/pizza-3007395_1280.jpg', 'Platos Principales'),
@@ -109,12 +158,18 @@ INSERT INTO Platillos (Nombre, Descripcion, Precio, ImagenUrl, Categoria) VALUES
 ('Café Americano', 'Café negro recién preparado', 5000.00, 'https://cdn.recetasderechupete.com/wp-content/uploads/2023/11/Cafe-americano-portada.jpg', 'Bebidas'),
 ('Cerveza Artesanal', 'Cerveza local artesanal', 12000.00, 'https://politecnicointernacional.edu.co/wp-content/uploads/2025/07/trigo-y-jarras-de-cerveza-de-angulo-alto-scaled.jpg', 'Bebidas');
 
+-- =====================================================
+-- DATOS INICIALES: Pedidos
+-- =====================================================
 INSERT INTO Pedidos (MesaId, UsuarioId, Estado, Fecha) VALUES
 (2, 2, 'EnProceso', '2025-10-15 12:30:00'),
 (3, 3, 'Listo', '2025-10-15 12:45:00'),
 (5, 2, 'Pagado', '2025-10-15 11:30:00'),
 (7, 3, 'EnProceso', '2025-10-15 13:00:00');
 
+-- =====================================================
+-- DATOS INICIALES: PedidoDetalles
+-- =====================================================
 INSERT INTO PedidoDetalles (PedidoId, PlatilloId, Cantidad, Nota, Estado) VALUES
 (1, 1, 2, 'Sin cebolla en una', 'EnPreparacion'),
 (1, 10, 2, NULL, 'Listo'),
@@ -129,8 +184,16 @@ INSERT INTO PedidoDetalles (PedidoId, PlatilloId, Cantidad, Nota, Estado) VALUES
 (4, 4, 1, 'Sin tocino', 'Pendiente'),
 (4, 10, 3, NULL, 'Listo');
 
+-- =====================================================
+-- DATOS INICIALES: Pagos
+-- =====================================================
 INSERT INTO Pagos (PedidoId, Monto, MontoPropina, MetodoPago, Fecha) VALUES
-(3, 232.00, 30.00, 'Tarjeta', '2025-10-15 12:15:00');
+(3, 232000.00, 30000.00, 'Tarjeta', '2025-10-15 12:15:00');
 
+-- =====================================================
+-- DATOS INICIALES: Facturas
+-- =====================================================
 INSERT INTO Facturas (PagoId, NumeroFactura, NitCliente, NombreCliente, Subtotal, Propina, Total, ArchivoUrl, FechaEmision) VALUES
-(1, 'FACT-2025-000001', '1234567890', 'Roberto Sánchez', 232.00, 30.00, 262.00, '/facturas/2025/10/FACT-2025-000001.pdf', '2025-10-15 12:15:00');
+(1, 'FACT-2025-000001', '1234567890', 'Roberto Sánchez', 232000.00, 30000.00, 262000.00, '/facturas/2025/10/FACT-2025-000001.pdf', '2025-10-15 12:15:00');
+
+
