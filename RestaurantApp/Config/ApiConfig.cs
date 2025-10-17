@@ -34,7 +34,7 @@
         {
 #if DEBUG
 
-            return "https://a8e95eb8cec7.ngrok-free.app/";
+            return "https://fc8b48b5ce25.ngrok-free.app/";
 
             // NOTA: Si ngrok no está disponible, detectar automáticamente:
             /*
@@ -43,17 +43,17 @@
             if (isEmulator)
             {
                 System.Diagnostics.Debug.WriteLine("[ApiConfig] 🖥️ EMULADOR detectado - usando 10.0.2.2");
-                return "http://10.0.2.2:5176/";
+                return "https://fc8b48b5ce25.ngrok-free.app/";
             }
             else
             {
                 System.Diagnostics.Debug.WriteLine("[ApiConfig] 📱 DISPOSITIVO FÍSICO detectado - usando ngrok");
-                return "https://a8e95eb8cec7.ngrok-free.app/";
+                return "https://fc8b48b5ce25.ngrok-free.app/";
             }
             */
 #else
             // Para producción, usar URL de servidor real
-            return "https://tu-api-produccion.com/";
+            return "https://fc8b48b5ce25.ngrok-free.app/";
 #endif
         }
 

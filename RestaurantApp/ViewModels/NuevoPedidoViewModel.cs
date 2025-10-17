@@ -106,6 +106,7 @@ namespace RestaurantApp.ViewModels
         public ICommand LimpiarPedidoCommand { get; private set; }
         public ICommand ConfirmarPedidoCommand { get; private set; }
         public ICommand BuscarProductoCommand { get; private set; }
+        public ICommand VolverInicioCommand { get; private set; }
 
         private void InicializarComandos()
         {
@@ -118,6 +119,7 @@ namespace RestaurantApp.ViewModels
             LimpiarPedidoCommand = new Command(LimpiarPedido);
             ConfirmarPedidoCommand = new AsyncCommand(ConfirmarPedido, () => PuedeConfirmarPedido);
             BuscarProductoCommand = new Command(FiltrarProductos);
+            VolverInicioCommand = new Command(async () => await VolverAlInicio());
         }
 
         // Métodos de carga de datos
@@ -214,6 +216,10 @@ namespace RestaurantApp.ViewModels
             {
                 CategoriaSeleccionada = categoria;
             }
+        }
+        private async Task VolverAlInicio()
+        {
+            await Shell.Current.GoToAsync("//inicio");
         }
 
         private void SeleccionarMesa(Mesa mesa)
@@ -363,6 +369,17 @@ namespace RestaurantApp.ViewModels
             NotasEspeciales = string.Empty;
             MesaSeleccionada = null;
         }
+        private void LimpiarPedidoTemporal()
+        {
+            try
+            {
+                Preferences.Remove("PedidoTemporal");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error limpiando pedido temporal: {ex.Message}");
+            }
+        }
 
         private void ActualizarTotales()
         {
@@ -400,8 +417,13 @@ namespace RestaurantApp.ViewModels
                 if (usuarioId == 0)
                 {
                     System.Diagnostics.Debug.WriteLine("ERROR: No hay sesión activa");
+                    await Application.Current.MainPage.DisplayAlert("Error",
+                        "No hay sesión activa. Por favor inicia sesión nuevamente.", "OK");
                     return;
                 }
+
+                // Guardar estado temporal ANTES de enviar (por si quiere editar)
+                GuardarEstadoTemporal();
 
                 // Crear request para la API
                 var request = new CrearPedidoRequest
@@ -429,33 +451,50 @@ namespace RestaurantApp.ViewModels
 
                 System.Diagnostics.Debug.WriteLine("=== PEDIDO CONFIRMADO EXITOSAMENTE ===");
 
-                // Mostrar confirmación
-                await Application.Current.MainPage.DisplayAlert("Éxito",
-                    $"Pedido #{pedidoCreado.Id} confirmado para mesa {MesaSeleccionada.Numero}\nTotal: ${pedidoCreado.Total:N0}", "OK");
+                // Mostrar confirmación con opción de editar
+                var accion = await Application.Current.MainPage.DisplayActionSheet(
+                    $"✅ Pedido #{pedidoCreado.Id} Confirmado",
+                    "Volver al Inicio",
+                    null,
+                    "✏️ Editar Pedido",
+                    "📋 Ver Pedidos Activos"
+                );
 
-                // Limpiar y volver al inicio
-                LimpiarPedido();
-                await Shell.Current.GoToAsync("//inicio");
+                if (accion == "✏️ Editar Pedido")
+                {
+                    // Restaurar el pedido para editar
+                    CargarPedidoTemporal();
+                }
+                else if (accion == "📋 Ver Pedidos Activos")
+                {
+                    // Limpiar y ir a pedidos activos
+                    LimpiarPedidoTemporal();
+                    LimpiarPedido();
+                    await Shell.Current.GoToAsync("//pedidosactivos");
+                }
+                else // "Volver al Inicio" o cerrar
+                {
+                    // Limpiar y volver al inicio
+                    LimpiarPedidoTemporal();
+                    LimpiarPedido();
+                    await Shell.Current.GoToAsync("//inicio");
+                }
             }
             catch (Exception ex)
             {
-                // Solo mostrar el error exacto del sistema
                 System.Diagnostics.Debug.WriteLine($"========== ERROR ==========");
                 System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().FullName}");
                 System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
                 System.Diagnostics.Debug.WriteLine($"StackTrace: {ex.StackTrace}");
+
                 if (ex.InnerException != null)
                 {
                     System.Diagnostics.Debug.WriteLine($"InnerException Type: {ex.InnerException.GetType().FullName}");
                     System.Diagnostics.Debug.WriteLine($"InnerException Message: {ex.InnerException.Message}");
-                    System.Diagnostics.Debug.WriteLine($"InnerException StackTrace: {ex.InnerException.StackTrace}");
                 }
-                System.Diagnostics.Debug.WriteLine($"===========================");
 
-                // Mostrar el error en pantalla también
-                await Application.Current.MainPage.DisplayAlert("ERROR",
-                    $"{ex.GetType().Name}\n\n{ex.Message}\n\n{ex.InnerException?.Message}",
-                    "OK");
+                await Application.Current.MainPage.DisplayAlert("Error",
+                    $"No se pudo confirmar el pedido:\n{ex.Message}", "OK");
             }
         }
 

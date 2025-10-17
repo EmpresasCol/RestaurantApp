@@ -1,14 +1,30 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || 'https://localhost:7137/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://fc8b48b5ce25.ngrok-free.app/api';
+
+console.log('🌐 API URL configurada:', API_URL);
+
+// ✅ Función auxiliar para hacer fetch con headers de ngrok
+const fetchWithHeaders = async (url, options = {}) => {
+  const headers = {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': '69420', // ✅ CRÍTICO: Evita la página de advertencia de ngrok
+    'User-Agent': 'RestaurantApp',
+    ...options.headers
+  };
+
+  return fetch(url, {
+    ...options,
+    headers
+  });
+};
 
 // ==================== AUTENTICACIÓN ====================
 export const login = async (usuario, clave) => {
   try {
     console.log('🔐 Intentando login con:', { usuario });
     
-    const response = await fetch(`${API_URL}/usuarios/login`, {
+    const response = await fetchWithHeaders(`${API_URL}/usuarios/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usuario, clave })
     });
 
@@ -29,7 +45,7 @@ export const login = async (usuario, clave) => {
 // ==================== PLATILLOS ====================
 export const getPlatillos = async () => {
   try {
-    const response = await fetch(`${API_URL}/platillos`);
+    const response = await fetchWithHeaders(`${API_URL}/platillos`);
     if (!response.ok) throw new Error('Error al obtener platillos');
     return await response.json();
   } catch (error) {
@@ -40,7 +56,7 @@ export const getPlatillos = async () => {
 
 export const getPlatillo = async (id) => {
   try {
-    const response = await fetch(`${API_URL}/platillos/${id}`);
+    const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`);
     if (!response.ok) throw new Error('Error al obtener platillo');
     return await response.json();
   } catch (error) {
@@ -49,14 +65,12 @@ export const getPlatillo = async (id) => {
   }
 };
 
-// ✅ NUEVO: Crear platillo
 export const createPlatillo = async (platilloData) => {
   try {
     console.log('📤 Creando platillo:', platilloData);
     
-    const response = await fetch(`${API_URL}/platillos`, {
+    const response = await fetchWithHeaders(`${API_URL}/platillos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(platilloData)
     });
 
@@ -74,14 +88,12 @@ export const createPlatillo = async (platilloData) => {
   }
 };
 
-// ✅ MEJORADO: Actualizar platillo
 export const updatePlatillo = async (id, platilloData) => {
   try {
     console.log('🔄 Actualizando platillo:', { id, ...platilloData });
     
-    const response = await fetch(`${API_URL}/platillos/${id}`, {
+    const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...platilloData })
     });
 
@@ -99,12 +111,11 @@ export const updatePlatillo = async (id, platilloData) => {
   }
 };
 
-// ✅ MEJORADO: Eliminar platillo
 export const deletePlatillo = async (id) => {
   try {
     console.log('🗑️ Eliminando platillo:', id);
     
-    const response = await fetch(`${API_URL}/platillos/${id}`, {
+    const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, {
       method: 'DELETE'
     });
 
@@ -125,7 +136,7 @@ export const deletePlatillo = async (id) => {
 // ==================== MESAS ====================
 export const getMesas = async () => {
   try {
-    const response = await fetch(`${API_URL}/mesas`);
+    const response = await fetchWithHeaders(`${API_URL}/mesas`);
     if (!response.ok) throw new Error('Error al obtener mesas');
     return await response.json();
   } catch (error) {
@@ -136,9 +147,8 @@ export const getMesas = async () => {
 
 export const updateEstadoMesa = async (id, estado) => {
   try {
-    const response = await fetch(`${API_URL}/mesas/${id}`, {
+    const response = await fetchWithHeaders(`${API_URL}/mesas/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Id: id, Numero: 0, Estado: estado })
     });
     if (!response.ok) throw new Error('Error al actualizar mesa');
@@ -152,7 +162,7 @@ export const updateEstadoMesa = async (id, estado) => {
 // ==================== PEDIDOS ====================
 export const getPedidos = async () => {
   try {
-    const response = await fetch(`${API_URL}/pedidos`);
+    const response = await fetchWithHeaders(`${API_URL}/pedidos`);
     if (!response.ok) throw new Error('Error al obtener pedidos');
     return await response.json();
   } catch (error) {
@@ -174,9 +184,8 @@ export const createPedido = async (mesaId, items) => {
 
     console.log('📤 Enviando pedido:', pedidoData);
 
-    const response = await fetch(`${API_URL}/pedidos`, {
+    const response = await fetchWithHeaders(`${API_URL}/pedidos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pedidoData)
     });
 
@@ -198,12 +207,8 @@ export const updatePedido = async (id, estado) => {
   try {
     console.log('🔄 Actualizando pedido:', { id, estado });
 
-    const response = await fetch(`${API_URL}/pedidos/${id}`, {
+    const response = await fetchWithHeaders(`${API_URL}/pedidos/${id}`, {
       method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
       body: JSON.stringify({ estado: estado })
     });
 
@@ -241,9 +246,8 @@ export const createPago = async (pedidoId, monto, metodoPago, montoPropina = 0) 
 
     console.log('💳 Enviando pago:', pagoData);
 
-    const response = await fetch(`${API_URL}/pagos`, {
+    const response = await fetchWithHeaders(`${API_URL}/pagos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(pagoData)
     });
 
@@ -263,7 +267,7 @@ export const createPago = async (pedidoId, monto, metodoPago, montoPropina = 0) 
 
 export const getPagos = async () => {
   try {
-    const response = await fetch(`${API_URL}/pagos`);
+    const response = await fetchWithHeaders(`${API_URL}/pagos`);
     if (!response.ok) throw new Error('Error al obtener pagos');
     return await response.json();
   } catch (error) {
@@ -275,7 +279,7 @@ export const getPagos = async () => {
 // ==================== FACTURAS ====================
 export const getFacturas = async () => {
   try {
-    const response = await fetch(`${API_URL}/facturas`);
+    const response = await fetchWithHeaders(`${API_URL}/facturas`);
     if (!response.ok) throw new Error('Error al obtener facturas');
     return await response.json();
   } catch (error) {
@@ -292,9 +296,8 @@ export const createFactura = async (pagoId, nitCliente = null, nombreCliente = n
       nombreCliente: nombreCliente
     };
 
-    const response = await fetch(`${API_URL}/facturas`, {
+    const response = await fetchWithHeaders(`${API_URL}/facturas`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(facturaData)
     });
 
@@ -306,11 +309,10 @@ export const createFactura = async (pagoId, nitCliente = null, nombreCliente = n
   }
 };
 
-
 // ==================== USUARIOS ====================
 export const getUsuarios = async () => {
   try {
-    const response = await fetch(`${API_URL}/usuarios`);
+    const response = await fetchWithHeaders(`${API_URL}/usuarios`);
     if (!response.ok) throw new Error('Error al obtener usuarios');
     return await response.json();
   } catch (error) {
@@ -321,7 +323,7 @@ export const getUsuarios = async () => {
 
 export const getUsuario = async (id) => {
   try {
-    const response = await fetch(`${API_URL}/usuarios/${id}`);
+    const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`);
     if (!response.ok) throw new Error('Error al obtener usuario');
     return await response.json();
   } catch (error) {
@@ -343,17 +345,16 @@ export const createUsuario = async (usuarioData) => {
     };
     
     const dataBackend = {
-      NombreUsuario: usuarioData.nombreUsuario,  // ✅ PascalCase
-      ClaveHash: usuarioData.clave,               // ✅ PascalCase
-      Nombre: usuarioData.nombre,                 // ✅ PascalCase
-      Rol: rolMap[usuarioData.rol]               // ✅ PascalCase
+      NombreUsuario: usuarioData.nombreUsuario,
+      ClaveHash: usuarioData.clave,
+      Nombre: usuarioData.nombre,
+      Rol: rolMap[usuarioData.rol]
     };
 
     console.log('📤 Enviando al backend:', dataBackend);
 
-    const response = await fetch(`${API_URL}/usuarios`, {
+    const response = await fetchWithHeaders(`${API_URL}/usuarios`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dataBackend)
     });
 
@@ -384,21 +385,20 @@ export const updateUsuario = async (id, usuarioData) => {
     };
     
     const dataBackend = {
-      Id: id,                                     // ✅ PascalCase
-      NombreUsuario: usuarioData.nombreUsuario,  // ✅ PascalCase
-      Nombre: usuarioData.nombre,                // ✅ PascalCase
-      Rol: rolMap[usuarioData.rol]              // ✅ PascalCase
+      Id: id,
+      NombreUsuario: usuarioData.nombreUsuario,
+      Nombre: usuarioData.nombre,
+      Rol: rolMap[usuarioData.rol]
     };
 
     if (usuarioData.clave) {
-      dataBackend.ClaveHash = usuarioData.clave; // ✅ PascalCase
+      dataBackend.ClaveHash = usuarioData.clave;
     }
 
     console.log('📤 Enviando al backend:', dataBackend);
 
-    const response = await fetch(`${API_URL}/usuarios/${id}`, {
+    const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dataBackend)
     });
 
@@ -415,11 +415,12 @@ export const updateUsuario = async (id, usuarioData) => {
     throw error;
   }
 };
+
 export const deleteUsuario = async (id) => {
   try {
     console.log('🗑️ Eliminando usuario:', id);
     
-    const response = await fetch(`${API_URL}/usuarios/${id}`, {
+    const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, {
       method: 'DELETE'
     });
 

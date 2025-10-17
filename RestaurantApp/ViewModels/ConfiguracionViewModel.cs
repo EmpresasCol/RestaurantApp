@@ -155,6 +155,7 @@ namespace RestaurantApp.ViewModels
         public ICommand VerDiagnosticosCommand { get; private set; }
         public ICommand ResetearUrlCommand { get; private set; }
         public ICommand VerificarConexionCommand { get; private set; }
+        public ICommand VolverInicioCommand { get; private set; }
 
         private void InicializarComandos()
         {
@@ -165,6 +166,7 @@ namespace RestaurantApp.ViewModels
             VerDiagnosticosCommand = new AsyncCommand(VerDiagnosticos);
             ResetearUrlCommand = new AsyncCommand(ResetearUrl);
             VerificarConexionCommand = new AsyncCommand(VerificarConexion);
+            VolverInicioCommand = new Command(async () => await Shell.Current.GoToAsync("//inicio"));
         }
 
         // ==================== MÉTODOS ====================
