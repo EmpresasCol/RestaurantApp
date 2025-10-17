@@ -11,24 +11,47 @@ namespace RestaurantApp.Services
             _httpService = new HttpService();
         }
 
-        public async Task<Pago> CrearPagoAsync(CrearPagoRequest request)
+        public async Task<PagoDto> CrearPagoAsync(int pedidoId, decimal monto, string metodoPago, decimal montoPropina = 0)
         {
             try
             {
-                System.Diagnostics.Debug.WriteLine($"[PAGO] Creando pago para pedido {request.PedidoId}");
-                System.Diagnostics.Debug.WriteLine($"[PAGO] Monto: ${request.Monto}, Propina: ${request.MontoPropina}, Método: {request.MetodoPago}");
+                // Capitalizar la primera letra del método de pago
+                var metodoPagoCapitalizado = char.ToUpper(metodoPago[0]) + metodoPago.Substring(1).ToLower();
 
-                var response = await _httpService.PostAsync<Pago>("api/pagos", request);
+                var crearPagoDto = new CrearPagoDto
+                {
+                    PedidoId = pedidoId,
+                    Monto = monto,
+                    MontoPropina = montoPropina,
+                    MetodoPago = metodoPagoCapitalizado
+                };
 
-                System.Diagnostics.Debug.WriteLine($"[PAGO] Pago creado con ID: {response.Id}");
-
-                return response;
+                var pago = await _httpService.PostAsync<PagoDto>("api/pagos", crearPagoDto);
+                return pago;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[PAGO] Error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error creando pago: {ex.Message}");
                 throw;
             }
         }
+    }
+
+    public class PagoDto
+    {
+        public int Id { get; set; }
+        public int PedidoId { get; set; }
+        public decimal Monto { get; set; }
+        public decimal MontoPropina { get; set; }
+        public string MetodoPago { get; set; }
+        public DateTime Fecha { get; set; }
+    }
+
+    public class CrearPagoDto
+    {
+        public int PedidoId { get; set; }
+        public decimal Monto { get; set; }
+        public decimal MontoPropina { get; set; }
+        public string MetodoPago { get; set; }
     }
 }

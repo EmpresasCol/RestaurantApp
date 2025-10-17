@@ -91,17 +91,14 @@ namespace RestaurantApp.ViewModels
         }
 
         // Propiedades calculadas
-        public bool PuedeConfirmarPedido => MesaSeleccionada != null && ItemsPedidoActual.Count > 0 && !IsBusy;
-        public DateTime FechaHora => DateTime.Now;
-        public string ResumenPedido => $"{TotalItems} items • ${TotalPedido:N0}";
+        public bool PuedeConfirmarPedido => MesaSeleccionada != null && ItemsPedidoActual.Count > 0;
         public bool TienePedidoActual => ItemsPedidoActual.Count > 0;
+        public string ResumenPedido => $"{TotalItems} items • ${TotalPedido:N0}";
 
         // Comandos
         public ICommand SeleccionarCategoriaCommand { get; private set; }
-        public ICommand SeleccionarMesaCommand { get; private set; }
-        public ICommand AumentarCantidadCommand { get; private set; }
-        public ICommand DisminuirCantidadCommand { get; private set; }
-        public ICommand AgregarProductoCommand { get; private set; }
+        public ICommand AgregarItemCommand { get; private set; }
+        public ICommand QuitarItemCommand { get; private set; }
         public ICommand EliminarItemCommand { get; private set; }
         public ICommand LimpiarPedidoCommand { get; private set; }
         public ICommand ConfirmarPedidoCommand { get; private set; }
@@ -110,16 +107,14 @@ namespace RestaurantApp.ViewModels
 
         private void InicializarComandos()
         {
-            SeleccionarCategoriaCommand = new Command<Categoria>(SeleccionarCategoria);
-            SeleccionarMesaCommand = new Command<Mesa>(SeleccionarMesa);
-            AumentarCantidadCommand = new Command<Platillo>(AumentarCantidad);
-            DisminuirCantidadCommand = new Command<Platillo>(DisminuirCantidad);
-            AgregarProductoCommand = new Command<Platillo>(AgregarProducto);
+            SeleccionarCategoriaCommand = new Command<Categoria>(categoria => CategoriaSeleccionada = categoria);
+            AgregarItemCommand = new Command<Platillo>(AgregarItem);
+            QuitarItemCommand = new Command<ItemPedido>(item => { if (item.Cantidad > 1) item.Cantidad--; });
             EliminarItemCommand = new Command<ItemPedido>(EliminarItem);
             LimpiarPedidoCommand = new Command(LimpiarPedido);
             ConfirmarPedidoCommand = new AsyncCommand(ConfirmarPedido, () => PuedeConfirmarPedido);
             BuscarProductoCommand = new Command(FiltrarProductos);
-            VolverInicioCommand = new Command(async () => await VolverAlInicio());
+            VolverInicioCommand = new AsyncCommand(async () => await Shell.Current.GoToAsync("//inicio"));
         }
 
         // Métodos de carga de datos
@@ -141,7 +136,7 @@ namespace RestaurantApp.ViewModels
                 var mesas = await _mesaService.ObtenerTodasAsync();
 
                 MesasDisponibles.Clear();
-                foreach (var mesa in mesas.Where(m => m.Estado == EstadoMesa.Disponible || m.Estado == EstadoMesa.Ocupada))
+                foreach (var mesa in mesas.OrderBy(m => m.Numero))
                 {
                     MesasDisponibles.Add(mesa);
                 }
@@ -177,158 +172,95 @@ namespace RestaurantApp.ViewModels
             {
                 _todosLosPlatillos = await _platilloService.ObtenerTodosAsync();
 
-                // Asignar categorías a los platillos
-                foreach (var platillo in _todosLosPlatillos)
-                {
-                    if (platillo.CategoriaId == 0)
-                    {
-                        platillo.CategoriaId = ObtenerCategoriaIdPorNombre(platillo.Nombre);
-                    }
-                }
+                // ✅ YA NO necesitamos asignar categorías manualmente
+                // Los platillos ya vienen con CategoriaTexto de la BD
 
                 FiltrarProductos();
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error cargando productos: {ex.Message}");
+                await Application.Current.MainPage.DisplayAlert("Error",
+                    "No se pudieron cargar los platillos. Verifica la conexión con el servidor.", "OK");
             }
         }
 
-        private int ObtenerCategoriaIdPorNombre(string nombreProducto)
+        private void CargarPedidoTemporal()
         {
-            var nombre = nombreProducto.ToLower();
-            if (nombre.Contains("ensalada") || nombre.Contains("bruschetta"))
-                return 1; // Entradas
-            else if (nombre.Contains("hamburguesa") || nombre.Contains("pizza") || nombre.Contains("pasta"))
-                return 2; // Platos Principales
-            else if (nombre.Contains("coca") || nombre.Contains("jugo") || nombre.Contains("cerveza"))
-                return 3; // Bebidas
-            else if (nombre.Contains("tiramisu") || nombre.Contains("cheesecake"))
-                return 4; // Postres
-            else
-                return 5; // Adicionales
-        }
-
-        // Métodos de interacción
-        private void SeleccionarCategoria(Categoria categoria)
-        {
-            if (categoria != null)
+            try
             {
-                CategoriaSeleccionada = categoria;
-            }
-        }
-        private async Task VolverAlInicio()
-        {
-            await Shell.Current.GoToAsync("//inicio");
-        }
+                // Intentar cargar pedido temporal guardado
+                var mesaId = Preferences.Get("pedido_temporal_mesa_id", 0);
+                var notas = Preferences.Get("pedido_temporal_notas", string.Empty);
+                var itemsCount = Preferences.Get("pedido_temporal_items_count", 0);
 
-        private void SeleccionarMesa(Mesa mesa)
-        {
-            if (mesa == null) return;
-
-            // Solo permitir seleccionar mesas disponibles
-            if (mesa.Estado != EstadoMesa.Disponible)
-            {
-                MainThread.BeginInvokeOnMainThread(async () =>
+                if (mesaId > 0 && itemsCount > 0)
                 {
-                    var mensaje = mesa.Estado switch
-                    {
-                        EstadoMesa.Ocupada => $"La mesa {mesa.Numero} está ocupada",
-                        EstadoMesa.EsperandoPago => $"La mesa {mesa.Numero} está esperando pago",
-                        _ => $"La mesa {mesa.Numero} no está disponible"
-                    };
+                    System.Diagnostics.Debug.WriteLine($"Pedido temporal encontrado: Mesa {mesaId}, {itemsCount} items");
 
-                    await Application.Current.MainPage.DisplayAlert("Mesa no disponible", mensaje, "OK");
-                });
-                return;
+                    // Restaurar mesa seleccionada
+                    MesaSeleccionada = MesasDisponibles.FirstOrDefault(m => m.Id == mesaId);
+
+                    // Restaurar notas
+                    NotasEspeciales = notas;
+
+                    // Nota: Los items del pedido se perderán entre sesiones
+                    // Si quieres persistirlos, necesitarás serializar la lista completa
+                }
             }
-
-            // Deseleccionar la mesa anterior
-            if (MesaSeleccionada != null)
+            catch (Exception ex)
             {
-                MesaSeleccionada.EstaSeleccionada = false;
+                System.Diagnostics.Debug.WriteLine($"Error cargando pedido temporal: {ex.Message}");
             }
-
-            // Seleccionar la nueva mesa
-            mesa.EstaSeleccionada = true;
-            MesaSeleccionada = mesa;
-
-            System.Diagnostics.Debug.WriteLine($"Mesa {mesa.Numero} seleccionada");
         }
 
+        // Métodos de filtrado
         private void FiltrarProductos()
         {
-            if (_todosLosPlatillos == null || !_todosLosPlatillos.Any())
+            if (CategoriaSeleccionada == null || _todosLosPlatillos == null)
                 return;
 
             var productosFiltrados = _todosLosPlatillos.AsEnumerable();
 
-            // Filtrar por categoría
-            if (CategoriaSeleccionada != null)
+            // Filtrar por categoría seleccionada
+            if (CategoriaSeleccionada.Id != 0) // 0 = "Todos"
             {
-                productosFiltrados = productosFiltrados.Where(p => p.CategoriaId == CategoriaSeleccionada.Id);
+                // ✅ USAR CategoriaNombre en lugar de comparar con enum
+                productosFiltrados = productosFiltrados
+                    .Where(p => p.CategoriaNombre != null &&
+                           p.CategoriaNombre.Equals(CategoriaSeleccionada.Nombre, StringComparison.OrdinalIgnoreCase));
             }
 
             // Filtrar por búsqueda
             if (!string.IsNullOrWhiteSpace(BusquedaTexto))
             {
-                productosFiltrados = productosFiltrados.Where(p =>
-                    p.Nombre.Contains(BusquedaTexto, StringComparison.OrdinalIgnoreCase) ||
-                    (p.Descripcion != null && p.Descripcion.Contains(BusquedaTexto, StringComparison.OrdinalIgnoreCase)));
+                productosFiltrados = productosFiltrados
+                    .Where(p => p.Nombre.Contains(BusquedaTexto, StringComparison.OrdinalIgnoreCase));
             }
 
             PlatillosFiltrados.Clear();
-            foreach (var producto in productosFiltrados)
+            foreach (var platillo in productosFiltrados.OrderBy(p => p.Nombre))
             {
-                PlatillosFiltrados.Add(producto);
+                PlatillosFiltrados.Add(platillo);
             }
         }
 
-        private void AumentarCantidad(Platillo platillo)
+        // Métodos de manipulación del pedido
+        private void AgregarItem(Platillo platillo)
         {
-            if (platillo != null)
-            {
-                platillo.CantidadTemporal++;
-                ActualizarItemEnPedido(platillo);
-            }
-        }
+            if (platillo == null || !platillo.EstaDisponible)
+                return;
 
-        private void DisminuirCantidad(Platillo platillo)
-        {
-            if (platillo != null && platillo.CantidadTemporal > 0)
-            {
-                platillo.CantidadTemporal--;
-                ActualizarItemEnPedido(platillo);
-            }
-        }
-
-        private void AgregarProducto(Platillo platillo)
-        {
-            if (platillo != null)
-            {
-                platillo.CantidadTemporal = Math.Max(1, platillo.CantidadTemporal);
-                ActualizarItemEnPedido(platillo);
-            }
-        }
-
-        private void ActualizarItemEnPedido(Platillo platillo)
-        {
+            // Buscar si ya existe en el pedido
             var itemExistente = ItemsPedidoActual.FirstOrDefault(x => x.PlatilloId == platillo.Id);
 
-            if (platillo.CantidadTemporal == 0)
+            if (itemExistente != null)
             {
-                if (itemExistente != null)
-                {
-                    ItemsPedidoActual.Remove(itemExistente);
-                }
-            }
-            else if (itemExistente != null)
-            {
-                itemExistente.Cantidad = platillo.CantidadTemporal;
-                itemExistente.CalcularSubtotal();
+                itemExistente.Cantidad++;
             }
             else
             {
+                platillo.CantidadTemporal = 1;
                 var nuevoItem = new ItemPedido
                 {
                     PlatilloId = platillo.Id,
@@ -369,17 +301,6 @@ namespace RestaurantApp.ViewModels
             NotasEspeciales = string.Empty;
             MesaSeleccionada = null;
         }
-        private void LimpiarPedidoTemporal()
-        {
-            try
-            {
-                Preferences.Remove("PedidoTemporal");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error limpiando pedido temporal: {ex.Message}");
-            }
-        }
 
         private void ActualizarTotales()
         {
@@ -389,7 +310,6 @@ namespace RestaurantApp.ViewModels
             OnPropertyChanged(nameof(ResumenPedido));
             OnPropertyChanged(nameof(TienePedidoActual));
         }
-
 
         private async Task ConfirmarPedido()
         {
@@ -417,13 +337,8 @@ namespace RestaurantApp.ViewModels
                 if (usuarioId == 0)
                 {
                     System.Diagnostics.Debug.WriteLine("ERROR: No hay sesión activa");
-                    await Application.Current.MainPage.DisplayAlert("Error",
-                        "No hay sesión activa. Por favor inicia sesión nuevamente.", "OK");
                     return;
                 }
-
-                // Guardar estado temporal ANTES de enviar (por si quiere editar)
-                GuardarEstadoTemporal();
 
                 // Crear request para la API
                 var request = new CrearPedidoRequest
@@ -451,37 +366,17 @@ namespace RestaurantApp.ViewModels
 
                 System.Diagnostics.Debug.WriteLine("=== PEDIDO CONFIRMADO EXITOSAMENTE ===");
 
-                // Mostrar confirmación con opción de editar
-                var accion = await Application.Current.MainPage.DisplayActionSheet(
-                    $"✅ Pedido #{pedidoCreado.Id} Confirmado",
-                    "Volver al Inicio",
-                    null,
-                    "✏️ Editar Pedido",
-                    "📋 Ver Pedidos Activos"
-                );
+                // Mostrar confirmación
+                await Application.Current.MainPage.DisplayAlert("Éxito",
+                    $"Pedido #{pedidoCreado.Id} confirmado para mesa {MesaSeleccionada.Numero}\nTotal: ${pedidoCreado.Total:N0}", "OK");
 
-                if (accion == "✏️ Editar Pedido")
-                {
-                    // Restaurar el pedido para editar
-                    CargarPedidoTemporal();
-                }
-                else if (accion == "📋 Ver Pedidos Activos")
-                {
-                    // Limpiar y ir a pedidos activos
-                    LimpiarPedidoTemporal();
-                    LimpiarPedido();
-                    await Shell.Current.GoToAsync("//pedidosactivos");
-                }
-                else // "Volver al Inicio" o cerrar
-                {
-                    // Limpiar y volver al inicio
-                    LimpiarPedidoTemporal();
-                    LimpiarPedido();
-                    await Shell.Current.GoToAsync("//inicio");
-                }
+                // Limpiar y volver al inicio
+                LimpiarPedido();
+                await Shell.Current.GoToAsync("//inicio");
             }
             catch (Exception ex)
             {
+                // Solo mostrar el error exacto del sistema
                 System.Diagnostics.Debug.WriteLine($"========== ERROR ==========");
                 System.Diagnostics.Debug.WriteLine($"Type: {ex.GetType().FullName}");
                 System.Diagnostics.Debug.WriteLine($"Message: {ex.Message}");
@@ -489,78 +384,44 @@ namespace RestaurantApp.ViewModels
 
                 if (ex.InnerException != null)
                 {
-                    System.Diagnostics.Debug.WriteLine($"InnerException Type: {ex.InnerException.GetType().FullName}");
-                    System.Diagnostics.Debug.WriteLine($"InnerException Message: {ex.InnerException.Message}");
+                    System.Diagnostics.Debug.WriteLine($"InnerException: {ex.InnerException.Message}");
                 }
 
+                System.Diagnostics.Debug.WriteLine($"===========================");
+
                 await Application.Current.MainPage.DisplayAlert("Error",
-                    $"No se pudo confirmar el pedido:\n{ex.Message}", "OK");
+                    $"No se pudo confirmar el pedido:\n{ex.Message}\n\nVerifica la conexión con el servidor.", "OK");
             }
         }
 
-        // Métodos de persistencia temporal
+        // ✅ MÉTODOS PÚBLICOS ADICIONALES
+        public async Task ActualizarDatos()
+        {
+            await ExecuteAsync(async () =>
+            {
+                await CargarMesas();
+                await CargarProductos();
+            });
+        }
+
         public void GuardarEstadoTemporal()
         {
+            // Guardar el estado temporal del pedido
             try
             {
-                if (ItemsPedidoActual.Any() || MesaSeleccionada != null)
+                if (ItemsPedidoActual.Any())
                 {
-                    var estadoTemporal = new
-                    {
-                        MesaId = MesaSeleccionada?.Id,
-                        Items = ItemsPedidoActual.Select(i => new { i.PlatilloId, i.Cantidad, i.PrecioUnitario }).ToList(),
-                        Notas = NotasEspeciales,
-                        Fecha = DateTime.Now
-                    };
+                    // Guardar información básica del pedido temporal
+                    Preferences.Set("pedido_temporal_mesa_id", MesaSeleccionada?.Id ?? 0);
+                    Preferences.Set("pedido_temporal_notas", NotasEspeciales ?? string.Empty);
+                    Preferences.Set("pedido_temporal_items_count", ItemsPedidoActual.Count);
 
-                    var json = System.Text.Json.JsonSerializer.Serialize(estadoTemporal);
-                    Preferences.Set("PedidoTemporal", json);
+                    System.Diagnostics.Debug.WriteLine($"Estado temporal guardado: {ItemsPedidoActual.Count} items");
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error guardando estado temporal: {ex.Message}");
-            }
-        }
-
-        public void CargarPedidoTemporal()
-        {
-            try
-            {
-                var json = Preferences.Get("PedidoTemporal", string.Empty);
-                if (!string.IsNullOrEmpty(json))
-                {
-                    // En implementación real, deserializar y restaurar estado
-                    // Por ahora solo limpiamos el temporal
-                    Preferences.Remove("PedidoTemporal");
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error cargando estado temporal: {ex.Message}");
-            }
-        }
-
-        public async Task ActualizarDatos()
-        {
-            try
-            {
-                System.Diagnostics.Debug.WriteLine("[ActualizarDatos] Recargando mesas...");
-
-                // Recargar mesas desde el servidor
-                var mesas = await _mesaService.ObtenerTodasAsync();
-
-                MesasDisponibles.Clear();
-                foreach (var mesa in mesas.OrderBy(m => m.Numero))
-                {
-                    MesasDisponibles.Add(mesa);
-                }
-
-                System.Diagnostics.Debug.WriteLine($"[ActualizarDatos] {mesas.Count} mesas cargadas");
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ActualizarDatos] Error: {ex.Message}");
             }
         }
     }

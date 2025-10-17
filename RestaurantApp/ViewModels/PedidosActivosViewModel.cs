@@ -10,7 +10,7 @@ namespace RestaurantApp.ViewModels
     {
         private readonly PedidoService _pedidoService;
         private readonly MesaService _mesaService;
-
+        private readonly PagoService _pagoService;
         private int _cantidadPedidosActivos;
         private FiltroEstado _filtroSeleccionado;
         private DateTime _ultimaActualizacion;
@@ -22,7 +22,7 @@ namespace RestaurantApp.ViewModels
 
             _pedidoService = new PedidoService();
             _mesaService = new MesaService();
-
+            _pagoService = new PagoService();
             PedidosFiltrados = new ObservableCollection<Pedido>();
             FiltrosEstado = new ObservableCollection<FiltroEstado>();
             _todosPedidos = new List<Pedido>();
@@ -259,114 +259,56 @@ namespace RestaurantApp.ViewModels
         {
             if (pedido == null) return;
 
-            // Verificar que pueda cobrarse
-            if (!pedido.PuedeCobrar)
+            if (pedido.Estado != EstadoPedido.Entregado)
             {
                 await Application.Current.MainPage.DisplayAlert("No disponible",
-                    "Solo se pueden cobrar pedidos que ya fueron entregados", "OK");
+                    "Solo se pueden completar pedidos que ya fueron entregados", "OK");
                 return;
             }
 
+            // ✅ MOSTRAR OPCIONES DE MÉTODO DE PAGO
+            var metodosPago = new[] { "Efectivo", "Tarjeta", "QR", "Cancelar" };
+            var metodoPagoSeleccionado = await Application.Current.MainPage.DisplayActionSheet(
+                $"Selecciona el método de pago\nTotal: ${pedido.Total:N0}",
+                null,
+                null,
+                metodosPago);
+
+            if (metodoPagoSeleccionado == "Cancelar" || string.IsNullOrEmpty(metodoPagoSeleccionado))
+                return;
+
             try
             {
-                // ✅ PASO 1: Seleccionar método de pago
-                string metodoPago = await Application.Current.MainPage.DisplayActionSheet(
-                    $"Selecciona el método de pago\n\nTotal a cobrar: ${pedido.Total:N0}",
-                    "Cancelar",
-                    null,
-                    "💵 Efectivo",
-                    "💳 Tarjeta",
-                    "📱 QR / Transferencia",
-                    "🔹 Otro"
-                );
+                System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Procesando pago para pedido {pedido.Id}");
+                System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Método de pago: {metodoPagoSeleccionado}");
+                System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Monto: {pedido.Total}");
 
-                if (metodoPago == "Cancelar" || string.IsNullOrEmpty(metodoPago))
-                    return;
+                // ✅ CREAR EL PAGO USANDO EL SERVICIO
+                await _pagoService.CrearPagoAsync(pedido.Id, pedido.Total, metodoPagoSeleccionado, 0);
 
-                // Mapear la selección al enum
-                string metodoPagoEnum = metodoPago switch
-                {
-                    "💵 Efectivo" => "Efectivo",
-                    "💳 Tarjeta" => "Tarjeta",
-                    "📱 QR / Transferencia" => "QR",
-                    "🔹 Otro" => "Otro",
-                    _ => "Efectivo"
-                };
+                System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Pago creado exitosamente");
 
-                // ✅ PASO 2: Preguntar por propina (opcional)
-                string propinaStr = await Application.Current.MainPage.DisplayPromptAsync(
-                    "Propina (Opcional)",
-                    "¿El cliente dejó propina?",
-                    "Continuar",
-                    "Sin propina",
-                    "0",
-                    keyboard: Keyboard.Numeric);
-
-                decimal montoPropina = 0;
-                if (!string.IsNullOrEmpty(propinaStr) && decimal.TryParse(propinaStr, out decimal propina))
-                {
-                    montoPropina = propina;
-                }
-
-                // ✅ PASO 3: Confirmar el cobro
-                string mensajeConfirmacion = $"Resumen del cobro:\n\n" +
-                    $"Subtotal: ${pedido.Total:N0}\n" +
-                    $"Propina: ${montoPropina:N0}\n" +
-                    $"Total: ${(pedido.Total + montoPropina):N0}\n\n" +
-                    $"Método de pago: {metodoPagoEnum}\n\n" +
-                    $"¿Confirmar cobro?";
-
-                bool confirmar = await Application.Current.MainPage.DisplayAlert(
-                    "Confirmar Cobro",
-                    mensajeConfirmacion,
-                    "Sí, cobrar",
-                    "Cancelar");
-
-                if (!confirmar)
-                    return;
-
-                System.Diagnostics.Debug.WriteLine($"[COBRAR] Procesando pago...");
-
-                // ✅ PASO 4: Registrar el pago en la API
-                var pagoService = new PagoService();
-                var pagoRequest = new CrearPagoRequest
-                {
-                    PedidoId = pedido.Id,
-                    Monto = pedido.Total,
-                    MontoPropina = montoPropina,
-                    MetodoPago = metodoPagoEnum
-                };
-
-                var pagoCreado = await pagoService.CrearPagoAsync(pagoRequest);
-
-                // ✅ PASO 5: Actualizar estado del pedido a Pagado
+                // Actualizar estado del pedido a "Pagado"
                 await _pedidoService.ActualizarEstadoAsync(pedido.Id, "Pagado");
+
                 pedido.Completar();
 
-                // ✅ PASO 6: Liberar la mesa
+                // Actualizar estado de la mesa a Disponible
                 await _mesaService.ActualizarEstadoAsync(pedido.Mesa.Id, "Disponible");
 
-                // ✅ PASO 7: Remover de la lista de activos
+                // Remover de la lista de activos
                 _todosPedidos.Remove(pedido);
                 AplicarFiltro();
                 CantidadPedidosActivos--;
 
-                // ✅ PASO 8: Mostrar confirmación
-                await Application.Current.MainPage.DisplayAlert(
-                    "✅ Cobro Exitoso",
-                    $"Pedido #{pedido.Id} cobrado correctamente\n\n" +
-                    $"Total cobrado: ${(pedido.Total + montoPropina):N0}\n" +
-                    $"Método: {metodoPagoEnum}\n\n" +
-                    $"La mesa {pedido.Mesa.Numero} está disponible nuevamente.",
-                    "OK");
-
-                System.Diagnostics.Debug.WriteLine($"[COBRAR] Éxito - Pago ID: {pagoCreado.Id}");
+                await Application.Current.MainPage.DisplayAlert("✅ Completado",
+                    $"Pago registrado correctamente.\nMétodo: {metodoPagoSeleccionado}\nLa mesa {pedido.Mesa.Numero} está disponible.", "OK");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[COBRAR] Error: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[COMPLETAR] Error: {ex.Message}");
                 await Application.Current.MainPage.DisplayAlert("Error",
-                    $"Error al procesar el cobro: {ex.Message}", "OK");
+                    $"Error al procesar el pago: {ex.Message}", "OK");
             }
         }
 

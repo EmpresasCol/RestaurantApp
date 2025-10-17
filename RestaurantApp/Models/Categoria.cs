@@ -64,16 +64,67 @@ namespace RestaurantApp.Models
         // Propiedades calculadas
         public string NombreConIcono => string.IsNullOrEmpty(Icono) ? Nombre : $"{Icono} {Nombre}";
 
-        // Métodos estáticos para categorías predeterminadas
+        // ✅ ACTUALIZADO: Métodos estáticos para categorías que coinciden con la BD y la foto
         public static List<Categoria> ObtenerCategoriasPorDefecto()
         {
             return new List<Categoria>
             {
-                new Categoria { Id = 1, Nombre = "Entradas", Icono = "🥗", ColorFondo = Colors.Orange, OrdenVisualizacion = 1 },
-                new Categoria { Id = 2, Nombre = "Platos Principales", Icono = "🍽️", ColorFondo = Colors.Red, OrdenVisualizacion = 2 },
-                new Categoria { Id = 3, Nombre = "Bebidas", Icono = "🥤", ColorFondo = Colors.Blue, OrdenVisualizacion = 3 },
-                new Categoria { Id = 4, Nombre = "Postres", Icono = "🍰", ColorFondo = Colors.Purple, OrdenVisualizacion = 4 },
-                new Categoria { Id = 5, Nombre = "Adicionales", Icono = "🧄", ColorFondo = Colors.Green, OrdenVisualizacion = 5 }
+                new Categoria
+                {
+                    Id = 0,
+                    Nombre = "Todos",
+                    Icono = "🍽️",
+                    ColorFondo = Color.FromArgb("#6C757D"),
+                    OrdenVisualizacion = 0
+                },
+                new Categoria
+                {
+                    Id = 1,
+                    Nombre = "Entradas",
+                    Icono = "🥗",
+                    ColorFondo = Color.FromArgb("#28A745"),
+                    OrdenVisualizacion = 1
+                },
+                new Categoria
+                {
+                    Id = 2,
+                    Nombre = "Platos Principales",
+                    Icono = "🍖",
+                    ColorFondo = Color.FromArgb("#FF6B35"),
+                    OrdenVisualizacion = 2
+                },
+                new Categoria
+                {
+                    Id = 3,
+                    Nombre = "Postres",
+                    Icono = "🍰",
+                    ColorFondo = Color.FromArgb("#E83E8C"),
+                    OrdenVisualizacion = 3
+                },
+                new Categoria
+                {
+                    Id = 4,
+                    Nombre = "Bebidas",
+                    Icono = "🥤",
+                    ColorFondo = Color.FromArgb("#17A2B8"),
+                    OrdenVisualizacion = 4
+                },
+                new Categoria
+                {
+                    Id = 5,
+                    Nombre = "Ensaladas",
+                    Icono = "🥬",
+                    ColorFondo = Color.FromArgb("#20C997"),
+                    OrdenVisualizacion = 5
+                },
+                new Categoria
+                {
+                    Id = 6,
+                    Nombre = "Sopas",
+                    Icono = "🍲",
+                    ColorFondo = Color.FromArgb("#FFC107"),
+                    OrdenVisualizacion = 6
+                }
             };
         }
 

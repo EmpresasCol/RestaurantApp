@@ -10,6 +10,7 @@ namespace RestaurantApp.Models
         private decimal _precio;
         private int _categoriaId;
         private CategoriaProducto _categoria;
+        private string _categoriaTexto; // ✅ NUEVA PROPIEDAD para la categoría de la BD
         private string _imagenUrl;
         private bool _estaDisponible;
         private int _cantidadTemporal;
@@ -60,6 +61,13 @@ namespace RestaurantApp.Models
             set => SetProperty(ref _categoria, value);
         }
 
+        // ✅ NUEVA PROPIEDAD: Categoría como texto (viene de la BD)
+        public string CategoriaTexto
+        {
+            get => _categoriaTexto;
+            set => SetProperty(ref _categoriaTexto, value);
+        }
+
         public string ImagenUrl
         {
             get => _imagenUrl;
@@ -98,6 +106,33 @@ namespace RestaurantApp.Models
         public string ImagenFinal => string.IsNullOrEmpty(ImagenUrl)
             ? "https://via.placeholder.com/150x150?text=🍽️"
             : ImagenUrl;
+
+        // ✅ NUEVA PROPIEDAD CALCULADA: Obtener la categoría correcta
+        public string CategoriaNombre
+        {
+            get
+            {
+                // Primero intentar usar CategoriaTexto si existe (viene de la BD)
+                if (!string.IsNullOrEmpty(CategoriaTexto))
+                    return CategoriaTexto;
+
+                // Si no, usar el enum Categoria
+                if (Categoria != CategoriaProducto.Entrada || CategoriaId != 0)
+                    return Categoria.ToString();
+
+                // Fallback: mapear desde CategoriaId
+                return CategoriaId switch
+                {
+                    1 => "Entradas",
+                    2 => "Platos Principales",
+                    3 => "Bebidas",
+                    4 => "Postres",
+                    5 => "Ensaladas",
+                    6 => "Sopas",
+                    _ => "General"
+                };
+            }
+        }
 
         // Métodos
         public void ToggleDisponibilidad()

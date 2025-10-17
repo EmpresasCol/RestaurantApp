@@ -1,5 +1,5 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || 'https://fc8b48b5ce25.ngrok-free.app/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://localhost:7137/api';
 
 console.log('🌐 API URL configurada:', API_URL);
 
