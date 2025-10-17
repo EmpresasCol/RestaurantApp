@@ -87,6 +87,57 @@ namespace RestaurantApi.Controllers
                 return StatusCode(500, new { message = $"Error en el servidor: {ex.Message}" });
             }
         }
+        [HttpPost("login-mobile")]
+        public async Task<ActionResult<LoginResponseDto>> LoginMobile(LoginRequestDto request)
+        {
+            try
+            {
+                Console.WriteLine($"📱 Intento de login MÓVIL: {request.Usuario}");
+
+                // Buscar usuario por nombre de usuario
+                var usuario = await _context.Usuarios
+                    .FirstOrDefaultAsync(u => u.NombreUsuario == request.Usuario);
+
+                if (usuario == null)
+                {
+                    Console.WriteLine($"❌ Usuario no encontrado: {request.Usuario}");
+                    return Unauthorized(new { message = "Usuario no encontrado" });
+                }
+
+                // Verificar contraseña
+                if (usuario.ClaveHash != request.Clave)
+                {
+                    Console.WriteLine($"❌ Contraseña incorrecta para: {request.Usuario}");
+                    return Unauthorized(new { message = "Contraseña incorrecta" });
+                }
+
+                if (usuario.Rol != RolUsuario.Mesero)
+                {
+                    Console.WriteLine($"⛔ No-mesero intentó acceder desde móvil: {request.Usuario}");
+                    return Unauthorized(new
+                    {
+                        message = "Solo usuarios con rol Mesero pueden acceder a la aplicación móvil."
+                    });
+                }
+
+                Console.WriteLine($"✅ Login móvil exitoso: {usuario.Nombre} (Mesero)");
+
+                var response = new LoginResponseDto
+                {
+                    Id = usuario.Id,
+                    Nombre = usuario.Nombre,
+                    NombreUsuario = usuario.NombreUsuario,
+                    Rol = usuario.Rol.ToString()
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error en login móvil: {ex.Message}");
+                return StatusCode(500, new { message = $"Error en el servidor: {ex.Message}" });
+            }
+        }
 
         [HttpGet]
         public async Task<ActionResult<IEnumerable<UsuarioDto>>> GetUsuarios()

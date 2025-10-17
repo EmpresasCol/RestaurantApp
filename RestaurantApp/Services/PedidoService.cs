@@ -54,6 +54,7 @@ namespace RestaurantApp.Services
             var pedido = new Pedido
             {
                 Id = dto.Id,
+                MesaId = dto.MesaId,  // ✅ AGREGAR MesaId
                 FechaHora = dto.Fecha,
                 NotasEspeciales = ""
             };
@@ -70,7 +71,7 @@ namespace RestaurantApp.Services
                 Estado = EstadoMesa.Ocupada
             };
 
-            // Convertir detalles
+            // ✅ CONVERTIR DETALLES CON PRECIO CORRECTO
             if (dto.Detalles != null && dto.Detalles.Count > 0)
             {
                 pedido.Items = dto.Detalles.Select(d => new ItemPedido
@@ -82,21 +83,32 @@ namespace RestaurantApp.Services
                     {
                         Id = d.PlatilloId,
                         Nombre = d.PlatilloNombre ?? "Producto",
-                        Precio = d.PrecioUnitario
+                        Precio = d.Precio  // ✅ USAR d.Precio en lugar de d.PrecioUnitario
                     },
                     Cantidad = d.Cantidad,
-                    PrecioUnitario = d.PrecioUnitario,
-                    AdicionesEspeciales = d.Nota
+                    PrecioUnitario = d.Precio  // ✅ USAR d.Precio
                 }).ToList();
 
+                // ✅ CALCULAR SUBTOTALES DE CADA ITEM
+                foreach (var item in pedido.Items)
+                {
+                    item.CalcularSubtotal();
+                }
+
+                // ✅ CALCULAR TOTAL DEL PEDIDO
                 pedido.CalcularTotal();
             }
 
             pedido.ActualizarTiempoTranscurrido();
+
+            // ✅ DEBUG: Imprimir total calculado
+            System.Diagnostics.Debug.WriteLine($"[PEDIDO] ID: {pedido.Id}, Items: {pedido.Items.Count}, Total: ${pedido.Total}");
+
             return pedido;
         }
     }
 
+    // ✅ DTOs ACTUALIZADOS
     public class PedidoDto
     {
         public int Id { get; set; }
@@ -115,7 +127,7 @@ namespace RestaurantApp.Services
         public int PlatilloId { get; set; }
         public string PlatilloNombre { get; set; }
         public int Cantidad { get; set; }
-        public decimal PrecioUnitario { get; set; }
+        public decimal Precio { get; set; }
         public string Nota { get; set; }
         public string Estado { get; set; }
     }

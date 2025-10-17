@@ -203,11 +203,11 @@
                             <!-- Botones de Acción -->
                             <FlexLayout Direction="Row" 
                                     Wrap="Wrap" 
-                                    JustifyContent="Start" 
+                                    JustifyContent="Start"
                                     AlignItems="Center"
-                                    Margin="0,15">
+                                    Margin="0,10,0,0">
 
-                                <!-- Botón Editar (solo primeros 5 min y EnProceso) -->
+                                <!-- Botón Editar (solo primeros 5 minutos) -->
                                 <Button Text="✏️ Editar"
                                     BackgroundColor="#FFC107"
                                     TextColor="White"
@@ -219,8 +219,8 @@
                                     CommandParameter="{Binding}"
                                     IsVisible="{Binding PuedeEditar}"/>
 
-                                <!-- Botón Entregar (EnProceso -> Entregado) -->
-                                <Button Text="🍽️ Entregado"
+                                <!-- Botón Entregar (después de 5 minutos) -->
+                                <Button Text="🍽️ Entregar"
                                     BackgroundColor="#17A2B8"
                                     TextColor="White"
                                     FontSize="12"
@@ -229,9 +229,9 @@
                                     Margin="0,0,5,5"
                                     Command="{Binding BindingContext.EntregarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
                                     CommandParameter="{Binding}"
-                                    IsVisible="{Binding PuedeMarcarComoEntregado}"/>
+                                    IsVisible="{Binding PuedeEntregar}"/>
 
-                                <!-- Botón Cobrar (Entregado -> Pagado) -->
+                                <!-- Botón Cobrar (después de entregar) -->
                                 <Button Text="💰 Cobrar"
                                     BackgroundColor="#28A745"
                                     TextColor="White"
@@ -241,9 +241,9 @@
                                     Margin="0,0,5,5"
                                     Command="{Binding BindingContext.CompletarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
                                     CommandParameter="{Binding}"
-                                    IsVisible="{Binding PuedeMarcarComoPagado}"/>
+                                    IsVisible="{Binding PuedeCobrar}"/>
 
-                                <!-- Botón Cancelar (EnProceso o Entregado) -->
+                                <!-- Botón Cancelar (siempre visible hasta que se complete) -->
                                 <Button Text="❌ Cancelar"
                                     BackgroundColor="#DC3545"
                                     TextColor="White"
@@ -254,9 +254,7 @@
                                     Command="{Binding BindingContext.CancelarPedidoCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
                                     CommandParameter="{Binding}"
                                     IsVisible="{Binding PuedeCancelar}"/>
-
                             </FlexLayout>
-
                         </StackLayout>
                     </Frame>
                 </DataTemplate>

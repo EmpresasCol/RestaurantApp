@@ -17,7 +17,7 @@ namespace RestaurantApp.Views
         protected override void OnAppearing()
         {
             base.OnAppearing();
-            _viewModel.CargarConfiguracion();
+            _viewModel.CargarConfiguracionPorDefecto();
         }
     }
 }

@@ -37,7 +37,8 @@ namespace RestaurantApp.Models
             get => _mesa;
             set => SetProperty(ref _mesa, value);
         }
-        public int MesaId 
+
+        public int MesaId
         {
             get => _mesaId;
             set => SetProperty(ref _mesaId, value);
@@ -60,14 +61,7 @@ namespace RestaurantApp.Models
                 }
             }
         }
-        public bool PuedeEditar
-        {
-            get
-            {
-                var tiempoTranscurrido = DateTime.Now - FechaHora;
-                return tiempoTranscurrido.TotalMinutes <= 5 && Estado == EstadoPedido.EnProceso;
-            }
-        }
+
         public EstadoPedido Estado
         {
             get => _estado;
@@ -131,9 +125,48 @@ namespace RestaurantApp.Models
         public decimal IVA => Subtotal * 0.19m;
         public int CantidadItems => Items.Sum(i => i.Cantidad);
         public string EstadoTexto => Estado.ToString();
-        public bool PuedeMarcarComoEntregado => Estado == EstadoPedido.Listo;
-        public bool PuedeCancelar => Estado == EstadoPedido.EnProceso || Estado == EstadoPedido.Listo;
-        public bool PuedeMarcarComoPagado => Estado == EstadoPedido.Entregado;
+
+        // ✅ NUEVAS PROPIEDADES PARA EL FLUJO CORRECTO
+        public bool PuedeEditar
+        {
+            get
+            {
+                if (Estado != EstadoPedido.EnProceso)
+                    return false;
+
+                var tiempoTranscurrido = DateTime.Now - FechaHora;
+                return tiempoTranscurrido.TotalMinutes <= 5;
+            }
+        }
+
+        public bool PuedeEntregar
+        {
+            get
+            {
+                if (Estado != EstadoPedido.EnProceso)
+                    return false;
+
+                var tiempoTranscurrido = DateTime.Now - FechaHora;
+                return tiempoTranscurrido.TotalMinutes > 5;
+            }
+        }
+
+        public bool PuedeCancelar
+        {
+            get
+            {
+                return Estado == EstadoPedido.EnProceso ||
+                       Estado == EstadoPedido.Entregado;
+            }
+        }
+
+        public bool PuedeCobrar
+        {
+            get
+            {
+                return Estado == EstadoPedido.Entregado;
+            }
+        }
 
         // Métodos
         private void ActualizarEstadoColor()
@@ -155,16 +188,19 @@ namespace RestaurantApp.Models
             TiempoTranscurrido = tiempo.TotalHours >= 1
                 ? $"{tiempo.Hours}h {tiempo.Minutes}min"
                 : $"{tiempo.Minutes}min";
+
+            // ✅ NOTIFICAR CAMBIOS EN PROPIEDADES CALCULADAS
+            OnPropertyChanged(nameof(PuedeEditar));
+            OnPropertyChanged(nameof(PuedeEntregar));
+            OnPropertyChanged(nameof(PuedeCancelar));
+            OnPropertyChanged(nameof(PuedeCobrar));
         }
 
         public void CalcularTotal()
         {
             Total = Subtotal + IVA;
         }
-        public void MarcarComoListo()
-        {
-            Estado = EstadoPedido.Listo;
-        }
+
         public void AgregarItem(ItemPedido item)
         {
             Items.Add(item);
@@ -177,6 +213,11 @@ namespace RestaurantApp.Models
             CalcularTotal();
         }
 
+        public void Entregar()
+        {
+            Estado = EstadoPedido.Entregado;
+        }
+
         public void Completar()
         {
             Estado = EstadoPedido.Pagado;
@@ -185,10 +226,6 @@ namespace RestaurantApp.Models
         public void Cancelar()
         {
             Estado = EstadoPedido.Cancelado;
-        }
-        public void Entregar()
-        {
-            Estado = EstadoPedido.Entregado;
         }
 
         // INotifyPropertyChanged implementation

@@ -24,6 +24,7 @@ namespace RestaurantApp
             builder.Services.AddSingleton<PedidoService>();
             builder.Services.AddSingleton<UsuarioService>();
             builder.Services.AddSingleton<SincronizacionService>();
+            builder.Services.AddSingleton<PagoService>();
 
             // Registrar páginas
             builder.Services.AddSingleton<MainPage>();

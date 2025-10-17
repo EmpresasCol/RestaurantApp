@@ -68,11 +68,6 @@ namespace RestaurantApp.ViewModels
 
                 if (resultado.Exito && resultado.Usuario != null)
                 {
-                    if (resultado.Usuario.Rol != "Mesero")
-                    {
-                        MostrarMensajeError($"Acceso denegado. Solo usuarios con rol Mesero pueden acceder.");
-                        return;
-                    }
 
                     _usuarioService.GuardarSesion(resultado.Usuario);
                     await Shell.Current.GoToAsync("//mesero");
@@ -91,7 +86,6 @@ namespace RestaurantApp.ViewModels
                 EstaCargando = false;
             }
         }
-
         private void MostrarMensajeError(string mensaje)
         {
             MensajeError = mensaje;

@@ -47,13 +47,12 @@
         Gerente
     }
 
+
     public enum MetodoPago
     {
         Efectivo,
         Tarjeta,
-        TransferenciaBancaria,
         QR,
-        Credito,
         Otro
     }
 

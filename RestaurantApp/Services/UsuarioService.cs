@@ -21,7 +21,8 @@ namespace RestaurantApp.Services
                     Clave = clave
                 };
 
-                var response = await _httpService.PostAsync<LoginResponseDto>("api/usuarios/login", request);
+                // ✅ CAMBIAR A ENDPOINT MÓVIL
+                var response = await _httpService.PostAsync<LoginResponseDto>("api/usuarios/login-mobile", request);
 
                 if (response != null)
                 {
@@ -52,15 +53,15 @@ namespace RestaurantApp.Services
                 return new ResultadoAutenticacion
                 {
                     Exito = false,
-                    MensajeError = "Error de conexión"
+                    MensajeError = "Error de conexión con el servidor"
                 };
             }
-            catch
+            catch (Exception ex)
             {
                 return new ResultadoAutenticacion
                 {
                     Exito = false,
-                    MensajeError = "Error inesperado"
+                    MensajeError = $"Error inesperado: {ex.Message}"
                 };
             }
         }

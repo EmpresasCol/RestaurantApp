@@ -8,14 +8,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configurar CORS
+// ? Configurar CORS para permitir ngrok
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
         policy.WithOrigins(
-            "http://localhost:3000",  // Desarrollo local
-            "https://empresascol.github.io"  // GitHub Pages
+            "http://localhost:3000",                          // React local
+            "https://empresascol.github.io",                  // GitHub Pages
+            "https://*.ngrok-free.app"                        // ? Cualquier subdominio de ngrok
         )
         .AllowAnyMethod()
         .AllowAnyHeader()
@@ -40,10 +41,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// ? NO usar HTTPS redirect cuando se usa ngrok
+// app.UseHttpsRedirection();
 
 // Usar CORS
-app.UseCors("AllowReactApp");
+app.UseCors("AllowAll");
 
 app.UseAuthorization();
 
