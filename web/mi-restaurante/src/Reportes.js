@@ -12,7 +12,9 @@ import {
   Award,
   Clock,
   Percent,
-  RefreshCw
+  RefreshCw,
+  UserCheck,
+  Trophy
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -137,6 +139,62 @@ function ReportesFinancieros() {
     );
 
     setDatosVentas(datosOrdenados);
+  };
+
+  const calcularEstadisticasMeseros = () => {
+    const pedidosPagados = pedidos.filter(p => 
+      p.estado === 'Pagado' && filtrarPorPeriodo(p.fecha)
+    );
+
+    // Lista de nombres/roles a excluir de las estadísticas de meseros
+    const rolesExcluidos = ['admin', 'administrador', 'caja', 'sistema', 'sin asignar'];
+    
+    const estadisticasPorMesero = {};
+
+    pedidosPagados.forEach(pedido => {
+      const meseroKey = pedido.usuarioId || 0;
+      const meseroNombre = pedido.meseroNombre || 'Sin asignar';
+      
+      // ⛔ EXCLUIR pedidos de Admin, Caja o Sin asignar
+      const nombreLower = meseroNombre.toLowerCase();
+      const esRolExcluido = rolesExcluidos.some(rol => nombreLower.includes(rol));
+      
+      if (esRolExcluido) {
+        return; // Saltar este pedido
+      }
+      
+      if (!estadisticasPorMesero[meseroKey]) {
+        estadisticasPorMesero[meseroKey] = {
+          usuarioId: meseroKey,
+          nombre: meseroNombre,
+          pedidosAtendidos: 0,
+          ventasTotales: 0,
+          propinas: 0,
+          mesasAtendidas: new Set()
+        };
+      }
+      
+      const totalPedido = pedido.detalles.reduce((sum, d) => sum + (d.precio * d.cantidad), 0);
+      estadisticasPorMesero[meseroKey].pedidosAtendidos += 1;
+      estadisticasPorMesero[meseroKey].ventasTotales += totalPedido;
+      estadisticasPorMesero[meseroKey].mesasAtendidas.add(pedido.mesaNumero);
+      
+      const pago = pagos.find(p => p.pedidoId === pedido.id);
+      if (pago && pago.montoPropina) {
+        estadisticasPorMesero[meseroKey].propinas += pago.montoPropina;
+      }
+    });
+
+    const meserosOrdenados = Object.values(estadisticasPorMesero)
+      .map(m => ({
+        ...m,
+        mesasAtendidas: m.mesasAtendidas.size,
+        ticketPromedio: m.pedidosAtendidos > 0 ? m.ventasTotales / m.pedidosAtendidos : 0,
+        propinaPromedio: m.pedidosAtendidos > 0 ? m.propinas / m.pedidosAtendidos : 0
+      }))
+      .sort((a, b) => b.ventasTotales - a.ventasTotales);
+
+    return meserosOrdenados;
   };
 
   const calcularPlatillosMasVendidos = () => {
@@ -301,6 +359,7 @@ function ReportesFinancieros() {
   const platillosMasVendidos = calcularPlatillosMasVendidos();
   const ventasPorMetodoPago = calcularVentasPorMetodoPago();
   const ventasPorHora = calcularVentasPorHora();
+  const estadisticasMeseros = calcularEstadisticasMeseros();
 
   const exportarExcel = () => {
     const csvData = [
@@ -322,7 +381,18 @@ function ReportesFinancieros() {
       [''],
       ['Platillos Más Vendidos'],
       ['Platillo', 'Cantidad', 'Ingresos'],
-      ...platillosMasVendidos.map(p => [p.nombre, p.cantidad, p.ingresos])
+      ...platillosMasVendidos.map(p => [p.nombre, p.cantidad, p.ingresos]),
+      [''],
+      ['Estadísticas por Mesero'],
+      ['Mesero', 'Pedidos', 'Ventas Totales', 'Ticket Promedio', 'Propinas', 'Mesas'],
+      ...estadisticasMeseros.map(m => [
+        m.nombre, 
+        m.pedidosAtendidos, 
+        m.ventasTotales, 
+        m.ticketPromedio.toFixed(0),
+        m.propinas,
+        m.mesasAtendidas
+      ])
     ].map(row => row.join(',')).join('\n');
     
     const blob = new Blob(['\uFEFF' + csvData], { type: 'text/csv;charset=utf-8;' });
@@ -341,6 +411,8 @@ function ReportesFinancieros() {
   const horaPico = ventasPorHora.reduce((max, v) => v.ventas > max.ventas ? v : max, { hora: '-', ventas: 0 });
   const horaBaja = ventasPorHora.reduce((min, v) => v.ventas < min.ventas && v.ventas > 0 ? v : min, { hora: '-', ventas: Infinity });
   const promedioHora = ventasPorHora.reduce((sum, v) => sum + v.ventas, 0) / ventasPorHora.length;
+
+  const COLORES_MESEROS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -512,6 +584,129 @@ function ReportesFinancieros() {
                     />
                   </AreaChart>
                 </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* NUEVA SECCIÓN: ESTADÍSTICAS POR MESERO */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 mb-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Rendimiento por Mesero</h2>
+                  <p className="text-gray-600 text-sm">Ranking de meseros por ventas atendidas</p>
+                </div>
+                <UserCheck className="text-orange-500" size={28} />
+              </div>
+              
+              {estadisticasMeseros.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={estadisticasMeseros.slice(0, 6)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="nombre" 
+                        stroke="#6b7280"
+                        tick={{ fontSize: 11 }}
+                        angle={-45}
+                        textAnchor="end"
+                        height={100}
+                      />
+                      <YAxis 
+                        stroke="#6b7280" 
+                        tick={{ fontSize: 12 }}
+                        tickFormatter={(value) => `$${(value / 1000).toFixed(0)}K`}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#fff', 
+                          border: '2px solid #f97316',
+                          borderRadius: '12px'
+                        }}
+                        formatter={(value) => [formatearPrecio(value), 'Ventas']}
+                      />
+                      <Bar dataKey="ventasTotales" radius={[8, 8, 0, 0]}>
+                        {estadisticasMeseros.slice(0, 6).map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORES_MESEROS[index % COLORES_MESEROS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+
+                  <div className="mt-6 overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b-2 border-gray-200">
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Posición</th>
+                          <th className="text-left py-3 px-4 font-semibold text-gray-700">Mesero</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700">Pedidos</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700">Ventas</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700">Ticket Prom.</th>
+                          <th className="text-right py-3 px-4 font-semibold text-gray-700">Propinas</th>
+                          <th className="text-center py-3 px-4 font-semibold text-gray-700">Mesas</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {estadisticasMeseros.map((mesero, index) => (
+                          <tr 
+                            key={mesero.usuarioId} 
+                            className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                          >
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                {index < 3 ? (
+                                  <Trophy 
+                                    size={20} 
+                                    className={
+                                      index === 0 ? 'text-yellow-500' : 
+                                      index === 1 ? 'text-gray-400' : 
+                                      'text-orange-600'
+                                    }
+                                  />
+                                ) : (
+                                  <span className="w-5 text-center font-semibold text-gray-500">
+                                    {index + 1}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <div 
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
+                                  style={{ backgroundColor: COLORES_MESEROS[index % COLORES_MESEROS.length] }}
+                                >
+                                  {mesero.nombre.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-medium text-gray-900">{mesero.nombre}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="inline-block bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-semibold">
+                                {mesero.pedidosAtendidos}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-green-600">
+                              {formatearPrecio(mesero.ventasTotales)}
+                            </td>
+                            <td className="py-3 px-4 text-right text-gray-700">
+                              {formatearPrecio(mesero.ticketPromedio)}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-purple-600">
+                              {formatearPrecio(mesero.propinas)}
+                            </td>
+                            <td className="py-3 px-4 text-center text-gray-700">
+                              {mesero.mesasAtendidas}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <UserCheck className="mx-auto mb-2" size={48} />
+                  <p>No hay datos de meseros</p>
+                </div>
               )}
             </div>
 

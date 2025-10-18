@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Reportes from './Reportes';
 import GestionPlatillos from './GestionPlatillos';
 import GestionUsuarios from './GestionUsuarios';
+import Cocina from './Cocina'; 
 
 function AppContent() {
   const { usuario, esClienteQR, estaAutenticado, logout, cargando: cargandoAuth } = useAuth();
@@ -510,94 +511,16 @@ const cargarPedidos = async () => {
     );
   };
 
-  const renderCocina = () => {
-    console.log('🍳 Renderizando cocina - Pedidos:', pedidos.length, 'Nuevos:', pedidosNuevos.length);
-    
-    return (
-      <div className="min-h-screen bg-gray-900 text-white pb-8">
-        {/* 📊 Contador de Pedidos Flotante */}
-        {pedidos.length > 0 && (
-          <div className="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-full shadow-2xl z-50 animate-bounce">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold">{pedidos.length}</span>
-              <span className="text-sm font-semibold">Órdenes Activas</span>
-            </div>
-          </div>
-        )}
-
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-3xl font-bold">Órdenes de Cocina</h2>
-            <span className="text-sm bg-green-600 px-4 py-2 rounded-lg flex items-center gap-2">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-              Actualización en tiempo real
-            </span>
-          </div>
-          {pedidos.length === 0 ? (
-            <div className="bg-gray-800 rounded-xl p-12 text-center">
-              <ChefHat className="mx-auto text-gray-600 mb-4" size={64} />
-              <p className="text-xl text-gray-400">No hay pedidos pendientes</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {pedidos.map(pedido => {
-                const esNuevo = pedidosNuevos.includes(pedido.id);
-                console.log(`Pedido ${pedido.id} - Es nuevo:`, esNuevo);
-                
-                return (
-                  <div 
-                    key={pedido.id} 
-                    className={`bg-gray-800 rounded-xl overflow-hidden border-l-4 transition-all ${
-                      esNuevo 
-                        ? 'border-red-500 animate-pulse ring-4 ring-red-500 ring-opacity-75 shadow-2xl shadow-red-500/50' 
-                        : 'border-orange-500'
-                    }`}
-                  >
-                    <div className={`p-5 border-b border-gray-600 ${
-                      esNuevo ? 'bg-red-700' : 'bg-gray-700'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <span className="text-2xl font-bold">Mesa {pedido.mesa}</span>
-                        {esNuevo && (
-                          <span className="bg-red-500 text-white text-xs px-3 py-1 rounded-full font-bold animate-pulse">
-                            🔔 NUEVO
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {pedido.hora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                    <div className="p-5">
-                      <h4 className="font-semibold mb-3">Platillos:</h4>
-                      <div className="space-y-2">
-                        {pedido.items.map((item, idx) => (
-                          <div key={idx} className="flex justify-between bg-gray-700 p-3 rounded">
-                            <div>
-                              <span className="font-medium">{item.nombre}</span>
-                              {item.notas && <p className="text-xs text-orange-300 mt-1">📝 {item.notas}</p>}
-                            </div>
-                            <span className="bg-orange-500 px-2 py-1 rounded text-sm font-bold">x{item.cantidad}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   const renderVistaActual = () => {
     switch (vistaActual) {
       case 'menu':
         return renderMenuCliente();
-      case 'cocina':
-        return <ProtectedRoute permisos={['administrador', 'cocina']}>{renderCocina()}</ProtectedRoute>;
+        case 'cocina':
+          return (
+            <ProtectedRoute permisos={['administrador', 'cocina']}>
+              <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />
+            </ProtectedRoute>
+          );
       case 'facturacion':
         return <ProtectedRoute permisos={['administrador', 'caja']}><Facturacion /></ProtectedRoute>;
       case 'qr':
@@ -615,7 +538,7 @@ const cargarPedidos = async () => {
 
   // ✅ SI ES PANTALLA DE COCINA PÚBLICA, MOSTRAR DIRECTAMENTE
   if (esPantallaCocina) {
-    return renderCocina();
+    return <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />;
   }
 
   if (cargandoAuth) {

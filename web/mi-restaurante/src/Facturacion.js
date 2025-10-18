@@ -1,9 +1,9 @@
 // src/Facturacion.js
 import React, { useState, useEffect } from 'react';
-import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import * as api from './services/api';
 
-// Componente de Notificación Toast
+// Componente de NotificaciÃ³n Toast
 function Toast({ mensaje, tipo, onClose }) {
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -61,7 +61,7 @@ function Facturacion() {
   const [cargando, setCargando] = useState(false);
   const [notificacion, setNotificacion] = useState(null);
 
-  // Función para mostrar notificaciones
+  // FunciÃ³n para mostrar notificaciones
   const mostrarNotificacion = (mensaje, tipo = 'success') => {
     setNotificacion({ mensaje, tipo });
   };
@@ -100,7 +100,7 @@ function Facturacion() {
         pedido.estado === 'Cancelado'
       );
 
-      console.log(`📋 Total pedidos: ${pedidosData.length}, Para facturar: ${pedidosFiltrados.length}`);
+      console.log(`ðŸ“‹ Total pedidos: ${pedidosData.length}, Para facturar: ${pedidosFiltrados.length}`);
 
       setPedidos(pedidosFiltrados);
       setPagos(pagosData);
@@ -201,7 +201,7 @@ function Facturacion() {
     })
     .sort((a, b) => b.fecha - a.fecha);
 
-  console.log('🎯 Facturas filtradas:', facturasFiltradas.length, 'de', facturas.length);
+  console.log('ðŸŽ¯ Facturas filtradas:', facturasFiltradas.length, 'de', facturas.length);
 
   const totalesDelDia = {
     ventasTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.total, 0),
@@ -214,7 +214,7 @@ function Facturacion() {
     
     setCargando(true);
     try {
-      console.log('💳 Procesando pago...', {
+      console.log('ðŸ’³ Procesando pago...', {
         pedidoId: modalPago.pedidoId,
         subtotal: modalPago.subtotal,
         metodoPago: metodoPago
@@ -232,7 +232,7 @@ function Facturacion() {
       await cargarDatos();
       
       setModalPago(null);
-      mostrarNotificacion('¡Pago registrado exitosamente!', 'success');
+      mostrarNotificacion('Â¡Pago registrado exitosamente!', 'success');
     } catch (error) {
       console.error('Error al registrar pago:', error);
       mostrarNotificacion('Error al registrar el pago. Intenta de nuevo.', 'error');
@@ -250,7 +250,7 @@ function Facturacion() {
 
     setCargando(true);
     try {
-      console.log('🔄 Cambiando estado:', { 
+      console.log('ðŸ”„ Cambiando estado:', { 
         facturaId: factura.id, 
         pedidoId: factura.pedidoId, 
         nuevoEstado 
@@ -260,19 +260,19 @@ function Facturacion() {
         setModalPago(factura);
       } else if (nuevoEstado === 'cancelada') {
         await api.updatePedido(factura.pedidoId, 'Cancelado');
-        console.log('✅ Pedido cancelado');
+        console.log('âœ… Pedido cancelado');
         await cargarDatos();
         mostrarNotificacion('Pedido cancelado correctamente', 'success');
       } else if (nuevoEstado === 'pendiente') {
         await api.updatePedido(factura.pedidoId, 'EnProceso');
-        console.log('✅ Pedido vuelto a pendiente');
+        console.log('âœ… Pedido vuelto a pendiente');
         await cargarDatos();
         mostrarNotificacion('Pedido marcado como pendiente', 'success');
       }
       
       setMenuAbierto(null);
     } catch (error) {
-      console.error('❌ Error al cambiar estado:', error);
+      console.error('âŒ Error al cambiar estado:', error);
       mostrarNotificacion(`Error al cambiar el estado: ${error.message}`, 'error');
     } finally {
       setCargando(false);
@@ -413,9 +413,9 @@ function Facturacion() {
         <body>
           <div class="factura">
             <div class="header">
-              <h2>RESTAURANTE DÉLICE</h2>
+              <h2>RESTAURANTE DÃ‰LICE</h2>
               <p>NIT: 900.123.456-7</p>
-              <p>Calle 123 #45-67, Bogotá D.C., Colombia</p>
+              <p>Calle 123 #45-67, BogotÃ¡ D.C., Colombia</p>
               <p>Tel: (601) 234-5678 | info@restaurantedelice.com</p>
               <div class="factura-id">
                 <div>FACTURA DE VENTA</div>
@@ -428,7 +428,7 @@ function Facturacion() {
               <p><span>Fecha:</span> ${formatearFecha(factura.fecha)}</p>
               <p><span>Mesa:</span> ${factura.mesa}</p>
               <p><span>Pedido:</span> #${factura.pedidoId}</p>
-              <p><span>Método de pago:</span> ${factura.metodoPago}</p>
+              <p><span>MÃ©todo de pago:</span> ${factura.metodoPago}</p>
               <p><span>Estado:</span> <strong>${factura.estado.toUpperCase()}</strong></p>
             </div>
 
@@ -476,10 +476,10 @@ function Facturacion() {
             </div>
 
             <div class="footer">
-              <p><strong>¡Gracias por visitarnos!</strong></p>
+              <p><strong>Â¡Gracias por visitarnos!</strong></p>
               <p>Esta es su factura de venta</p>
               <p>Para dudas o reclamos: info@restaurantedelice.com</p>
-              <p>Resolución DIAN No. 18764003241789 del 15/03/2024</p>
+              <p>ResoluciÃ³n DIAN No. 18764003241789 del 15/03/2024</p>
               <p>Rango autorizado: INV-1000000 al INV-2000000</p>
             </div>
           </div>
@@ -498,7 +498,7 @@ function Facturacion() {
 
   const exportarExcel = () => {
     const csvData = [
-      ['Factura', 'Mesa', 'Pedido ID', 'Fecha', 'Cliente', 'Subtotal', 'Impuestos', 'Total', 'Estado', 'Método Pago'],
+      ['Factura', 'Mesa', 'Pedido ID', 'Fecha', 'Cliente', 'Subtotal', 'Impuestos', 'Total', 'Estado', 'MÃ©todo Pago'],
       ...facturasFiltradas.map(f => [
         f.numeroFactura,
         f.mesa,
@@ -539,8 +539,8 @@ function Facturacion() {
             <div className="flex items-center gap-3">
               <Receipt className="text-blue-600" size={32} />
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">Sistema de Facturación</h1>
-                <p className="text-gray-600">Restaurante Délice</p>
+                <h1 className="text-2xl font-bold text-gray-800">Sistema de FacturaciÃ³n</h1>
+                <p className="text-gray-600">Restaurante DÃ©lice</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -570,7 +570,7 @@ function Facturacion() {
           <div className="bg-white p-6 rounded-lg shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">Ventas del Día</p>
+                <p className="text-gray-600 text-sm">Ventas del DÃ­a</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatearPrecio(totalesDelDia.ventasTotal)}
                 </p>
@@ -607,15 +607,15 @@ function Facturacion() {
             <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
             <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay pedidos listos para facturar</h3>
             <p className="text-gray-500 mb-4">
-              Los pedidos aparecerán aquí cuando sean marcados como <strong>"Entregado"</strong> en la cocina
+              Los pedidos aparecerÃ¡n aquÃ­ cuando sean marcados como <strong>"Entregado"</strong> en la cocina
             </p>
             <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-md mx-auto">
               <p className="text-sm text-blue-800">
-                💡 <strong>Flujo:</strong><br/>
-                1️⃣ Cliente hace pedido<br/>
-                2️⃣ Cocina prepara<br/>
-                3️⃣ <strong>Mesero marca "Entregado"</strong><br/>
-                4️⃣ Aparece aquí para facturar
+                ðŸ’¡ <strong>Flujo:</strong><br/>
+                1ï¸âƒ£ Cliente hace pedido<br/>
+                2ï¸âƒ£ Cocina prepara<br/>
+                3ï¸âƒ£ <strong>Mesero marca "Entregado"</strong><br/>
+                4ï¸âƒ£ Aparece aquÃ­ para facturar
               </p>
             </div>
             <button
@@ -660,7 +660,7 @@ function Facturacion() {
                 
                 <button
                   onClick={() => {
-                    console.log('🧹 Limpiando todos los filtros');
+                    console.log('ðŸ§¹ Limpiando todos los filtros');
                     setBusqueda('');
                     setFiltroEstado('todas');
                     setFiltroFecha('');
@@ -718,9 +718,9 @@ function Facturacion() {
                           </div>
                           <div className="flex items-center gap-4 text-sm text-gray-600">
                             <span className="font-medium">{factura.cliente.nombre}</span>
-                            <span>•</span>
+                            <span>â€¢</span>
                             <span>{formatearFecha(factura.fecha)}</span>
-                            <span>•</span>
+                            <span>â€¢</span>
                             <span className="font-bold text-green-600 text-base">{formatearPrecio(factura.total)}</span>
                           </div>
                         </div>
@@ -833,7 +833,7 @@ function Facturacion() {
                         <div className="bg-gradient-to-br from-green-50 to-white p-5 rounded-lg border border-green-100">
                           <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase flex items-center gap-2">
                             <span className="w-2 h-2 bg-green-600 rounded-full"></span>
-                            Información de la Venta
+                            InformaciÃ³n de la Venta
                           </h4>
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div className="flex justify-between items-center">
@@ -845,7 +845,7 @@ function Facturacion() {
                               <span className="font-medium text-gray-800 text-xs">{formatearFecha(factura.fecha)}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-gray-600">Método de pago:</span>
+                              <span className="text-gray-600">MÃ©todo de pago:</span>
                               <span className="font-medium text-gray-800 capitalize">{factura.metodoPago}</span>
                             </div>
                             <div className="flex justify-between items-center">
@@ -925,7 +925,7 @@ function Facturacion() {
         )}
       </div>
 
-      {/* Modal de Método de Pago */}
+      {/* Modal de MÃ©todo de Pago */}
       {modalPago && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
@@ -933,8 +933,8 @@ function Facturacion() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <DollarSign className="text-green-600" size={32} />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Método de Pago</h3>
-              <p className="text-gray-600">Selecciona cómo pagó el cliente</p>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">MÃ©todo de Pago</h3>
+              <p className="text-gray-600">Selecciona cÃ³mo pagÃ³ el cliente</p>
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-700">
                   <span className="font-semibold">Pedido:</span> #{modalPago.pedidoId}
@@ -956,7 +956,7 @@ function Facturacion() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                    <span className="text-2xl">💵</span>
+                    <span className="text-2xl">ðŸ’µ</span>
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-lg">Efectivo</p>
@@ -973,11 +973,11 @@ function Facturacion() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                    <span className="text-2xl">💳</span>
+                    <span className="text-2xl">ðŸ’³</span>
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-lg">Tarjeta</p>
-                    <p className="text-sm text-blue-100">Débito o crédito</p>
+                    <p className="text-sm text-blue-100">DÃ©bito o crÃ©dito</p>
                   </div>
                 </div>
                 <ChevronDown className="rotate-[-90deg]" size={24} />
@@ -990,7 +990,7 @@ function Facturacion() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                    <span className="text-2xl">📱</span>
+                    <span className="text-2xl">ðŸ“±</span>
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-lg">QR / Transferencia</p>

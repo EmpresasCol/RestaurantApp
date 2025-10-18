@@ -22,6 +22,7 @@ namespace RestaurantApi.Controllers
         {
             var pedidos = await _context.Pedidos
                 .Include(p => p.Mesa)
+                .Include(p => p.Usuario)  // ✅ AGREGAR ESTA LÍNEA
                 .Include(p => p.Detalles)
                     .ThenInclude(d => d.Platillo)
                 .OrderByDescending(p => p.Fecha)
@@ -31,16 +32,18 @@ namespace RestaurantApi.Controllers
             {
                 Id = p.Id,
                 MesaId = p.MesaId,
-                MesaNumero = p.Mesa?.Numero ?? 0,  // ← Operador ?? para manejar null
+                MesaNumero = p.Mesa?.Numero ?? 0,
                 Estado = p.Estado.ToString(),
                 Fecha = p.Fecha,
+                UsuarioId = p.UsuarioId,  // ✅ AGREGAR
+                MeseroNombre = p.Usuario?.Nombre ?? "Sin asignar",  // ✅ AGREGAR
                 Detalles = p.Detalles.Select(d => new PedidoDetalleDto
                 {
                     Id = d.Id,
                     PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",  // ← Manejar null
+                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
                     Cantidad = d.Cantidad,
-                    Precio = d.Platillo?.Precio ?? 0,  // ← Manejar null
+                    Precio = d.Platillo?.Precio ?? 0,
                     Nota = d.Nota,
                     Estado = d.Estado.ToString()
                 }).ToList()
@@ -53,6 +56,7 @@ namespace RestaurantApi.Controllers
         {
             var pedido = await _context.Pedidos
                 .Include(p => p.Mesa)
+                .Include(p => p.Usuario)  // ✅ AGREGAR ESTA LÍNEA
                 .Include(p => p.Detalles)
                     .ThenInclude(d => d.Platillo)
                 .FirstOrDefaultAsync(p => p.Id == id);
@@ -67,6 +71,8 @@ namespace RestaurantApi.Controllers
                 MesaNumero = pedido.Mesa?.Numero ?? 0,
                 Estado = pedido.Estado.ToString(),
                 Fecha = pedido.Fecha,
+                UsuarioId = pedido.UsuarioId,  // ✅ AGREGAR
+                MeseroNombre = pedido.Usuario?.Nombre ?? "Sin asignar",  // ✅ AGREGAR
                 Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
                 {
                     Id = d.Id,
@@ -129,6 +135,8 @@ namespace RestaurantApi.Controllers
                 MesaNumero = pedidoCreado.Mesa?.Numero ?? 0,
                 Estado = pedidoCreado.Estado.ToString(),
                 Fecha = pedidoCreado.Fecha,
+                UsuarioId = pedidoCreado.UsuarioId,  // ✅ AGREGAR
+                MeseroNombre = pedidoCreado.Usuario?.Nombre ?? "Sin asignar",  // ✅ AGREGAR
                 Detalles = pedidoCreado.Detalles.Select(d => new PedidoDetalleDto
                 {
                     Id = d.Id,

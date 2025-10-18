@@ -1,6 +1,6 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || 'https://localhost:7137/api';
-
+const API_URL = process.env.REACT_APP_API_URL || 'https://9fdbc4b0ad94.ngrok-free.app/api'; // https://localhost:7137/api
+https://9fdbc4b0ad94.ngrok-free.app
 console.log('🌐 API URL configurada:', API_URL);
 
 // ✅ Función auxiliar para hacer fetch con headers de ngrok
@@ -436,4 +436,22 @@ export const deleteUsuario = async (id) => {
     console.error('❌ Error en deleteUsuario:', error);
     throw error;
   }
+};
+
+//estado pedido cocina
+
+export const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
+  const response = await fetch(`${API_URL}/pedidos/${pedidoId}/estado`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ estado: nuevoEstado })
+  });
+
+  if (!response.ok) {
+    throw new Error('Error al actualizar estado del pedido');
+  }
+
+  return await response.json();
 };
