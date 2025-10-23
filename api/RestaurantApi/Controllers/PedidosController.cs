@@ -152,45 +152,192 @@ namespace RestaurantApi.Controllers
             return CreatedAtAction(nameof(GetPedido), new { id = resultado.Id }, resultado);
         }
 
-        // PUT: api/Pedidos/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutPedido(int id, ActualizarPedidoDto actualizarPedido)
+        // PUT: api/Pedidos/5/actualizar
+        [HttpPut("{id}/actualizar")]
+        public async Task<ActionResult<PedidoDto>> ActualizarPedidoCompleto(int id, ActualizarPedidoCompletoDto dto)
         {
-            var pedido = await _context.Pedidos.FindAsync(id);
+            var pedido = await _context.Pedidos
+                .Include(p => p.Detalles)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
             if (pedido == null)
                 return NotFound();
 
-            // Actualizar estado
-            if (!string.IsNullOrEmpty(actualizarPedido.Estado))
-            {
-                // ⭐ Lista de estados válidos
-                var estadosValidos = new[] { "EnProceso", "Listo", "Entregado", "Pagado", "Cancelado" };
+            // Eliminar detalles anteriores
+            _context.PedidoDetalles.RemoveRange(pedido.Detalles);
 
-                if (Enum.TryParse<EstadoPedido>(actualizarPedido.Estado, true, out var estadoEnum))
+            // Agregar nuevos detalles
+            foreach (var detalle in dto.Detalles)
+            {
+                _context.PedidoDetalles.Add(new PedidoDetalle
                 {
-                    pedido.Estado = estadoEnum;
-                }
-                else
-                {
-                    return BadRequest($"Estado inválido: {actualizarPedido.Estado}. Estados válidos: {string.Join(", ", estadosValidos)}");
-                }
+                    PedidoId = id,
+                    PlatilloId = detalle.PlatilloId,
+                    Cantidad = detalle.Cantidad,
+                    Nota = detalle.Nota,
+                    Estado = EstadoDetalle.Pendiente
+                });
             }
 
-            _context.Entry(pedido).State = EntityState.Modified;
+            await _context.SaveChangesAsync();
 
+            // Retornar pedido actualizado
+            var pedidoActualizado = await _context.Pedidos
+                .Include(p => p.Mesa)
+                .Include(p => p.Detalles)
+                .ThenInclude(d => d.Platillo)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            return new PedidoDto
+            {
+                Id = pedidoActualizado.Id,
+                MesaId = pedidoActualizado.MesaId,
+                MesaNumero = pedidoActualizado.Mesa?.Numero ?? 0,
+                Estado = pedidoActualizado.Estado.ToString(),
+                Fecha = pedidoActualizado.Fecha,
+                Detalles = pedidoActualizado.Detalles.Select(d => new PedidoDetalleDto
+                {
+                    Id = d.Id,
+                    PlatilloId = d.PlatilloId,
+                    PlatilloNombre = d.Platillo?.Nombre ?? "",
+                    Cantidad = d.Cantidad,
+                    Precio = d.Platillo?.Precio ?? 0,
+                    Nota = d.Nota,
+                    Estado = d.Estado.ToString()
+                }).ToList()
+            };
+        }
+
+        // PUT: api/Pedidos/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutPedido(int id, ActualizarPedidoDto actualizarDto)
+        {
             try
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.Pedidos.Any(e => e.Id == id))
-                    return NotFound();
-                throw;
-            }
+                var pedido = await _context.Pedidos
+                    .Include(p => p.Detalles)
+                    .FirstOrDefaultAsync(p => p.Id == id);
 
-            return NoContent();
+                if (pedido == null)
+                    return NotFound($"Pedido {id} no encontrado");
+
+                Console.WriteLine($"📝 Actualizando pedido {id}");
+
+                // ✅ ACTUALIZAR ESTADO si se proporciona
+                if (!string.IsNullOrEmpty(actualizarDto.Estado))
+                {
+                    if (Enum.TryParse<EstadoPedido>(actualizarDto.Estado, true, out var nuevoEstado))
+                    {
+                        pedido.Estado = nuevoEstado;
+                        Console.WriteLine($"   Estado: {actualizarDto.Estado}");
+                    }
+                }
+
+                // ✅ ACTUALIZAR DETALLES si se proporcionan
+                if (actualizarDto.Detalles != null && actualizarDto.Detalles.Count > 0)
+                {
+                    Console.WriteLine($"   Actualizando {actualizarDto.Detalles.Count} detalles");
+
+                    // 1. Eliminar items marcados para eliminar
+                    var idsAEliminar = actualizarDto.Detalles
+                        .Where(d => d.Eliminar && d.Id.HasValue)
+                        .Select(d => d.Id.Value)
+                        .ToList();
+
+                    if (idsAEliminar.Any())
+                    {
+                        var detallesAEliminar = pedido.Detalles
+                            .Where(d => idsAEliminar.Contains(d.Id))
+                            .ToList();
+
+                        foreach (var detalle in detallesAEliminar)
+                        {
+                            _context.PedidoDetalles.Remove(detalle);
+                            Console.WriteLine($"   ❌ Eliminando item: {detalle.Id}");
+                        }
+                    }
+
+                    // 2. Actualizar items existentes
+                    var detallesParaActualizar = actualizarDto.Detalles
+                        .Where(d => !d.Eliminar && d.Id.HasValue)
+                        .ToList();
+
+                    foreach (var detalleDto in detallesParaActualizar)
+                    {
+                        var detalleExistente = pedido.Detalles
+                            .FirstOrDefault(d => d.Id == detalleDto.Id.Value);
+
+                        if (detalleExistente != null)
+                        {
+                            detalleExistente.Cantidad = detalleDto.Cantidad;
+                            detalleExistente.Nota = detalleDto.Nota;
+                            Console.WriteLine($"   🔄 Actualizando item {detalleDto.Id}: cantidad={detalleDto.Cantidad}");
+                        }
+                    }
+
+                    // 3. Agregar nuevos items
+                    var detallesNuevos = actualizarDto.Detalles
+                        .Where(d => !d.Eliminar && !d.Id.HasValue)
+                        .ToList();
+
+                    foreach (var detalleDto in detallesNuevos)
+                    {
+                        var nuevoDetalle = new PedidoDetalle
+                        {
+                            PedidoId = id,
+                            PlatilloId = detalleDto.PlatilloId,
+                            Cantidad = detalleDto.Cantidad,
+                            Nota = detalleDto.Nota ?? "",
+                            Estado = EstadoDetalle.Pendiente
+                        };
+
+                        pedido.Detalles.Add(nuevoDetalle);
+                        Console.WriteLine($"   ➕ Agregando nuevo item: PlatilloId={detalleDto.PlatilloId}");
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                Console.WriteLine($"✅ Pedido {id} actualizado exitosamente");
+
+                // Retornar el pedido actualizado
+                var pedidoActualizado = await _context.Pedidos
+                    .Include(p => p.Mesa)
+                    .Include(p => p.Detalles)
+                        .ThenInclude(d => d.Platillo)
+                    .FirstOrDefaultAsync(p => p.Id == id);
+
+                var pedidoDto = MapearPedidoADto(pedidoActualizado);
+                return Ok(pedidoDto);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error actualizando pedido {id}: {ex.Message}");
+                return StatusCode(500, $"Error al actualizar pedido: {ex.Message}");
+            }
         }
+        private PedidoDto MapearPedidoADto(Pedido pedido)
+        {
+            return new PedidoDto
+            {
+                Id = pedido.Id,
+                MesaId = pedido.MesaId,
+                MesaNumero = pedido.Mesa?.Numero ?? 0,
+                UsuarioId = pedido.UsuarioId,
+                Estado = pedido.Estado.ToString(),
+                Fecha = pedido.Fecha,
+                Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
+                {
+                    Id = d.Id,
+                    PlatilloId = d.PlatilloId,
+                    PlatilloNombre = d.Platillo?.Nombre ?? "Producto",
+                    Cantidad = d.Cantidad,
+                    Precio = d.Platillo?.Precio ?? 0,
+                    Nota = d.Nota,
+                    Estado = d.Estado.ToString()
+                }).ToList()
+            };
+        }
+
         [HttpPut("{id}/estado")]
         public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
         {

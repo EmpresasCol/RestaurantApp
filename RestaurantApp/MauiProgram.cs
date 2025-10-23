@@ -34,12 +34,14 @@ namespace RestaurantApp
             builder.Services.AddTransient<Views.NuevoPedidoView>();
             builder.Services.AddTransient<Views.PedidosActivosView>();
             builder.Services.AddTransient<Views.ConfiguracionView>();
+            builder.Services.AddTransient<Views.EditarPedidoView>();
 
             // Registrar ViewModels
             builder.Services.AddTransient<ViewModels.MeseroMainViewModel>();
             builder.Services.AddTransient<ViewModels.NuevoPedidoViewModel>();
             builder.Services.AddTransient<ViewModels.PedidosActivosViewModel>();
             builder.Services.AddTransient<ViewModels.ConfiguracionViewModel>();
+            builder.Services.AddTransient<ViewModels.EditarPedidoViewModel>();
 
 #if DEBUG
             builder.Logging.AddDebug();

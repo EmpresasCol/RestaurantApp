@@ -51,6 +51,7 @@ namespace RestaurantApp.Models
             get => _opacidadMesa;
             set => SetProperty(ref _opacidadMesa, value);
         }
+
         public int Id
         {
             get => _id;
@@ -138,16 +139,14 @@ namespace RestaurantApp.Models
         public string CapacidadTexto => $"👥{Capacidad}";
         public bool PuedeTomarPedido => Estado == EstadoMesa.Disponible || Estado == EstadoMesa.Ocupada;
 
+        // ✅ NUEVA PROPIEDAD: Permite seleccionar cualquier mesa para nuevo pedido
+        public bool EstaHabilitadaParaSeleccion => true; // Todas las mesas están habilitadas
+
         // Métodos
         private void ActualizarColorEstado()
         {
-            ColorEstado = Estado switch
-            {
-                EstadoMesa.Disponible => Colors.Green,
-                EstadoMesa.Ocupada => Colors.Orange,
-                EstadoMesa.EsperandoPago => Colors.Red,
-                _ => Colors.Gray
-            };
+            // ✅ TODAS LAS MESAS CON EL MISMO COLOR (Azul neutral)
+            ColorEstado = Color.FromArgb("#17A2B8");
 
             ActualizarVisualizacionSeleccion();
         }
@@ -180,6 +179,20 @@ namespace RestaurantApp.Models
             TiempoOcupada = null;
         }
 
+        private void ActualizarVisualizacionSeleccion()
+        {
+            if (EstaSeleccionada)
+            {
+                BorderColor = Colors.Blue;
+                OpacidadMesa = 1.0;
+            }
+            else
+            {
+                BorderColor = Colors.Transparent;
+                OpacidadMesa = 1.0; // ✅ CAMBIO: Opacidad siempre 1.0 para que todas sean visibles
+            }
+        }
+
         // INotifyPropertyChanged implementation
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -196,19 +209,6 @@ namespace RestaurantApp.Models
             backingStore = value;
             OnPropertyChanged(propertyName);
             return true;
-        }
-        private void ActualizarVisualizacionSeleccion()
-        {
-            if (EstaSeleccionada)
-            {
-                BorderColor = Colors.Blue;
-                OpacidadMesa = 1.0;
-            }
-            else
-            {
-                BorderColor = Colors.Transparent;
-                OpacidadMesa = Estado == EstadoMesa.Disponible ? 1.0 : 0.5;
-            }
         }
     }
 }

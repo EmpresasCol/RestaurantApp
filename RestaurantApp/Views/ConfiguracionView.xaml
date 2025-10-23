@@ -293,6 +293,16 @@
                         CornerRadius="10"
                         Padding="15"/>
 
+                <Button Text="🏠 Volver al Inicio"
+                        BackgroundColor="#007BFF"
+                        TextColor="White"
+                        FontSize="16"
+                        FontAttributes="Bold"
+                        CornerRadius="12"
+                        HeightRequest="50"
+                        Margin="0,10,0,0"
+                        Clicked="OnVolverInicioClicked"/>
+
                 <Button Text="🚪 Cerrar Sesión"
                         Command="{Binding CerrarSesionCommand}"
                         BackgroundColor="#ef4444"
@@ -302,8 +312,6 @@
                         Padding="15"/>
             </VerticalStackLayout>
 
-            <!-- Espaciado final -->
-            <BoxView HeightRequest="20" Color="Transparent"/>
 
         </VerticalStackLayout>
     </ScrollView>

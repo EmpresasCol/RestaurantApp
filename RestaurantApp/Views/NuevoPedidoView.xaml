@@ -19,59 +19,59 @@
 
         <!-- Header -->
         <Frame Grid.Row="0" 
-       BackgroundColor="#FF6B35" 
-       CornerRadius="0" 
-       Padding="20,15" 
-       HasShadow="True">
+               BackgroundColor="#FF6B35" 
+               CornerRadius="0" 
+               Padding="20,15" 
+               HasShadow="True">
             <Grid RowDefinitions="Auto,Auto" 
-          ColumnDefinitions="Auto,*,Auto,Auto">
+                  ColumnDefinitions="Auto,*,Auto,Auto">
 
                 <!-- BOTÓN VOLVER AL INICIO -->
                 <Button Grid.Row="0" 
-                Grid.Column="0"
-                Text="🏠"
-                BackgroundColor="Transparent"
-                TextColor="White"
-                FontSize="24"
-                WidthRequest="40"
-                HeightRequest="40"
-                Padding="0"
-                Margin="0,0,10,0"
-                Command="{Binding VolverInicioCommand}"/>
+                        Grid.Column="0"
+                        Text="🏠"
+                        BackgroundColor="Transparent"
+                        TextColor="White"
+                        FontSize="24"
+                        WidthRequest="40"
+                        HeightRequest="40"
+                        Padding="0"
+                        Margin="0,0,10,0"
+                        Command="{Binding VolverInicioCommand}"/>
 
                 <!-- Título -->
                 <Label Grid.Row="0" 
-               Grid.Column="1" 
-               Grid.ColumnSpan="3"
-               Text="Nuevo Pedido" 
-               FontSize="24" 
-               FontAttributes="Bold" 
-               TextColor="White"
-               Margin="0,0,0,10"/>
+                       Grid.Column="1" 
+                       Grid.ColumnSpan="3"
+                       Text="Nuevo Pedido" 
+                       FontSize="24" 
+                       FontAttributes="Bold" 
+                       TextColor="White"
+                       Margin="0,0,0,10"/>
 
                 <!-- Mesa Seleccionada -->
                 <Label Grid.Row="1" 
-               Grid.Column="1"
-               FontSize="14" 
-               TextColor="White"
-               VerticalOptions="Center">
+                       Grid.Column="1"
+                       FontSize="14" 
+                       TextColor="White"
+                       VerticalOptions="Center">
                     <Label.FormattedText>
                         <FormattedString>
                             <Span Text="Mesa: " />
                             <Span Text="{Binding MesaSeleccionada.Numero, FallbackValue='Sin seleccionar'}" 
-                          FontAttributes="Bold"/>
+                                  FontAttributes="Bold"/>
                         </FormattedString>
                     </Label.FormattedText>
                 </Label>
 
                 <!-- Resumen: Cantidad de items -->
                 <Frame Grid.Row="1" 
-               Grid.Column="2"
-               BackgroundColor="White"
-               Padding="10,8"
-               CornerRadius="8"
-               Margin="10,0"
-               HasShadow="False">
+                       Grid.Column="2"
+                       BackgroundColor="White"
+                       Padding="10,8"
+                       CornerRadius="8"
+                       Margin="10,0"
+                       HasShadow="False">
                     <Label TextColor="#FF6B35" FontAttributes="Bold">
                         <Label.FormattedText>
                             <FormattedString>
@@ -84,15 +84,15 @@
 
                 <!-- Resumen: Total -->
                 <Frame Grid.Row="1" 
-               Grid.Column="3"
-               BackgroundColor="White"
-               Padding="10,8"
-               CornerRadius="8"
-               HasShadow="False">
+                       Grid.Column="3"
+                       BackgroundColor="White"
+                       Padding="10,8"
+                       CornerRadius="8"
+                       HasShadow="False">
                     <Label Text="{Binding TotalPedido, StringFormat='${0:N0}'}"
-                   TextColor="#FF6B35"
-                   FontSize="16"
-                   FontAttributes="Bold"/>
+                           TextColor="#FF6B35"
+                           FontSize="16"
+                           FontAttributes="Bold"/>
                 </Frame>
             </Grid>
         </Frame>
@@ -166,20 +166,8 @@
                             </Label>
                         </Frame>
 
-                        <StackLayout Orientation="Horizontal" Spacing="15" HorizontalOptions="Center" Margin="0,15,0,0">
-                            <StackLayout Orientation="Horizontal" Spacing="5">
-                                <BoxView Color="Green" WidthRequest="15" HeightRequest="15" CornerRadius="3"/>
-                                <Label Text="Disponible" FontSize="11" TextColor="#666" VerticalOptions="Center"/>
-                            </StackLayout>
-                            <StackLayout Orientation="Horizontal" Spacing="5">
-                                <BoxView Color="Orange" WidthRequest="15" HeightRequest="15" CornerRadius="3"/>
-                                <Label Text="Ocupada" FontSize="11" TextColor="#666" VerticalOptions="Center"/>
-                            </StackLayout>
-                            <StackLayout Orientation="Horizontal" Spacing="5">
-                                <BoxView Color="Red" WidthRequest="15" HeightRequest="15" CornerRadius="3"/>
-                                <Label Text="Por pagar" FontSize="11" TextColor="#666" VerticalOptions="Center"/>
-                            </StackLayout>
-                        </StackLayout>
+                        <!-- ❌ LEYENDA DE COLORES ELIMINADA -->
+
                     </StackLayout>
                 </Frame>
 
@@ -216,7 +204,7 @@
                     </StackLayout>
                 </Frame>
 
-                <!-- PRODUCTOS DISPONIBLES - CÓDIGO CORREGIDO -->
+                <!-- PRODUCTOS DISPONIBLES -->
                 <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
                     <StackLayout>
                         <Grid ColumnDefinitions="*,Auto">
@@ -240,7 +228,6 @@
                         <CollectionView ItemsSource="{Binding PlatillosFiltrados}">
                             <CollectionView.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- LAYOUT CORREGIDO: Vertical en lugar de horizontal -->
                                     <Frame BackgroundColor="#FAFAFA" 
                                            CornerRadius="12" 
                                            Padding="15" 
@@ -442,20 +429,20 @@
             <StackLayout Spacing="10">
                 <!-- Mensaje de validación si no puede confirmar -->
                 <Label Text="⚠️ Selecciona una mesa y agrega productos para continuar"
-                   FontSize="12"
-                   TextColor="#DC3545"
-                   HorizontalOptions="Center"
-                   IsVisible="{Binding PuedeConfirmarPedido, Converter={StaticResource InverseBoolConverter}}"/>
+                       FontSize="12"
+                       TextColor="#DC3545"
+                       HorizontalOptions="Center"
+                       IsVisible="{Binding PuedeConfirmarPedido, Converter={StaticResource InverseBoolConverter}}"/>
 
                 <Button Text="Confirmar Pedido"
-                    BackgroundColor="#28A745"
-                    TextColor="White"
-                    FontSize="18"
-                    FontAttributes="Bold"
-                    CornerRadius="12"
-                    HeightRequest="55"
-                    IsEnabled="{Binding PuedeConfirmarPedido}"
-                    Command="{Binding ConfirmarPedidoCommand}"/>
+                        BackgroundColor="#28A745"
+                        TextColor="White"
+                        FontSize="18"
+                        FontAttributes="Bold"
+                        CornerRadius="12"
+                        HeightRequest="55"
+                        IsEnabled="{Binding PuedeConfirmarPedido}"
+                        Command="{Binding ConfirmarPedidoCommand}"/>
             </StackLayout>
         </Frame>
     </Grid>

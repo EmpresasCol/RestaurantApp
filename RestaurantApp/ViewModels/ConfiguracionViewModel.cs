@@ -53,25 +53,7 @@ namespace RestaurantApp.ViewModels
             set => SetProperty(ref _nombreMesero, value);
         }
 
-        // Configuración de la app
-        public string UrlServidor
-        {
-            get => ApiConfig.BaseUrl;
-            set
-            {
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    ApiConfig.ResetToDefault();
-                }
-                else
-                {
-                    ApiConfig.BaseUrl = value;
-                }
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(TextoUrlServidor));
-                _ = VerificarConexion(); // Verificar automáticamente
-            }
-        }
+
 
         public bool ModoOffline
         {
@@ -164,7 +146,6 @@ namespace RestaurantApp.ViewModels
             CerrarSesionCommand = new AsyncCommand(CerrarSesion);
             ResetearEstadisticasCommand = new AsyncCommand(ResetearEstadisticas);
             VerDiagnosticosCommand = new AsyncCommand(VerDiagnosticos);
-            ResetearUrlCommand = new AsyncCommand(ResetearUrl);
             VerificarConexionCommand = new AsyncCommand(VerificarConexion);
             VolverInicioCommand = new Command(async () => await Shell.Current.GoToAsync("//inicio"));
         }
@@ -323,24 +304,6 @@ namespace RestaurantApp.ViewModels
             await Application.Current.MainPage.DisplayAlert("Diagnósticos", diagnostico, "OK");
         }
 
-        private async Task ResetearUrl()
-        {
-            bool confirmar = await Application.Current.MainPage.DisplayAlert(
-                "Resetear URL",
-                $"¿Deseas restaurar la URL por defecto?\n\nURL actual: {ApiConfig.BaseUrl}\nURL por defecto: {(DeviceInfo.DeviceType == DeviceType.Virtual ? "10.0.2.2:5176" : "IP de tu PC")}",
-                "Sí, resetear",
-                "Cancelar"
-            );
-
-            if (confirmar)
-            {
-                ApiConfig.ResetToDefault();
-                OnPropertyChanged(nameof(UrlServidor));
-                OnPropertyChanged(nameof(TextoUrlServidor));
-                await Application.Current.MainPage.DisplayAlert("Éxito", "URL reseteada correctamente", "OK");
-                await VerificarConexion();
-            }
-        }
 
         private async Task VerificarConexion()
         {

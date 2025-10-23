@@ -1,4 +1,5 @@
 ﻿using RestaurantApp.Models;
+using RestaurantApp.Services;
 
 namespace RestaurantApp.Services
 {
@@ -34,6 +35,21 @@ namespace RestaurantApp.Services
         public async Task<Pedido> CrearPedidoAsync(CrearPedidoRequest request)
         {
             var pedido = await _httpService.PostAsync<PedidoDto>("api/Pedidos", request);
+            return ConvertirDtoAModelo(pedido);
+        }
+        public async Task<Pedido> ActualizarPedidoCompletoAsync(int pedidoId, CrearPedidoRequest request)
+        {
+            var data = new
+            {
+                Detalles = request.Detalles.Select(d => new
+                {
+                    PlatilloId = d.PlatilloId,
+                    Cantidad = d.Cantidad,
+                    Nota = d.Nota
+                }).ToList()
+            };
+
+            var pedido = await _httpService.PutAsync<PedidoDto>($"api/Pedidos/{pedidoId}/actualizar", data);
             return ConvertirDtoAModelo(pedido);
         }
 
@@ -106,43 +122,61 @@ namespace RestaurantApp.Services
 
             return pedido;
         }
+
+        public async Task<Pedido> ActualizarPedidoCompletoAsync(int id, ActualizarPedidoRequest request)
+        {
+            try
+            {
+                System.Diagnostics.Debug.WriteLine($"[PEDIDO] Actualizando pedido completo {id}");
+                System.Diagnostics.Debug.WriteLine($"[PEDIDO] Detalles: {request.Detalles?.Count ?? 0} items");
+
+                var response = await _httpService.PutAsync<PedidoDto>($"api/Pedidos/{id}", request);
+                return ConvertirDtoAModelo(response);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[PEDIDO] Error actualizando: {ex.Message}");
+                throw;
+            }
+        }
+
+        // ✅ DTOs ACTUALIZADOS
+        public class PedidoDto
+        {
+            public int Id { get; set; }
+            public int MesaId { get; set; }
+            public int MesaNumero { get; set; }
+            public MesaDto Mesa { get; set; }
+            public int UsuarioId { get; set; }
+            public string Estado { get; set; }
+            public DateTime Fecha { get; set; }
+            public List<PedidoDetalleDto> Detalles { get; set; }
+        }
+
+        public class PedidoDetalleDto
+        {
+            public int Id { get; set; }
+            public int PlatilloId { get; set; }
+            public string PlatilloNombre { get; set; }
+            public int Cantidad { get; set; }
+            public decimal Precio { get; set; }
+            public string Nota { get; set; }
+            public string Estado { get; set; }
+        }
+        public class ActualizarPedidoRequest
+        {
+            public List<ActualizarPedidoDetalleRequest> Detalles { get; set; }
+            public string Estado { get; set; }
+        }
+
+        public class ActualizarPedidoDetalleRequest
+        {
+            public int? Id { get; set; }  // null = nuevo item
+            public int PlatilloId { get; set; }
+            public int Cantidad { get; set; }
+            public string Nota { get; set; }
+            public bool Eliminar { get; set; }  // true = eliminar este item
+        }
     }
 
-    // ✅ DTOs ACTUALIZADOS
-    public class PedidoDto
-    {
-        public int Id { get; set; }
-        public int MesaId { get; set; }
-        public int MesaNumero { get; set; }
-        public MesaDto Mesa { get; set; }
-        public int UsuarioId { get; set; }
-        public string Estado { get; set; }
-        public DateTime Fecha { get; set; }
-        public List<PedidoDetalleDto> Detalles { get; set; }
-    }
-
-    public class PedidoDetalleDto
-    {
-        public int Id { get; set; }
-        public int PlatilloId { get; set; }
-        public string PlatilloNombre { get; set; }
-        public int Cantidad { get; set; }
-        public decimal Precio { get; set; }
-        public string Nota { get; set; }
-        public string Estado { get; set; }
-    }
-
-    public class CrearPedidoRequest
-    {
-        public int MesaId { get; set; }
-        public int UsuarioId { get; set; }
-        public List<CrearPedidoDetalleRequest> Detalles { get; set; }
-    }
-
-    public class CrearPedidoDetalleRequest
-    {
-        public int PlatilloId { get; set; }
-        public int Cantidad { get; set; }
-        public string Nota { get; set; }
-    }
 }

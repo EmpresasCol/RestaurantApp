@@ -169,17 +169,24 @@ namespace RestaurantApp.ViewModels
         {
             if (pedido == null) return;
 
-            // Verificar que se pueda editar
-            if (!pedido.PuedeEditar)
+            var tiempoTranscurrido = DateTime.Now - pedido.FechaHora;
+            if (tiempoTranscurrido.TotalMinutes > 5)
             {
                 await Application.Current.MainPage.DisplayAlert("No permitido",
-                    "Solo se pueden editar pedidos en los primeros 5 minutos después de creados", "OK");
+                    "No se puede editar un pedido después de 5 minutos de creado", "OK");
                 return;
             }
 
-            // TODO: Implementar navegación a edición
-            await Application.Current.MainPage.DisplayAlert("Editar",
-                $"Función de edición para pedido #{pedido.Id}\n(Por implementar)", "OK");
+            if (pedido.Estado != EstadoPedido.EnProceso)
+            {
+                await Application.Current.MainPage.DisplayAlert("No permitido",
+                    "Solo se pueden editar pedidos en proceso", "OK");
+                return;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[NAVEGACIÓN] Editando pedido ID: {pedido.Id}");
+
+            await Shell.Current.GoToAsync($"editarpedido?id={pedido.Id}");
         }
 
         // ENTREGAR: Después de 5 minutos de EnProceso

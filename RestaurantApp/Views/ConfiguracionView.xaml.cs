@@ -19,5 +19,9 @@ namespace RestaurantApp.Views
             base.OnAppearing();
             _viewModel.CargarConfiguracionPorDefecto();
         }
+        private async void OnVolverInicioClicked(object sender, EventArgs e)
+        {
+            await Shell.Current.GoToAsync("//inicio");
+        }
     }
 }

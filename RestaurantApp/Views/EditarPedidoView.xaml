@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage x:Class="RestaurantApp.Views.EditarPedidoView"
+             xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:converters="clr-namespace:RestaurantApp.Converters"
+             Title="Editar Pedido"
+             BackgroundColor="#F8F9FA">
+
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <converters:IntToBoolConverter x:Key="IntToBoolConverter"/>
+            <converters:IntToBoolInverseConverter x:Key="IntToBoolInverseConverter"/>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- Header -->
+        <Frame Grid.Row="0" 
+               BackgroundColor="#FF6B35" 
+               CornerRadius="0" 
+               Padding="20" 
+               HasShadow="True">
+            <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto">
+
+                <!-- Título y número de pedido -->
+                <Label Grid.Row="0" Grid.Column="0"
+                       Text="{Binding NumeroPedido}" 
+                       FontSize="24" 
+                       FontAttributes="Bold" 
+                       TextColor="White"/>
+
+                <!-- Mesa -->
+                <Label Grid.Row="1" Grid.Column="0"
+                       Text="{Binding MesaInfo}"
+                       FontSize="14" 
+                       TextColor="White"
+                       Opacity="0.9"/>
+
+                <!-- Resumen del pedido -->
+                <Frame Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                       BackgroundColor="White" 
+                       CornerRadius="12" 
+                       Padding="15"
+                       VerticalOptions="Center">
+                    <Label FontSize="14" TextColor="#FF6B35" FontAttributes="Bold" HorizontalOptions="Center">
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span Text="{Binding TotalItems}" FontSize="18"/>
+                                <Span Text=" items&#x0a;"/>
+                                <Span Text="$"/>
+                                <Span Text="{Binding TotalPedido, StringFormat='{0:N0}'}" FontSize="18"/>
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+                </Frame>
+            </Grid>
+        </Frame>
+
+        <!-- Contenido Principal -->
+        <ScrollView Grid.Row="1">
+            <StackLayout Padding="20" Spacing="15">
+
+                <!-- Items del Pedido Actual -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="🛒 Items del Pedido" 
+                               FontSize="18" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <Label Text="No hay items en el pedido"
+                               FontSize="14"
+                               TextColor="#999"
+                               HorizontalTextAlignment="Center"
+                               Padding="20"
+                               IsVisible="{Binding ItemsPedido.Count, Converter={StaticResource IntToBoolInverseConverter}}"/>
+
+                        <CollectionView ItemsSource="{Binding ItemsPedido}"
+                                      IsVisible="{Binding ItemsPedido.Count, Converter={StaticResource IntToBoolConverter}}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Frame BackgroundColor="#FAFAFA" 
+                                           CornerRadius="12" 
+                                           Padding="15" 
+                                           Margin="0,5"
+                                           HasShadow="False">
+                                        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
+
+                                            <!-- Nombre del platillo -->
+                                            <Label Grid.Row="0" Grid.Column="0"
+                                                   Text="{Binding Platillo.Nombre}" 
+                                                   FontAttributes="Bold"
+                                                   FontSize="16"
+                                                   TextColor="#333"/>
+
+                                            <!-- Precio unitario -->
+                                            <Label Grid.Row="1" Grid.Column="0"
+                                                   Text="{Binding PrecioUnitario, StringFormat='${0:N0} c/u'}" 
+                                                   FontSize="12"
+                                                   TextColor="#666"
+                                                   Margin="0,2,0,0"/>
+
+                                            <!-- Controles de cantidad -->
+                                            <HorizontalStackLayout Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                                                                 Spacing="10"
+                                                                 VerticalOptions="Center">
+
+                                                <Button Text="-"
+                                                        BackgroundColor="#DC3545"
+                                                        TextColor="White"
+                                                        FontSize="18"
+                                                        FontAttributes="Bold"
+                                                        WidthRequest="40"
+                                                        HeightRequest="40"
+                                                        CornerRadius="20"
+                                                        Padding="0"
+                                                        Command="{Binding BindingContext.DisminuirCantidadCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                        CommandParameter="{Binding}"/>
+
+                                                <Label Text="{Binding Cantidad}"
+                                                       FontSize="20"
+                                                       FontAttributes="Bold"
+                                                       TextColor="#333"
+                                                       VerticalOptions="Center"
+                                                       WidthRequest="30"
+                                                       HorizontalTextAlignment="Center"/>
+
+                                                <Button Text="+"
+                                                        BackgroundColor="#28A745"
+                                                        TextColor="White"
+                                                        FontSize="18"
+                                                        FontAttributes="Bold"
+                                                        WidthRequest="40"
+                                                        HeightRequest="40"
+                                                        CornerRadius="20"
+                                                        Padding="0"
+                                                        Command="{Binding BindingContext.AumentarCantidadCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </HorizontalStackLayout>
+
+                                            <!-- Subtotal y botón eliminar -->
+                                            <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                  ColumnDefinitions="*,Auto"
+                                                  Margin="0,10,0,0">
+
+                                                <Label Grid.Column="0"
+                                                       Text="{Binding Subtotal, StringFormat='Subtotal: ${0:N0}'}" 
+                                                       FontAttributes="Bold"
+                                                       FontSize="14"
+                                                       TextColor="#FF6B35"
+                                                       VerticalOptions="Center"/>
+
+                                                <Button Grid.Column="1"
+                                                        Text="🗑️"
+                                                        BackgroundColor="Transparent"
+                                                        TextColor="#DC3545"
+                                                        FontSize="20"
+                                                        WidthRequest="50"
+                                                        Command="{Binding BindingContext.EliminarItemCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Agregar Platillos -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="➕ Agregar Platillos" 
+                               FontSize="18" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,15"/>
+
+                        <!-- Categorías -->
+                        <Label Text="Categorías" 
+                               FontSize="14" 
+                               FontAttributes="Bold" 
+                               TextColor="#666"
+                               Margin="0,0,0,10"/>
+
+                        <CollectionView ItemsSource="{Binding Categorias}"
+                                      SelectedItem="{Binding CategoriaSeleccionada}"
+                                      SelectionMode="Single">
+                            <CollectionView.ItemsLayout>
+                                <LinearItemsLayout Orientation="Horizontal" ItemSpacing="10"/>
+                            </CollectionView.ItemsLayout>
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Text="{Binding Nombre}"
+                                            BackgroundColor="{Binding ColorFondo}"
+                                            TextColor="White"
+                                            FontSize="14"
+                                            FontAttributes="Bold"
+                                            CornerRadius="20"
+                                            Padding="20,12"
+                                            Command="{Binding BindingContext.SeleccionarCategoriaCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                            CommandParameter="{Binding}"/>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+
+                        <!-- Platillos -->
+                        <Label Text="Platillos Disponibles" 
+                               FontSize="14" 
+                               FontAttributes="Bold" 
+                               TextColor="#666"
+                               Margin="0,20,0,10"/>
+
+                        <CollectionView ItemsSource="{Binding PlatillosFiltrados}">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Frame BackgroundColor="#F8F9FA" 
+                                           CornerRadius="12" 
+                                           Padding="15" 
+                                           Margin="0,5"
+                                           HasShadow="False">
+                                        <Grid ColumnDefinitions="*,Auto">
+
+                                            <StackLayout Grid.Column="0">
+                                                <Label Text="{Binding Nombre}" 
+                                                       FontAttributes="Bold"
+                                                       FontSize="16"
+                                                       TextColor="#333"/>
+                                                <Label Text="{Binding Descripcion}" 
+                                                       FontSize="12"
+                                                       TextColor="#666"
+                                                       LineBreakMode="TailTruncation"
+                                                       MaxLines="2"
+                                                       Margin="0,2,0,0"/>
+                                                <Label Text="{Binding PrecioFormateado}" 
+                                                       FontAttributes="Bold"
+                                                       FontSize="14"
+                                                       TextColor="#FF6B35"
+                                                       Margin="0,5,0,0"/>
+                                            </StackLayout>
+
+                                            <Button Grid.Column="1"
+                                                    Text="+"
+                                                    BackgroundColor="#28A745"
+                                                    TextColor="White"
+                                                    FontSize="24"
+                                                    FontAttributes="Bold"
+                                                    WidthRequest="50"
+                                                    HeightRequest="50"
+                                                    CornerRadius="25"
+                                                    Padding="0"
+                                                    VerticalOptions="Center"
+                                                    Command="{Binding BindingContext.AgregarPlatilloCommand, Source={RelativeSource AncestorType={x:Type ContentPage}}}"
+                                                    CommandParameter="{Binding}"/>
+                                        </Grid>
+                                    </Frame>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </StackLayout>
+                </Frame>
+
+                <!-- Notas Especiales -->
+                <Frame BackgroundColor="White" CornerRadius="12" Padding="20" HasShadow="True">
+                    <StackLayout>
+                        <Label Text="📝 Notas Especiales" 
+                               FontSize="16" 
+                               FontAttributes="Bold" 
+                               TextColor="#333"
+                               Margin="0,0,0,10"/>
+
+                        <Editor Text="{Binding NotasEspeciales}"
+                                Placeholder="Notas adicionales..."
+                                HeightRequest="100"
+                                BackgroundColor="#F8F9FA"/>
+                    </StackLayout>
+                </Frame>
+
+            </StackLayout>
+        </ScrollView>
+
+        <!-- Botones de Acción -->
+        <Grid Grid.Row="2" 
+              ColumnDefinitions="*,*"
+              Padding="20"
+              ColumnSpacing="10"
+              BackgroundColor="White">
+
+            <Button Grid.Column="0"
+                    Text="Cancelar"
+                    BackgroundColor="#6C757D"
+                    TextColor="White"
+                    FontSize="16"
+                    FontAttributes="Bold"
+                    CornerRadius="12"
+                    HeightRequest="50"
+                    Command="{Binding CancelarCommand}"/>
+
+            <Button Grid.Column="1"
+                    Text="Guardar"
+                    BackgroundColor="#28A745"
+                    TextColor="White"
+                    FontSize="16"
+                    FontAttributes="Bold"
+                    CornerRadius="12"
+                    HeightRequest="50"
+                    Command="{Binding GuardarCommand}"
+                    IsEnabled="{Binding PuedeGuardar}"/>
+        </Grid>
+
+    </Grid>
+</ContentPage>
