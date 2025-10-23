@@ -217,7 +217,8 @@ function Login() {
               </div>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}?cocina=true`);
+                  const enlace = `${window.location.origin}/RestaurantApp/?cocina=true`;
+                  navigator.clipboard.writeText(enlace);
                   alert('✅ Enlace copiado al portapapeles');
                 }}
                 className="w-full text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 py-2 rounded-lg font-medium transition-colors"
