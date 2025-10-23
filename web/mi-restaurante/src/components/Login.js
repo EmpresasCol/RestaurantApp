@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { LogIn, Lock, User, AlertCircle, Smartphone, ChefHat, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import logo from './logo.jpg';
+
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -39,7 +41,11 @@ function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-lg mb-4">
-            <span className="text-4xl">🍽️</span>
+          <img
+            src={logo}
+            alt="Logo del restaurante"
+            className="w-16 h-16 object-contain rounded-full"/>
+
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">Restaurante Délice</h1>
           <p className="text-orange-100">Sistema de Gestión</p>

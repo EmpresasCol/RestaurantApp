@@ -1,6 +1,5 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || 'https://9fdbc4b0ad94.ngrok-free.app/api'; // https://localhost:7137/api
-https://9fdbc4b0ad94.ngrok-free.app
+const API_URL = process.env.REACT_APP_API_URL || 'https://1d47ee1b6742.ngrok-free.app/api'; // https://localhost:7137/api
 console.log('🌐 API URL configurada:', API_URL);
 
 // ✅ Función auxiliar para hacer fetch con headers de ngrok
