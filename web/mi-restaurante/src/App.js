@@ -13,6 +13,7 @@ import GestionUsuarios from './GestionUsuarios';
 import Cocina from './Cocina'; 
 
 function AppContent() {
+  const [errorNota, setErrorNota] = useState(null);
   const { usuario, esClienteQR, estaAutenticado, logout, cargando: cargandoAuth } = useAuth();
   const [vistaActual, setVistaActual] = useState('menu');
   const [carrito, setCarrito] = useState([]);
@@ -424,35 +425,68 @@ const cargarPedidos = async () => {
           </div>
         )}
 
-        {modalNota && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6">
-              <h3 className="text-xl font-bold mb-4">{modalNota.nombre}</h3>
-              <label className="block text-sm font-medium mb-2">Nota para cocina (opcional)</label>
-              <textarea
-                value={notaTemp}
-                onChange={(e) => setNotaTemp(e.target.value)}
-                placeholder="Ej: Sin cebolla"
-                className="w-full border rounded-lg p-3 resize-none"
-                rows="3"
-              />
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={() => setModalNota(null)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 py-2 rounded-lg font-semibold"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={agregarAlCarritoConNota}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg font-semibold"
-                >
-                  Agregar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+{modalNota && (
+  
+  <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="bg-white rounded-2xl max-w-md w-full p-6">
+      <h3 className="text-xl font-bold mb-4">{modalNota.nombre}</h3>
+      <label className="block text-sm font-medium mb-2">
+        Nota para cocina (opcional)
+      </label>
+
+      <textarea
+        value={notaTemp}
+        onChange={(e) => setNotaTemp(e.target.value)}
+        placeholder="Ej: Sin cebolla"
+        className="w-full border rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
+        rows="3"
+      />
+
+      {/* Mensaje de error */}
+      {errorNota && (
+        <p className="text-red-600 text-sm mt-2">{errorNota}</p>
+      )}
+
+      <div className="flex gap-3 mt-4">
+        <button
+          onClick={() => {
+            setModalNota(null);
+            setErrorNota(null);
+          }}
+          className="flex-1 bg-gray-200 hover:bg-gray-300 py-2 rounded-lg font-semibold"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={() => {
+            const texto = notaTemp.trim();
+
+            if (texto.length > 0) {
+              if (texto.length > 50) {
+                setErrorNota("La nota no puede superar los 50 caracteres.");
+                return;
+              }
+
+              // Solo letras, números y signos básicos
+              const regex = /^[a-zA-ZáéíóúüñÁÉÍÓÚÜÑ ,.!?()-]*$/;
+              if (!regex.test(texto)) {
+                setErrorNota("La nota contiene caracteres inválidos.");
+                return;
+              }
+            }
+
+            setErrorNota(null);
+            agregarAlCarritoConNota();
+          }}
+          className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg font-semibold"
+        >
+          Agregar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
         {modalConfirmacion && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">

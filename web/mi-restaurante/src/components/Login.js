@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { LogIn, Lock, User, AlertCircle, Smartphone, ChefHat, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import logo from './logo.jpg';
+
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -39,7 +41,11 @@ function Login() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-lg mb-4">
-            <span className="text-4xl">🍽️</span>
+          <img
+            src={logo}
+            alt="Logo del restaurante"
+            className="w-16 h-16 object-contain rounded-full"/>
+
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">Restaurante Délice</h1>
           <p className="text-orange-100">Sistema de Gestión</p>
@@ -204,13 +210,15 @@ function Login() {
                 🔗 Usa este enlace en la tablet/pantalla de cocina:
               </p>
               <div className="bg-white border border-orange-300 rounded-lg p-3 mb-2">
-                <code className="text-xs text-gray-700 break-all">
-                  {window.location.origin}?cocina=true
-                </code>
+              <code className="text-xs text-gray-700 break-all">
+                {`${window.location.origin}/RestaurantApp/?cocina=true`}
+              </code>
+
               </div>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}?cocina=true`);
+                  const enlace = `${window.location.origin}/RestaurantApp/?cocina=true`;
+                  navigator.clipboard.writeText(enlace);
                   alert('✅ Enlace copiado al portapapeles');
                 }}
                 className="w-full text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 py-2 rounded-lg font-medium transition-colors"
