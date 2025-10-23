@@ -80,16 +80,13 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
   const mesasUnicas = [...new Set(pedidos.map(p => p.mesa))].sort((a, b) => a - b);
 
   const pedidosFiltrados = pedidos
-    .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
-    .filter(pedido => {
-      // Si el usuario no puede filtrar (rol Cocina), mostrar todas las mesas
-      if (!puedeFiltrarMesas()) {
-        return true;
-      }
-      // Si puede filtrar (Admin/Caja), aplicar el filtro seleccionado
-      if (filtroMesa === 'todas') return true;
-      return pedido.mesa.toString() === filtroMesa;
-    });
+  .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
+  .filter(pedido => {
+    if (!puedeFiltrarMesas()) return true;
+    if (filtroMesa === 'todas') return true;
+    return pedido.mesa.toString() === filtroMesa;
+  })
+  .sort((a, b) => new Date(a.hora) - new Date(b.hora));
 
   const getEstadoColor = (estado) => {
     switch (estado) {
