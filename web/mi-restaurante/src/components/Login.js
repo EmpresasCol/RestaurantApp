@@ -210,9 +210,10 @@ function Login() {
                 🔗 Usa este enlace en la tablet/pantalla de cocina:
               </p>
               <div className="bg-white border border-orange-300 rounded-lg p-3 mb-2">
-                <code className="text-xs text-gray-700 break-all">
-                  {window.location.origin}?cocina=true
-                </code>
+              <code className="text-xs text-gray-700 break-all">
+                {`${window.location.origin}/RestaurantApp/?cocina=true`}
+              </code>
+
               </div>
               <button
                 onClick={() => {
