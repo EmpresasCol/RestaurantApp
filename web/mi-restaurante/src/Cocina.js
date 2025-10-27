@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, ChefHat, Clock, CheckCircle, Package } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import * as api from './services/api';
+import VoiceControlCocina from './components/VoiceControlCocina'; // ✅ NUEVO IMPORT
 
 function Cocina({ pedidos = [], onActualizarPedidos }) {
   const { usuario } = useAuth();
@@ -62,6 +63,12 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
     }
   };
 
+  // ✅ NUEVA FUNCIÓN: Marcar pedido como listo (para control por voz)
+  const marcarPedidoListoPorVoz = async (pedidoId) => {
+    console.log(`🎤 Control por voz: Marcando pedido ${pedidoId} como listo`);
+    await cambiarEstadoPedido(pedidoId, 'Listo');
+  };
+
   const confirmarCambioEstado = (pedidoId, nuevoEstado, numeroMesa) => {
     setModalConfirmacion({
       tipo: 'confirmar',
@@ -80,13 +87,13 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
   const mesasUnicas = [...new Set(pedidos.map(p => p.mesa))].sort((a, b) => a - b);
 
   const pedidosFiltrados = pedidos
-  .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
-  .filter(pedido => {
-    if (!puedeFiltrarMesas()) return true;
-    if (filtroMesa === 'todas') return true;
-    return pedido.mesa.toString() === filtroMesa;
-  })
-  .sort((a, b) => new Date(a.hora) - new Date(b.hora));
+    .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
+    .filter(pedido => {
+      if (!puedeFiltrarMesas()) return true;
+      if (filtroMesa === 'todas') return true;
+      return pedido.mesa.toString() === filtroMesa;
+    })
+    .sort((a, b) => new Date(a.hora) - new Date(b.hora));
 
   const getEstadoColor = (estado) => {
     switch (estado) {
@@ -136,50 +143,38 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-gray-800 p-6 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-300">Total de Órdenes</p>
-                <p className="text-3xl font-bold text-white">{pedidosFiltrados.length}</p>
-              </div>
-              <ChefHat className="text-orange-500" size={32} />
-            </div>
-          </div>
-          
-          <div className="bg-gray-800 p-6 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-300">Mesas Activas</p>
-                <p className="text-3xl font-bold text-white">{mesasUnicas.length}</p>
-              </div>
-              <Users className="text-blue-500" size={32} />
-            </div>
-          </div>
-        </div>
-
-        {/* Filtros de Mesa - Solo para Administrador y Caja */}
-        {pedidos.length > 0 && puedeFiltrarMesas() && (
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {puedeFiltrarMesas() && mesasUnicas.length > 0 && (
+          <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => setFiltroMesa('todas')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                filtroMesa === 'todas' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap ${
+                filtroMesa === 'todas'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              Todas las Mesas
+              Todas las Mesas ({pedidos.filter(p => p.estado !== 'Pagado' && p.estado !== 'Cancelado').length})
             </button>
-            {mesasUnicas.map(mesa => (
-              <button 
-                key={mesa} 
-                onClick={() => setFiltroMesa(mesa.toString())}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                  filtroMesa === mesa.toString() ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Mesa {mesa}
-              </button>
-            ))}
+            {mesasUnicas.map(mesa => {
+              const pedidosMesa = pedidos.filter(p => 
+                p.mesa === mesa && 
+                p.estado !== 'Pagado' && 
+                p.estado !== 'Cancelado'
+              );
+              return (
+                <button
+                  key={mesa}
+                  onClick={() => setFiltroMesa(mesa.toString())}
+                  className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap ${
+                    filtroMesa === mesa.toString()
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Mesa {mesa} ({pedidosMesa.length})
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -265,7 +260,6 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                             {cargandoEstado === pedido.id ? 'Procesando...' : 'Marcar Listo'}
                           </button>
                         )}
-                        
                         {pedido.estado === 'Listo' && (
                           <button
                             onClick={() => confirmarCambioEstado(pedido.id, 'Entregado', pedido.mesa)}
@@ -295,6 +289,12 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
           </div>
         )}
       </div>
+
+      {/* ✅ NUEVO: Componente de Control por Voz */}
+      <VoiceControlCocina 
+        pedidos={pedidosFiltrados}
+        onMarcarListo={marcarPedidoListoPorVoz}
+      />
 
       {/* Modal de Confirmación */}
       {modalConfirmacion && modalConfirmacion.tipo === 'confirmar' && (

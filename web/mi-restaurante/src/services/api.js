@@ -1,5 +1,5 @@
 // src/services/api.js
-const API_URL = process.env.REACT_APP_API_URL || 'https://705e32771f5f.ngrok-free.app/api'; 
+const API_URL = process.env.REACT_APP_API_URL || 'https://21ef6a54f660.ngrok-free.app/api'; 
 console.log('🌐 API URL configurada:', API_URL);
 
 // ✅ Función auxiliar para hacer fetch con headers de ngrok
@@ -438,19 +438,29 @@ export const deleteUsuario = async (id) => {
 };
 
 //estado pedido cocina
-
 export const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
-  const response = await fetch(`${API_URL}/pedidos/${pedidoId}/estado`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ estado: nuevoEstado })
-  });
+  try {
+    console.log(`🔄 [VOZ] Actualizando pedido ${pedidoId} → ${nuevoEstado}`);
+    console.log(`📍 URL: ${API_URL}/pedidos/${pedidoId}/estado`);
+    
+    const response = await fetchWithHeaders(`${API_URL}/pedidos/${pedidoId}/estado`, {
+      method: 'PUT',
+      body: JSON.stringify({ estado: nuevoEstado })
+    });
 
-  if (!response.ok) {
-    throw new Error('Error al actualizar estado del pedido');
+    console.log(`📡 [VOZ] Status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [VOZ] Error del servidor: ${errorText}`);
+      throw new Error(`Error al actualizar estado del pedido: ${errorText}`);
+    }
+
+    const resultado = await response.json();
+    console.log('✅ [VOZ] Pedido actualizado:', resultado);
+    return resultado;
+  } catch (error) {
+    console.error('❌ [VOZ] Error en actualizarEstadoPedido:', error);
+    throw error;
   }
-
-  return await response.json();
 };
