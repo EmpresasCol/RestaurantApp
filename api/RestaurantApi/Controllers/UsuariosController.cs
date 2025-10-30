@@ -87,6 +87,54 @@ namespace RestaurantApi.Controllers
                 return StatusCode(500, new { message = $"Error en el servidor: {ex.Message}" });
             }
         }
+
+        [HttpPost("{id}/fcm-token")]
+        public async Task<IActionResult> RegistrarTokenFCM(int id, [FromBody] TokenFCMDto dto)
+        {
+            try
+            {
+                var usuario = await _context.Usuarios.FindAsync(id);
+                if (usuario == null)
+                    return NotFound("Usuario no encontrado");
+
+                // Verificar si el token ya existe
+                var tokenExistente = await _context.UsuariosFCM
+                    .FirstOrDefaultAsync(u => u.UsuarioId == id && u.FcmToken == dto.FcmToken);
+
+                if (tokenExistente == null)
+                {
+                    // Registrar nuevo token
+                    var nuevoToken = new UsuarioFCM
+                    {
+                        UsuarioId = id,
+                        FcmToken = dto.FcmToken,
+                        FechaRegistro = DateTime.Now
+                    };
+
+                    _context.UsuariosFCM.Add(nuevoToken);
+                    await _context.SaveChangesAsync();
+
+                    Console.WriteLine($"✅ Token FCM registrado para usuario {id}");
+                }
+                else
+                {
+                    Console.WriteLine($"ℹ️ Token FCM ya existe para usuario {id}");
+                }
+
+                return Ok(new { message = "Token registrado correctamente" });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error registrando token: {ex.Message}");
+                return StatusCode(500, new { message = $"Error: {ex.Message}" });
+            }
+        }
+
+        // DTO
+        public class TokenFCMDto
+        {
+            public string FcmToken { get; set; }
+        }
         [HttpPost("login-mobile")]
         public async Task<ActionResult<LoginResponseDto>> LoginMobile(LoginRequestDto request)
         {

@@ -2,6 +2,7 @@
 {
     public class CrearPedidoDto
     {
+        public int UsuarioId { get; set; }
         public int MesaId { get; set; }
         public List<CrearDetalleDto> Detalles { get; set; } = new();
     }

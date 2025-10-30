@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 
 namespace RestaurantApi
@@ -14,6 +15,7 @@ namespace RestaurantApi
         public DbSet<PedidoDetalle> PedidoDetalles { get; set; }
         public DbSet<Pago> Pagos { get; set; }
         public DbSet<Factura> Facturas { get; set; }
+        public DbSet<UsuarioFCM> UsuariosFCM { get; set; } 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

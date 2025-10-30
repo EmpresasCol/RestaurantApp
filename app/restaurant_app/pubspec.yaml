@@ -1,5 +1,5 @@
 name: restaurant_app
-description: App móvil para meseros - Restaurante Délice
+description: Qpro - App móvil para meseros
 version: 1.0.0+1
 
 environment:
@@ -9,19 +9,19 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # Estado
   provider: ^6.1.1
-  
-  # HTTP
   http: ^1.1.0
-  
-  # UI
   google_fonts: ^6.1.0
-  flutter_svg: ^2.0.9
-  
-  # Utilidades
   intl: ^0.19.0
   shared_preferences: ^2.2.2
+  
+  # Firebase para notificaciones
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.9
+
+  # Vibración y sonido
+  audioplayers: ^5.2.1
+
 
 dev_dependencies:
   flutter_test:
@@ -30,3 +30,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  

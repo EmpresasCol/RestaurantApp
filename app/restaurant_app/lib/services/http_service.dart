@@ -5,40 +5,40 @@ import '../config/api_config.dart';
 class HttpService {
   Future<T> get<T>(String endpoint, T Function(dynamic) fromJson) async {
     try {
-      print('🌐 GET: ${ApiConfig.apiUrl}/$endpoint');
-      
       final response = await http.get(
         Uri.parse('${ApiConfig.apiUrl}/$endpoint'),
         headers: {'Content-Type': 'application/json; charset=UTF-8'},
-      ).timeout(const Duration(seconds: 10));  // ✅ Timeout
-
-      print('📥 Response status: ${response.statusCode}');
-      print('📥 Response body: ${response.body}');
+      );
 
       if (response.statusCode == 200) {
-        final decoded = json.decode(utf8.decode(response.bodyBytes));
-        return fromJson(decoded);
+        return fromJson(json.decode(utf8.decode(response.bodyBytes)));
       }
-      throw Exception('Error HTTP ${response.statusCode}: ${response.body}');
+      throw Exception('Error: ${response.statusCode}');
     } catch (e) {
-      print('❌ Error en GET $endpoint: $e');
       throw Exception('Error de conexión: $e');
     }
   }
 
   Future<T> post<T>(String endpoint, Map<String, dynamic> data, T Function(dynamic) fromJson) async {
     try {
+      print('🌐 POST: ${ApiConfig.apiUrl}/$endpoint');
+      print('📤 Data: ${json.encode(data)}');
+      
       final response = await http.post(
         Uri.parse('${ApiConfig.apiUrl}/$endpoint'),
         headers: {'Content-Type': 'application/json; charset=UTF-8'},
         body: json.encode(data),
       );
 
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         return fromJson(json.decode(utf8.decode(response.bodyBytes)));
       }
-      throw Exception('Error: ${response.statusCode}');
+      throw Exception('Error: ${response.statusCode} - ${response.body}');
     } catch (e) {
+      print('❌ Error en POST: $e');
       throw Exception('Error de conexión: $e');
     }
   }

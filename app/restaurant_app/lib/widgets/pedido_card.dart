@@ -38,7 +38,7 @@ class PedidoCard extends StatelessWidget {
       case EstadoPedido.enProceso:
         return 'En Proceso';
       case EstadoPedido.listo:
-        return 'Listo';
+        return '🔔 Listo para Entregar';  // ✅ Indicador visual
       case EstadoPedido.entregado:
         return 'Entregado';
       case EstadoPedido.pagado:
@@ -48,14 +48,32 @@ class PedidoCard extends StatelessWidget {
     }
   }
 
+  IconData _getIconoEstado() {
+    switch (pedido.estado) {
+      case EstadoPedido.enProceso:
+        return Icons.schedule;
+      case EstadoPedido.listo:
+        return Icons.notifications_active;  // ✅ Icono de notificación
+      case EstadoPedido.entregado:
+        return Icons.check_circle;
+      case EstadoPedido.pagado:
+        return Icons.attach_money;
+      case EstadoPedido.cancelado:
+        return Icons.cancel;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 4,
+      elevation: pedido.estado == EstadoPedido.listo ? 8 : 4,  // ✅ Más elevación si está listo
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: _getColorEstado(), width: 2),
+        side: BorderSide(
+          color: _getColorEstado(),
+          width: pedido.estado == EstadoPedido.listo ? 3 : 2,  // ✅ Borde más grueso
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,20 +113,30 @@ class PedidoCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _getColorEstado(),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    _getTextoEstado(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                Row(
+                  children: [
+                    Icon(
+                      _getIconoEstado(),
+                      color: _getColorEstado(),
+                      size: pedido.estado == EstadoPedido.listo ? 24 : 20,
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _getColorEstado(),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _getTextoEstado(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -125,23 +153,49 @@ class PedidoCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 ...pedido.detalles.map((item) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              '${item.cantidad}x ${item.platilloNombre}',
-                              style: const TextStyle(fontSize: 14),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${item.cantidad}x ${item.platilloNombre}',
+                                  style: const TextStyle(fontSize: 14),
+                                ),
+                              ),
+                              Text(
+                                NumberFormat.currency(symbol: '\$', decimalDigits: 0)
+                                    .format(item.precio * item.cantidad),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            NumberFormat.currency(symbol: '\$', decimalDigits: 0)
-                                .format(item.precio * item.cantidad),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
+                          if (item.nota != null && item.nota!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '📝 ${item.nota}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue[900],
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     )),
@@ -184,20 +238,23 @@ class PedidoCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (onEditar != null)
+                  // ✅ EDITAR: Solo si está en proceso y no han pasado 5 minutos
+                  if (onEditar != null && pedido.puedeEditar)
                     _ActionButton(
                       icon: Icons.edit,
                       label: 'Editar',
                       color: Colors.orange,
                       onPressed: onEditar!,
                     ),
-                  if (onEntregar != null)
+                  // ✅ ENTREGAR: Solo si está LISTO
+                  if (onEntregar != null && pedido.mostrarBotonEntregar)
                     _ActionButton(
                       icon: Icons.restaurant,
                       label: 'Entregar',
                       color: const Color(0xFF17A2B8),
                       onPressed: onEntregar!,
                     ),
+                  // ✅ COBRAR: Solo si está entregado
                   if (onCobrar != null)
                     _ActionButton(
                       icon: Icons.attach_money,
@@ -205,6 +262,7 @@ class PedidoCard extends StatelessWidget {
                       color: const Color(0xFF28A745),
                       onPressed: onCobrar!,
                     ),
+                  // ✅ CANCELAR: Siempre visible hasta que se complete
                   if (onCancelar != null)
                     _ActionButton(
                       icon: Icons.close,

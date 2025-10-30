@@ -19,29 +19,34 @@ class Pedido {
 
   factory Pedido.fromJson(Map<String, dynamic> json) {
     return Pedido(
-      id: json['id'],
-      mesaId: json['mesaId'],
-      mesaNumero: json['mesaNumero'] ?? json['mesaId'],
+      id: json['id'] ?? 0,
+      mesaId: json['mesaId'] ?? 0,
+      mesaNumero: json['mesaNumero'] ?? json['mesaId'] ?? 0,
       fecha: DateTime.parse(json['fecha']),
-      estado: _estadoFromString(json['estado']),
-      detalles: (json['detalles'] as List)
-          .map((d) => ItemPedido.fromJson(d))
-          .toList(),
+      estado: _estadoFromString(json['estado'] ?? ''),
+      detalles: (json['detalles'] as List?)
+          ?.map((d) => ItemPedido.fromJson(d))
+          .toList() ?? [],
     );
   }
 
   double get total => detalles.fold(0, (sum, item) => sum + (item.precio * item.cantidad));
 
+  // ✅ SOLO puede editar si está en proceso y no han pasado 5 minutos
   bool get puedeEditar {
     if (estado != EstadoPedido.enProceso) return false;
     final diff = DateTime.now().difference(fecha);
     return diff.inMinutes <= 5;
   }
 
+  // ✅ SOLO puede entregar si está LISTO (cambio principal)
   bool get puedeEntregar {
-    if (estado != EstadoPedido.enProceso) return false;
-    final diff = DateTime.now().difference(fecha);
-    return diff.inMinutes > 5;
+    return estado == EstadoPedido.listo;
+  }
+
+  // ✅ NUNCA se muestra el botón de entregar si está en proceso
+  bool get mostrarBotonEntregar {
+    return estado == EstadoPedido.listo;
   }
 
   static EstadoPedido _estadoFromString(String estado) {
@@ -76,10 +81,10 @@ class ItemPedido {
   factory ItemPedido.fromJson(Map<String, dynamic> json) {
     return ItemPedido(
       id: json['id'],
-      platilloId: json['platilloId'],
-      platilloNombre: json['platilloNombre'],
-      cantidad: json['cantidad'],
-      precio: (json['precio'] as num).toDouble(),
+      platilloId: json['platilloId'] ?? 0,
+      platilloNombre: json['platilloNombre'] ?? '',
+      cantidad: json['cantidad'] ?? 0,
+      precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
       nota: json['nota'],
     );
   }

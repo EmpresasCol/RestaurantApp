@@ -112,6 +112,14 @@ CREATE TABLE Facturas (
     INDEX idx_fecha (FechaEmision)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE UsuariosFCM (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    UsuarioId INT NOT NULL,
+    FcmToken VARCHAR(255) NOT NULL,
+    FechaRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE CASCADE,
+    UNIQUE KEY unique_usuario_token (UsuarioId, FcmToken)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- =====================================================
 -- DATOS INICIALES: Usuarios
 -- =====================================================

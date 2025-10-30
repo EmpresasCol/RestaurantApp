@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using RestaurantApi.Models;
 using RestaurantApi.Dtos;
+using RestaurantApi.Models;
+using RestaurantApi.Services;
 
 namespace RestaurantApi.Controllers
 {
@@ -94,7 +95,7 @@ namespace RestaurantApi.Controllers
             var pedido = new Pedido
             {
                 MesaId = crearPedido.MesaId,
-                UsuarioId = 1, // Por ahora usuario fijo
+                UsuarioId = crearPedido.UsuarioId, // Por ahora usuario fijo
                 Estado = EstadoPedido.EnProceso,
                 Fecha = DateTime.Now
             };
@@ -150,6 +151,72 @@ namespace RestaurantApi.Controllers
             };
 
             return CreatedAtAction(nameof(GetPedido), new { id = resultado.Id }, resultado);
+        }
+
+        [HttpPut("{id}/estado")]
+        public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
+        {
+            System.Diagnostics.Debug.WriteLine("========================================");
+            System.Diagnostics.Debug.WriteLine($"🔄 ACTUALIZANDO PEDIDO {id} A ESTADO: {dto.Estado}");
+            System.Diagnostics.Debug.WriteLine("========================================");
+
+            var pedido = await _context.Pedidos
+                .Include(p => p.Mesa)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (pedido == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ Pedido {id} no encontrado");
+                return NotFound($"Pedido con ID {id} no encontrado");
+            }
+
+            if (!Enum.TryParse<EstadoPedido>(dto.Estado, true, out var estadoEnum))
+            {
+                System.Diagnostics.Debug.WriteLine($"❌ Estado inválido: {dto.Estado}");
+                return BadRequest($"Estado inválido: {dto.Estado}");
+            }
+
+            System.Diagnostics.Debug.WriteLine($"✅ Estado anterior: {pedido.Estado}");
+            System.Diagnostics.Debug.WriteLine($"✅ Estado nuevo: {estadoEnum}");
+
+            pedido.Estado = estadoEnum;
+            await _context.SaveChangesAsync();
+
+            System.Diagnostics.Debug.WriteLine($"💾 Estado guardado en BD");
+
+            if (estadoEnum == EstadoPedido.Listo)
+            {
+                System.Diagnostics.Debug.WriteLine($"🔔 El estado es LISTO, enviando notificación...");
+                try
+                {
+                    var notificationService = new FirebaseNotificationService(_context);
+                    await notificationService.EnviarNotificacionPedidoListo(
+                        pedido.Id,
+                        pedido.Mesa?.Numero ?? pedido.MesaId
+                    );
+                    System.Diagnostics.Debug.WriteLine($"✅ Notificación enviada correctamente");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"❌ ERROR enviando notificación: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"   Stack: {ex.StackTrace}");
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"ℹ️ Estado no es LISTO, no se envía notificación");
+            }
+
+            System.Diagnostics.Debug.WriteLine("========================================");
+
+            return Ok(new PedidoDto
+            {
+                Id = pedido.Id,
+                MesaId = pedido.MesaId,
+                MesaNumero = pedido.Mesa?.Numero ?? 0,
+                Estado = pedido.Estado.ToString(),
+                Fecha = pedido.Fecha
+            });
         }
 
         // PUT: api/Pedidos/5/actualizar
@@ -336,33 +403,6 @@ namespace RestaurantApi.Controllers
                     Estado = d.Estado.ToString()
                 }).ToList()
             };
-        }
-
-        [HttpPut("{id}/estado")]
-        public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
-        {
-            var pedido = await _context.Pedidos.FindAsync(id);
-
-            if (pedido == null)
-                return NotFound($"Pedido con ID {id} no encontrado");
-
-            // Validar que el estado sea válido
-            if (!Enum.TryParse<EstadoPedido>(dto.Estado, true, out var estadoEnum))
-            {
-                return BadRequest($"Estado inválido: {dto.Estado}. Estados válidos: EnProceso, Listo, Entregado, Pagado, Cancelado");
-            }
-
-            pedido.Estado = estadoEnum;
-            await _context.SaveChangesAsync();
-
-            return Ok(new PedidoDto
-            {
-                Id = pedido.Id,
-                MesaId = pedido.MesaId,
-                MesaNumero = pedido.Mesa?.Numero ?? 0,
-                Estado = pedido.Estado.ToString(),
-                Fecha = pedido.Fecha
-            });
         }
 
 

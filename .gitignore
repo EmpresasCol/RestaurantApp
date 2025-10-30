@@ -416,3 +416,12 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Firebase credentials
+api/RestaurantApi/firebase-service-account.json
+api/RestaurantApi/qpro-7d23e-firebase-adminsdk-fbsvc-*.json
+
+# Otros archivos sensibles
+**/appsettings.json
+**/*.pfx
+**/*.p12
