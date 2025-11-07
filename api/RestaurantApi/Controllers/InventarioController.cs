@@ -192,16 +192,30 @@ namespace RestaurantApi.Controllers
 
         // ==================== PROVEEDORES ====================
 
-        /// <summary>
         /// Obtiene todos los proveedores
-        /// </summary>
         [HttpGet("proveedores")]
-        public async Task<ActionResult<IEnumerable<Proveedor>>> GetProveedores()
+        public async Task<ActionResult<IEnumerable<object>>> GetProveedores()
         {
             try
             {
                 var proveedores = await _context.Proveedores
                     .OrderBy(p => p.Nombre)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Nombre,
+                        Contacto = p.Contacto ?? "",
+                        Telefono = p.Telefono ?? "",
+                        Email = p.Email ?? "",
+                        Direccion = p.Direccion ?? "",
+                        NIT = p.NIT ?? "",
+                        Ciudad = p.Ciudad ?? "",
+                        Pais = p.Pais ?? "Colombia",
+                        NotasAdicionales = p.NotasAdicionales ?? "",
+                        TipoProductos = p.TipoProductos ?? "",
+                        p.Activo,
+                        p.FechaRegistro
+                    })
                     .ToListAsync();
 
                 return Ok(proveedores);
@@ -1122,42 +1136,40 @@ namespace RestaurantApi.Controllers
 
         // ==================== REPORTES ====================
 
-        /// <summary>
         /// Obtiene el resumen general de stock (vista vw_stock_general)
-        /// </summary>
         [HttpGet("reportes/stock-general")]
         public async Task<ActionResult<IEnumerable<object>>> GetStockGeneral()
         {
             try
             {
-                var query = @"
-                    SELECT 
-                        p.Id AS ProductoId,
+                var resultado = await _context.ProductosInventario
+                    .Include(p => p.Categoria)
+                    .Where(p => p.Activo)
+                    .Select(p => new
+                    {
+                        ProductoId = p.Id,
                         p.Codigo,
-                        p.Nombre AS ProductoNombre,
-                        c.Nombre AS Categoria,
+                        ProductoNombre = p.Nombre,
+                        Categoria = p.Categoria.Nombre,
                         p.UnidadMedida,
-                        COALESCE(SUM(s.Cantidad), 0) AS StockTotal,
+                        StockTotal = _context.Stock
+                            .Where(s => s.ProductoId == p.Id)
+                            .Sum(s => (decimal?)s.Cantidad) ?? 0,
                         p.StockMinimo,
                         p.StockMaximo,
                         p.PuntoReorden,
-                        COALESCE(SUM(s.CostoTotal), 0) AS ValorInventario,
-                        CASE 
-                            WHEN COALESCE(SUM(s.Cantidad), 0) = 0 THEN 'Agotado'
-                            WHEN COALESCE(SUM(s.Cantidad), 0) <= p.StockMinimo THEN 'Critico'
-                            WHEN COALESCE(SUM(s.Cantidad), 0) <= p.PuntoReorden THEN 'Bajo'
-                            WHEN p.StockMaximo IS NOT NULL AND COALESCE(SUM(s.Cantidad), 0) >= p.StockMaximo THEN 'Excedido'
-                            ELSE 'Normal'
-                        END AS EstadoStock,
+                        ValorInventario = _context.Stock
+                            .Where(s => s.ProductoId == p.Id)
+                            .Sum(s => (decimal?)s.CostoTotal) ?? 0,
+                        EstadoStock =
+                            (_context.Stock.Where(s => s.ProductoId == p.Id).Sum(s => (decimal?)s.Cantidad) ?? 0) == 0 ? "Agotado" :
+                            (_context.Stock.Where(s => s.ProductoId == p.Id).Sum(s => (decimal?)s.Cantidad) ?? 0) <= p.StockMinimo ? "Critico" :
+                            (_context.Stock.Where(s => s.ProductoId == p.Id).Sum(s => (decimal?)s.Cantidad) ?? 0) <= (p.PuntoReorden ?? p.StockMinimo) ? "Bajo" :
+                            (p.StockMaximo.HasValue && (_context.Stock.Where(s => s.ProductoId == p.Id).Sum(s => (decimal?)s.Cantidad) ?? 0) >= p.StockMaximo) ? "Excedido" :
+                            "Normal",
                         p.Activo
-                    FROM ProductosInventario p
-                    LEFT JOIN Stock s ON p.Id = s.ProductoId
-                    LEFT JOIN CategoriasInventario c ON p.CategoriaId = c.Id
-                    WHERE p.Activo = TRUE
-                    GROUP BY p.Id, p.Codigo, p.Nombre, c.Nombre, p.UnidadMedida, p.StockMinimo, p.StockMaximo, p.PuntoReorden, p.Activo
-                    ORDER BY p.Nombre";
-
-                var resultado = await _context.Database.SqlQueryRaw<dynamic>(query).ToListAsync();
+                    })
+                    .ToListAsync();
 
                 return Ok(resultado);
             }
@@ -1167,40 +1179,37 @@ namespace RestaurantApi.Controllers
             }
         }
 
-        /// <summary>
         /// Obtiene productos próximos a vencer (vista vw_productos_vencimiento)
-        /// </summary>
         [HttpGet("reportes/productos-vencimiento")]
         public async Task<ActionResult<IEnumerable<object>>> GetProductosVencimiento()
         {
             try
             {
-                var query = @"
-                    SELECT 
-                        l.Id AS LoteId,
+                var resultado = await _context.Lotes
+                    .Include(l => l.Producto)
+                    .Include(l => l.Almacen)
+                    .Where(l => l.Estado == "Activo"
+                             && l.CantidadActual > 0
+                             && l.FechaVencimiento.HasValue)
+                    .OrderBy(l => l.FechaVencimiento)
+                    .Select(l => new
+                    {
+                        LoteId = l.Id,
                         l.NumeroLote,
-                        p.Id AS ProductoId,
-                        p.Nombre AS ProductoNombre,
-                        a.Nombre AS Almacen,
+                        ProductoId = l.Producto.Id,
+                        ProductoNombre = l.Producto.Nombre,
+                        Almacen = l.Almacen.Nombre,
                         l.CantidadActual,
-                        p.UnidadMedida,
+                        UnidadMedida = l.Producto.UnidadMedida,
                         l.FechaVencimiento,
-                        DATEDIFF(l.FechaVencimiento, CURDATE()) AS DiasParaVencer,
-                        CASE 
-                            WHEN l.FechaVencimiento < CURDATE() THEN 'Vencido'
-                            WHEN DATEDIFF(l.FechaVencimiento, CURDATE()) <= 3 THEN 'Critico'
-                            WHEN DATEDIFF(l.FechaVencimiento, CURDATE()) <= 7 THEN 'Advertencia'
-                            ELSE 'Normal'
-                        END AS NivelAlerta
-                    FROM Lotes l
-                    INNER JOIN ProductosInventario p ON l.ProductoId = p.Id
-                    INNER JOIN Almacenes a ON l.AlmacenId = a.Id
-                    WHERE l.Estado = 'Activo' 
-                      AND l.CantidadActual > 0
-                      AND l.FechaVencimiento IS NOT NULL
-                    ORDER BY l.FechaVencimiento ASC";
-
-                var resultado = await _context.Database.SqlQueryRaw<dynamic>(query).ToListAsync();
+                        DiasParaVencer = EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value),
+                        NivelAlerta =
+                            l.FechaVencimiento.Value < DateTime.Now ? "Vencido" :
+                            EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value) <= 3 ? "Critico" :
+                            EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value) <= 7 ? "Advertencia" :
+                            "Normal"
+                    })
+                    .ToListAsync();
 
                 return Ok(resultado);
             }
@@ -1210,9 +1219,7 @@ namespace RestaurantApi.Controllers
             }
         }
 
-        /// <summary>
         /// Obtiene el valor del inventario por almacén (vista vw_valor_inventario_almacen)
-        /// </summary>
         [HttpGet("reportes/valor-por-almacen")]
         public async Task<ActionResult<IEnumerable<object>>> GetValorInventarioPorAlmacen()
         {
@@ -1248,9 +1255,7 @@ namespace RestaurantApi.Controllers
             }
         }
 
-        /// <summary>
         /// Obtiene alertas de stock (productos con stock bajo o crítico)
-        /// </summary>
         [HttpGet("reportes/alertas-stock")]
         public async Task<ActionResult<IEnumerable<object>>> GetAlertasStock()
         {

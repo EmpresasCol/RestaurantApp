@@ -15,34 +15,34 @@ namespace RestaurantApi.Models
         public string Nombre { get; set; }
 
         [StringLength(100)]
-        public string Contacto { get; set; }
+        public string? Contacto { get; set; } // ✅ Nullable
 
         [StringLength(20)]
-        public string Telefono { get; set; }
+        public string? Telefono { get; set; } // ✅ Nullable
 
         [StringLength(100)]
-        public string Email { get; set; }
+        public string? Email { get; set; } // ✅ Nullable
 
         [Column(TypeName = "TEXT")]
-        public string Direccion { get; set; }
+        public string? Direccion { get; set; } // ✅ Nullable
 
         [StringLength(50)]
-        public string NIT { get; set; }
+        public string? NIT { get; set; } // ✅ Nullable
 
         [StringLength(100)]
-        public string Ciudad { get; set; }
+        public string? Ciudad { get; set; } // ✅ Nullable
 
         [StringLength(100)]
-        public string Pais { get; set; } = "Colombia";
+        public string? Pais { get; set; } = "Colombia"; // ✅ Nullable
 
         [Column(TypeName = "TEXT")]
-        public string NotasAdicionales { get; set; }
+        public string? NotasAdicionales { get; set; } // ✅ Nullable
 
-        [StringLength(200)] 
-        public string TipoProductos { get; set; }
+        [StringLength(200)]
+        public string? TipoProductos { get; set; } // ✅ Nullable
 
         public bool Activo { get; set; } = true;
 
-        public DateTime FechaRegistro { get; set; } = DateTime.Now; 
+        public DateTime FechaRegistro { get; set; } = DateTime.Now;
     }
 }

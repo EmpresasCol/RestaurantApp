@@ -9,31 +9,30 @@ namespace RestaurantApi.Models
         [Key]
         public int Id { get; set; }
 
-        [Required]
         [StringLength(50)]
-        public string Codigo { get; set; }
+        public string? Codigo { get; set; } // ✅ Nullable
 
         [Required]
         [StringLength(150)]
         public string Nombre { get; set; }
 
         [Column(TypeName = "TEXT")]
-        public string Descripcion { get; set; }
+        public string? Descripcion { get; set; } // ✅ Nullable
 
         [Required]
         public int CategoriaId { get; set; }
 
         [ForeignKey("CategoriaId")]
-        public CategoriaInventario Categoria { get; set; }
+        public CategoriaInventario? Categoria { get; set; }
 
         public int? ProveedorId { get; set; }
 
         [ForeignKey("ProveedorId")]
-        public Proveedor Proveedor { get; set; }
+        public Proveedor? Proveedor { get; set; }
 
         [Required]
         [StringLength(20)]
-        public string UnidadMedida { get; set; } // Kg, Litro, Unidad, etc.
+        public string UnidadMedida { get; set; }
 
         [Required]
         [Column(TypeName = "decimal(10,2)")]
@@ -51,10 +50,10 @@ namespace RestaurantApi.Models
         public int? DiasVencimiento { get; set; }
 
         [StringLength(100)]
-        public string CodigoBarras { get; set; }
+        public string? CodigoBarras { get; set; } // ✅ Nullable
 
         [Column(TypeName = "LONGTEXT")]
-        public string ImagenUrl { get; set; }
+        public string? ImagenUrl { get; set; } // ✅ Nullable
 
         public bool Activo { get; set; } = true;
 
