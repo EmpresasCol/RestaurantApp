@@ -1,5 +1,4 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 
 namespace RestaurantApi
@@ -15,7 +14,17 @@ namespace RestaurantApi
         public DbSet<PedidoDetalle> PedidoDetalles { get; set; }
         public DbSet<Pago> Pagos { get; set; }
         public DbSet<Factura> Facturas { get; set; }
-        public DbSet<UsuarioFCM> UsuariosFCM { get; set; } 
+        public DbSet<UsuarioFCM> UsuariosFCM { get; set; }
+
+
+        // Inventario
+        public DbSet<CategoriaInventario> CategoriasInventario { get; set; }
+        public DbSet<Proveedor> Proveedores { get; set; }
+        public DbSet<Almacen> Almacenes { get; set; }
+        public DbSet<ProductoInventario> ProductosInventario { get; set; }
+        public DbSet<Stock> Stock { get; set; }
+        public DbSet<Lote> Lotes { get; set; }
+        public DbSet<MovimientoInventario> MovimientosInventario { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
