@@ -7,12 +7,15 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'providers/auth_provider.dart';
 import 'providers/pedido_provider.dart';
+import 'providers/notificacion_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = 
     GlobalKey<ScaffoldMessengerState>();
+
+late NotificacionProvider notificacionProviderGlobal;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,23 +28,35 @@ void main() async {
   NotificationService().onMessageReceived = (RemoteMessage message) async {
     debugPrint('🔊 Reproduciendo sonido y vibración...');
     
-
-    // ✅ 3 VIBRACIONES FUERTES
-    for (int i = 0; i < 3; i++) {
-      HapticFeedback.vibrate();
-      await Future.delayed(const Duration(milliseconds: 300));  // Pausa de 300ms entre cada una
+    for (int i = 0; i < 5; i++) {
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 100));
     }
     
-    // ✅ REPRODUCIR SONIDO (URL de notificación estándar)
     try {
       await audioPlayer.play(UrlSource(
         'https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3'
       ));
-      debugPrint('✅ Sonido reproducido');
     } catch (e) {
-      debugPrint('❌ Error reproduciendo sonido: $e');
-      // Fallback: sonido del sistema
       SystemSound.play(SystemSoundType.alert);
+    }
+
+    try {
+      final pedidoId = int.tryParse(message.data['pedidoId'] ?? '0') ?? 0;
+      final mesaNumero = int.tryParse(message.data['mesaNumero'] ?? '0') ?? 0;
+      final platillos = message.data['platillos'];
+      final totalItems = int.tryParse(message.data['totalItems'] ?? '0');
+      
+      await notificacionProviderGlobal.agregarNotificacion(
+        pedidoId: pedidoId,
+        mesaNumero: mesaNumero,
+        titulo: message.notification?.title ?? 'Notificación',
+        mensaje: message.notification?.body ?? '',
+        platillos: platillos,
+        totalItems: totalItems,
+      );
+    } catch (e) {
+      debugPrint('Error guardando notificación: $e');
     }
     
     scaffoldMessengerKey.currentState?.showSnackBar(
@@ -72,7 +87,7 @@ void main() async {
             ),
           ],
         ),
-        backgroundColor: Colors.orange.shade700,
+        backgroundColor: const Color(0xFFE28D41),
         duration: const Duration(seconds: 6),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.all(16),
@@ -83,9 +98,7 @@ void main() async {
         action: SnackBarAction(
           label: 'VER',
           textColor: Colors.white,
-          onPressed: () {
-            // Aquí puedes navegar a pedidos activos
-          },
+          onPressed: () {},
         ),
       ),
     );
@@ -103,6 +116,12 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()..cargarUsuario()),
         ChangeNotifierProvider(create: (_) => PedidoProvider()),
+        ChangeNotifierProvider(create: (context) {
+          final provider = NotificacionProvider();
+          notificacionProviderGlobal = provider;
+          provider.cargarNotificaciones();
+          return provider;
+        }),
       ],
       child: MaterialApp(
         title: 'Qpro',
@@ -110,17 +129,93 @@ class MyApp extends StatelessWidget {
         scaffoldMessengerKey: scaffoldMessengerKey,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFFFF6B35),
+            seedColor: const Color(0xFFC79B64),
+            primary: const Color(0xFFC79B64),
+            secondary: const Color(0xFF93704E),
+            tertiary: const Color(0xFFE28D41),
+            surface: Colors.white,
+            error: const Color(0xFFD32F2F),
+            onPrimary: Colors.white,
+            onSecondary: Colors.white,
+            onSurface: const Color(0xFF3F291A), // ✅ Cambio de onBackground a onSurface
             brightness: Brightness.light,
           ),
-          textTheme: GoogleFonts.interTextTheme(),
+          
+          textTheme: GoogleFonts.merriweatherSansTextTheme().copyWith(
+            bodyLarge: const TextStyle(color: Color(0xFF3F291A)),
+            bodyMedium: const TextStyle(color: Color(0xFF3F291A)),
+            bodySmall: const TextStyle(color: Color(0xFF73563D)),
+            titleLarge: const TextStyle(
+              color: Color(0xFF3F291A),
+              fontWeight: FontWeight.bold,
+            ),
+            titleMedium: const TextStyle(
+              color: Color(0xFF3F291A),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xFFC79B64),
+            foregroundColor: Colors.white,
+            elevation: 0,
+            centerTitle: false,
+          ),
+          
+          cardTheme: CardThemeData( // ✅ Cambio de CardTheme a CardThemeData
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            color: Colors.white,
+          ),
+          
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFC79B64),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          
+          floatingActionButtonTheme: const FloatingActionButtonThemeData(
+            backgroundColor: Color(0xFFE28D41),
+            foregroundColor: Colors.white,
+          ),
+          
+          inputDecorationTheme: InputDecorationTheme(
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFFC79B64), width: 2),
+            ),
+            labelStyle: const TextStyle(color: Color(0xFF73563D)),
+          ),
+          
           useMaterial3: true,
         ),
         home: Consumer<AuthProvider>(
           builder: (context, auth, _) {
             if (auth.cargando) {
               return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
+                backgroundColor: Color(0xFF3F291A),
+                body: Center(
+                  child: CircularProgressIndicator(
+                    color: Color(0xFFC79B64),
+                  ),
+                ),
               );
             }
             return auth.estaAutenticado ? const HomeScreen() : const LoginScreen();

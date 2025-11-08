@@ -55,7 +55,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)],
+            colors: [Color.fromRGBO(63, 41, 26, 1), Color.fromRGBO(115, 86, 61, 1)],
           ),
         ),
         child: SafeArea(
@@ -83,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       child: const Icon(
                         Icons.restaurant_menu,
                         size: 60,
-                        color: Color(0xFFFF6B35),
+                        color: Color.fromRGBO(226, 141, 65, 1),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -183,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   return ElevatedButton(
                                     onPressed: auth.cargando ? null : _login,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFFF6B35),
+                                      backgroundColor: const Color.fromRGBO(63, 41, 26, 1),
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
