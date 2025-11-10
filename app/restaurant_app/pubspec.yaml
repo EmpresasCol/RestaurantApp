@@ -22,6 +22,9 @@ dependencies:
   # Vibración y sonido
   audioplayers: ^5.2.1
 
+  # Splash screen e iconos
+  flutter_native_splash: ^2.3.5
+  flutter_launcher_icons: ^0.13.1
 
 dev_dependencies:
   flutter_test:
@@ -30,4 +33,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/icon.png"
   
+flutter_native_splash:
+  color: "#3F291A"  # Fondo marrón oscuro
+  image: assets/splash/logo.png
+  android: true
+  ios: false
+  android_12:
+    color: "#3F291A"
+    image: assets/splash/logo.png

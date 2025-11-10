@@ -1,11 +1,48 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
-// Handler para notificaciones en background
+// ✅ Handler para notificaciones en background (app cerrada/minimizada)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('📬 Mensaje en background: ${message.notification?.title}');
+  
+  // ✅ GUARDAR NOTIFICACIÓN INCLUSO CUANDO LA APP ESTÁ CERRADA
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final notificacionesJson = prefs.getString('notificaciones');
+    
+    List<dynamic> notificaciones = [];
+    if (notificacionesJson != null) {
+      notificaciones = json.decode(notificacionesJson);
+    }
+    
+    final nuevaNotificacion = {
+      'id': DateTime.now().millisecondsSinceEpoch,
+      'pedidoId': int.tryParse(message.data['pedidoId'] ?? '0') ?? 0,
+      'mesaNumero': int.tryParse(message.data['mesaNumero'] ?? '0') ?? 0,
+      'titulo': message.notification?.title ?? 'Notificación',
+      'mensaje': message.notification?.body ?? '',
+      'fecha': DateTime.now().toIso8601String(),
+      'leida': false,
+      'platillos': message.data['platillos'],
+      'totalItems': int.tryParse(message.data['totalItems'] ?? '0'),
+    };
+    
+    notificaciones.insert(0, nuevaNotificacion);
+    
+    // Mantener solo las últimas 50
+    if (notificaciones.length > 50) {
+      notificaciones = notificaciones.take(50).toList();
+    }
+    
+    await prefs.setString('notificaciones', json.encode(notificaciones));
+    debugPrint('✅ Notificación guardada en background');
+  } catch (e) {
+    debugPrint('❌ Error guardando notificación en background: $e');
+  }
 }
 
 class NotificationService {
@@ -15,7 +52,6 @@ class NotificationService {
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   
-  // ✅ Callback para mostrar notificación en la UI
   Function(RemoteMessage)? onMessageReceived;
 
   Future<void> initialize() async {
@@ -40,9 +76,10 @@ class NotificationService {
         await _guardarToken(newToken);
       });
 
+      // ✅ Handler para background/cerrada
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-      // ✅ Cuando llega mensaje con app abierta
+      // Cuando llega mensaje con app abierta
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('========================================');
         debugPrint('📬 NOTIFICACIÓN EN FOREGROUND');
@@ -50,7 +87,6 @@ class NotificationService {
         debugPrint('Cuerpo: ${message.notification?.body}');
         debugPrint('========================================');
         
-        // Llamar al callback para mostrar en la UI
         if (onMessageReceived != null) {
           onMessageReceived!(message);
         }
