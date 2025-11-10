@@ -12,6 +12,9 @@ import GestionPlatillos from './GestionPlatillos';
 import GestionUsuarios from './GestionUsuarios';
 import Cocina from './Cocina'; 
 
+import Inventario from './Inventario';
+import { Package } from 'lucide-react';
+
 function AppContent() {
   const [errorNota, setErrorNota] = useState(null);
   const { usuario, esClienteQR, estaAutenticado, logout, cargando: cargandoAuth } = useAuth();
@@ -549,12 +552,12 @@ const cargarPedidos = async () => {
     switch (vistaActual) {
       case 'menu':
         return renderMenuCliente();
-        case 'cocina':
-          return (
-            <ProtectedRoute permisos={['administrador', 'cocina']}>
-              <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />
-            </ProtectedRoute>
-          );
+      case 'cocina':
+        return (
+          <ProtectedRoute permisos={['administrador', 'cocina']}>
+            <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />
+          </ProtectedRoute>
+        );
       case 'facturacion':
         return <ProtectedRoute permisos={['administrador', 'caja']}><Facturacion /></ProtectedRoute>;
       case 'qr':
@@ -565,6 +568,9 @@ const cargarPedidos = async () => {
         return <ProtectedRoute permisos={['administrador']}><GestionPlatillos /></ProtectedRoute>;
       case 'gestion-usuarios':
         return <ProtectedRoute permisos={['administrador']}><GestionUsuarios /></ProtectedRoute>;
+      case 'inventario':
+        return <ProtectedRoute permisos={['administrador']}><Inventario /></ProtectedRoute>;
+      
       default:
         return renderMenuCliente();
     }
@@ -596,7 +602,7 @@ const cargarPedidos = async () => {
 
   const rol = usuario?.rol?.toLowerCase();
 
-  return (
+return (
     <div className="min-h-screen">
       <nav className="bg-gray-800 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-4">
@@ -620,6 +626,11 @@ const cargarPedidos = async () => {
                   <button onClick={() => setVistaActual('gestion-usuarios')} className={`px-6 py-4 text-sm font-medium border-b-2 flex items-center gap-2 ${vistaActual === 'gestion-usuarios' ? 'border-orange-500 text-orange-500 bg-gray-700' : 'border-transparent hover:bg-gray-700'}`}>
                     <Users size={18} />Usuarios
                   </button>
+                  
+                  <button onClick={() => setVistaActual('inventario')} className={`px-6 py-4 text-sm font-medium border-b-2 flex items-center gap-2 ${vistaActual === 'inventario' ? 'border-orange-500 text-orange-500 bg-gray-700' : 'border-transparent hover:bg-gray-700'}`}>
+                    <Package size={18} />Inventario
+                  </button>
+                  
                   <button onClick={() => setVistaActual('qr')} className={`px-6 py-4 text-sm font-medium border-b-2 flex items-center gap-2 ${vistaActual === 'qr' ? 'border-orange-500 text-orange-500 bg-gray-700' : 'border-transparent hover:bg-gray-700'}`}>
                     <QrCode size={18} />Generar QR
                   </button>
@@ -667,5 +678,6 @@ function App() {
     </AuthProvider>
   );
 }
+
 
 export default App;

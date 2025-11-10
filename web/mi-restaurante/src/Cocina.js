@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, ChefHat, Clock, CheckCircle, Package } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import * as api from './services/api';
-import VoiceControlCocina from './components/VoiceControlCocina'; // ✅ NUEVO IMPORT
+import VoiceControlCocina from './components/VoiceControlCocina'; 
 
 function Cocina({ pedidos = [], onActualizarPedidos }) {
   const { usuario } = useAuth();
