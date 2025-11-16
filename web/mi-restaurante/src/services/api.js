@@ -202,11 +202,19 @@ export const createPedido = async (mesaId, items) => {
   }
 };
 
+/**
+ * Actualiza el estado de un pedido
+ * ✅ CORREGIDO: Usa el endpoint /estado para cambios de estado
+ * @param {number} id - ID del pedido
+ * @param {string} estado - Nuevo estado (EnProceso, Listo, Entregado, Pagado, Cancelado)
+ * @returns {Promise} - Resultado de la actualización
+ */
 export const updatePedido = async (id, estado) => {
   try {
-    console.log('🔄 Actualizando pedido:', { id, estado });
+    console.log('🔄 Actualizando estado del pedido:', { id, estado });
 
-    const response = await fetchWithHeaders(`${API_URL}/pedidos/${id}`, {
+    // ✅ CORRECCIÓN: Usar endpoint específico /estado
+    const response = await fetchWithHeaders(`${API_URL}/pedidos/${id}/estado`, {
       method: 'PUT',
       body: JSON.stringify({ estado: estado })
     });
@@ -437,7 +445,14 @@ export const deleteUsuario = async (id) => {
   }
 };
 
-//estado pedido cocina
+// ==================== ESTADO PEDIDO COCINA ====================
+/**
+ * Actualiza el estado de un pedido (usado principalmente en módulo de cocina)
+ * ✅ Esta función ya usaba el endpoint correcto /estado
+ * @param {number} pedidoId - ID del pedido
+ * @param {string} nuevoEstado - Nuevo estado del pedido
+ * @returns {Promise} - Resultado de la actualización
+ */
 export const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
   try {
     console.log(`🔄 [VOZ] Actualizando pedido ${pedidoId} → ${nuevoEstado}`);

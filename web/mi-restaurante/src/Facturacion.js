@@ -1,5 +1,5 @@
 // src/Facturacion.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle, Users } from 'lucide-react';
 import * as api from './services/api';
 
@@ -61,7 +61,7 @@ function Facturacion() {
   const [cargando, setCargando] = useState(false);
   const [notificacion, setNotificacion] = useState(null);
 
-  // FunciÃ³n para mostrar notificaciones
+  // Función para mostrar notificaciones
   const mostrarNotificacion = (mensaje, tipo = 'success') => {
     setNotificacion({ mensaje, tipo });
   };
@@ -79,14 +79,8 @@ function Facturacion() {
     localStorage.setItem('busquedaFacturacion', busqueda);
   }, [busqueda]);
 
-  // Cargar pedidos al iniciar y cada 30 segundos
-  useEffect(() => {
-    cargarDatos();
-    const interval = setInterval(cargarDatos, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const cargarDatos = async () => {
+  // ✅ MEJORA: useCallback para evitar recrear la función en cada render
+  const cargarDatos = useCallback(async (mostrarMensaje = false) => {
     try {
       const [pedidosData, pagosData] = await Promise.all([
         api.getPedidos(),
@@ -104,11 +98,34 @@ function Facturacion() {
 
       setPedidos(pedidosFiltrados);
       setPagos(pagosData);
+
+      if (mostrarMensaje) {
+        mostrarNotificacion('Datos actualizados correctamente', 'success');
+      }
     } catch (error) {
       console.error('Error al cargar datos:', error);
-      mostrarNotificacion('Error al cargar datos', 'error');
+      if (mostrarMensaje) {
+        mostrarNotificacion('Error al cargar datos', 'error');
+      }
     }
-  };
+  }, []); // Sin dependencias porque no usa ningún estado
+
+  // ✅ MEJORA: Cargar datos al iniciar y actualización automática cada 15 segundos
+  useEffect(() => {
+    console.log('🔄 Iniciando actualización automática de datos');
+    cargarDatos(); // Carga inicial
+    
+    // Actualización automática cada 15 segundos (sin mensaje de notificación)
+    const interval = setInterval(() => {
+      console.log('⏰ Actualización automática...');
+      cargarDatos(false); // false = sin mensaje de notificación
+    }, 15000); // 15 segundos
+    
+    return () => {
+      console.log('🛑 Deteniendo actualización automática');
+      clearInterval(interval);
+    };
+  }, [cargarDatos]);
 
   // Transformar pedidos a formato de facturas
   const facturas = pedidos.map(pedido => {
@@ -209,6 +226,7 @@ function Facturacion() {
     impuestosTotal: facturas.filter(f => f.estado === 'pagada').reduce((sum, f) => sum + f.impuestos, 0)
   };
 
+  // ✅ MEJORA: Recargar automáticamente después de confirmar pago
   const confirmarPago = async (metodoPago) => {
     if (!modalPago) return;
     
@@ -229,9 +247,12 @@ function Facturacion() {
 
       await api.updatePedido(modalPago.pedidoId, 'Pagado');
 
-      await cargarDatos();
-      
+      // ✅ Cerrar modal primero
       setModalPago(null);
+      
+      // ✅ Actualizar datos automáticamente
+      await cargarDatos(false);
+      
       mostrarNotificacion('Pago registrado exitosamente!', 'success');
     } catch (error) {
       console.error('Error al registrar pago:', error);
@@ -241,6 +262,7 @@ function Facturacion() {
     }
   };
 
+  // ✅ MEJORA: Recargar automáticamente después de cambiar estado
   const cambiarEstado = async (factura, nuevoEstado) => {
     if (factura.estado === 'pagada') {
       mostrarNotificacion('Esta factura ya fue pagada y no se puede modificar', 'error');
@@ -257,20 +279,27 @@ function Facturacion() {
       });
 
       if (nuevoEstado === 'pagada') {
+        setMenuAbierto(null);
         setModalPago(factura);
       } else if (nuevoEstado === 'cancelada') {
         await api.updatePedido(factura.pedidoId, 'Cancelado');
         console.log('Pedido cancelado');
-        await cargarDatos();
+        
+        // ✅ Actualizar automáticamente
+        await cargarDatos(false);
+        
         mostrarNotificacion('Pedido cancelado correctamente', 'success');
+        setMenuAbierto(null);
       } else if (nuevoEstado === 'pendiente') {
         await api.updatePedido(factura.pedidoId, 'EnProceso');
         console.log('Pedido vuelto a pendiente');
-        await cargarDatos();
+        
+        // ✅ Actualizar automáticamente
+        await cargarDatos(false);
+        
         mostrarNotificacion('Pedido marcado como pendiente', 'success');
+        setMenuAbierto(null);
       }
-      
-      setMenuAbierto(null);
     } catch (error) {
       console.error('Error al cambiar estado:', error);
       mostrarNotificacion(`Error al cambiar el estado: ${error.message}`, 'error');
@@ -415,7 +444,7 @@ function Facturacion() {
             <div class="header">
               <h2>RESTAURANTE DELICE</h2>
               <p>NIT: 900.123.456-7</p>
-              <p>Calle 123 #45-67, Bogota¡ D.C., Colombia</p>
+              <p>Calle 123 #45-67, Bogotá D.C., Colombia</p>
               <p>Tel: (601) 234-5678 | info@restaurantedelice.com</p>
               <div class="factura-id">
                 <div>FACTURA DE VENTA</div>
@@ -428,7 +457,7 @@ function Facturacion() {
               <p><span>Fecha:</span> ${formatearFecha(factura.fecha)}</p>
               <p><span>Mesa:</span> ${factura.mesa}</p>
               <p><span>Pedido:</span> #${factura.pedidoId}</p>
-              <p><span>MÃ©todo de pago:</span> ${factura.metodoPago}</p>
+              <p><span>Método de pago:</span> ${factura.metodoPago}</p>
               <p><span>Estado:</span> <strong>${factura.estado.toUpperCase()}</strong></p>
             </div>
 
@@ -476,10 +505,10 @@ function Facturacion() {
             </div>
 
             <div class="footer">
-              <p><strong>Gracias por visitarnos!</strong></p>
+              <p><strong>¡Gracias por visitarnos!</strong></p>
               <p>Esta es su factura de venta</p>
               <p>Para dudas o reclamos: info@restaurantedelice.com</p>
-              <p>ResoluciÃ³n DIAN No. 18764003241789 del 15/03/2024</p>
+              <p>Resolución DIAN No. 18764003241789 del 15/03/2024</p>
               <p>Rango autorizado: INV-1000000 al INV-2000000</p>
             </div>
           </div>
@@ -498,7 +527,7 @@ function Facturacion() {
 
   const exportarExcel = () => {
     const csvData = [
-      ['Factura', 'Mesa', 'Pedido ID', 'Fecha', 'Cliente', 'Subtotal', 'Impuestos', 'Total', 'Estado', 'MEtodo Pago'],
+      ['Factura', 'Mesa', 'Pedido ID', 'Fecha', 'Cliente', 'Subtotal', 'Impuestos', 'Total', 'Estado', 'Método Pago'],
       ...facturasFiltradas.map(f => [
         f.numeroFactura,
         f.mesa,
@@ -539,13 +568,19 @@ function Facturacion() {
             <div className="flex items-center gap-3">
               <Receipt className="text-blue-600" size={32} />
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">Sistema de Facturacion</h1>
+                <h1 className="text-2xl font-bold text-gray-800">Sistema de Facturación</h1>
                 <p className="text-gray-600">Restaurante Delice</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {/* ✅ Indicador de actualización automática */}
+              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-xs text-green-700 font-medium">Actualización automática</span>
+              </div>
+              
               <button
-                onClick={cargarDatos}
+                onClick={() => cargarDatos(true)}
                 disabled={cargando}
                 className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
               >
@@ -570,7 +605,7 @@ function Facturacion() {
           <div className="bg-white p-6 rounded-lg shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-600 text-sm">Ventas del Di­a</p>
+                <p className="text-gray-600 text-sm">Ventas del Día</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatearPrecio(totalesDelDia.ventasTotal)}
                 </p>
@@ -607,7 +642,7 @@ function Facturacion() {
             <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
             <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay pedidos listos para facturar</h3>
             <p className="text-gray-500 mb-4">
-              Los pedidos apareceran aqui­ cuando sean marcados como <strong>"Entregado"</strong> en la cocina
+              Los pedidos aparecerán aquí cuando sean marcados como <strong>"Entregado"</strong> en la cocina
             </p>
             <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-md mx-auto">
               <p className="text-sm text-blue-800">
@@ -615,11 +650,11 @@ function Facturacion() {
                 1. Cliente hace pedido<br/>
                 2. Cocina prepara<br/>
                 3. <strong>Mesero marca "Entregado"</strong><br/>
-                4. Aparece aqui para facturar
+                4. Aparece aquí para facturar
               </p>
             </div>
             <button
-              onClick={cargarDatos}
+              onClick={() => cargarDatos(true)}
               className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
             >
               Recargar
@@ -718,9 +753,9 @@ function Facturacion() {
                           </div>
                           <div className="flex items-center gap-4 text-sm text-gray-600">
                             <span className="font-medium">{factura.cliente.nombre}</span>
-                            <span>fecha:</span>
+                            <span>•</span>
                             <span>{formatearFecha(factura.fecha)}</span>
-                            <span></span>
+                            <span>•</span>
                             <span className="font-bold text-green-600 text-base">{formatearPrecio(factura.total)}</span>
                           </div>
                         </div>
@@ -833,7 +868,7 @@ function Facturacion() {
                         <div className="bg-gradient-to-br from-green-50 to-white p-5 rounded-lg border border-green-100">
                           <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase flex items-center gap-2">
                             <span className="w-2 h-2 bg-green-600 rounded-full"></span>
-                            Informacion de la Venta
+                            Información de la Venta
                           </h4>
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div className="flex justify-between items-center">
@@ -845,7 +880,7 @@ function Facturacion() {
                               <span className="font-medium text-gray-800 text-xs">{formatearFecha(factura.fecha)}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-gray-600">Metodo de pago:</span>
+                              <span className="text-gray-600">Método de pago:</span>
                               <span className="font-medium text-gray-800 capitalize">{factura.metodoPago}</span>
                             </div>
                             <div className="flex justify-between items-center">
@@ -925,7 +960,7 @@ function Facturacion() {
         )}
       </div>
 
-      {/* Modal de MÃ©todo de Pago */}
+      {/* Modal de Método de Pago */}
       {modalPago && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
@@ -933,8 +968,8 @@ function Facturacion() {
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <DollarSign className="text-green-600" size={32} />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Metodo de Pago</h3>
-              <p className="text-gray-600">Selecciona como paga el cliente</p>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Método de Pago</h3>
+              <p className="text-gray-600">Selecciona cómo paga el cliente</p>
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-700">
                   <span className="font-semibold">Pedido:</span> #{modalPago.pedidoId}
@@ -977,7 +1012,7 @@ function Facturacion() {
                   </div>
                   <div className="text-left">
                     <p className="font-bold text-lg">Tarjeta</p>
-                    <p className="text-sm text-blue-100">Debito o credito</p>
+                    <p className="text-sm text-blue-100">Débito o crédito</p>
                   </div>
                 </div>
                 <ChevronDown className="rotate-[-90deg]" size={24} />
