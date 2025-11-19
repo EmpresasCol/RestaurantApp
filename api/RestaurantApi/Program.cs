@@ -16,7 +16,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:3000",                          // React local
             "https://empresascol.github.io",                  // GitHub Pages
-            "https://*.ngrok-free.app"                        // ? Cualquier subdominio de ngrok
+            "https://shadowgraphic-punctiliously-sharleen.ngrok-free.dev"                        // ? Cualquier subdominio de ngrok
         )
         .AllowAnyMethod()
         .AllowAnyHeader()

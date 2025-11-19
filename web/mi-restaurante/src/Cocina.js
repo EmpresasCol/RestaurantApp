@@ -1,13 +1,8 @@
-// src/Cocina.js - VERSIÓN CORREGIDA CON CONTROL POR VOZ FUNCIONANDO
 import React, { useState, useEffect } from 'react';
 import { Users, ChefHat, Clock, CheckCircle, Package } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import * as api from './services/api';
-<<<<<<< HEAD
 import VoiceControlCocina from './components/VoiceControlCocina'; 
-=======
-import VoiceControlCocina from './components/VoiceControlCocina';
->>>>>>> f5ae25dfe0ce9399e8c2f689327c242344331a8f
 
 function Cocina({ pedidos = [], onActualizarPedidos }) {
   const { usuario } = useAuth();
@@ -44,8 +39,6 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
   const cambiarEstadoPedido = async (pedidoId, nuevoEstado) => {
     setCargandoEstado(pedidoId);
     try {
-      console.log(`🔄 Cambiando estado del pedido ${pedidoId} a ${nuevoEstado}`);
-      
       await api.actualizarEstadoPedido(pedidoId, nuevoEstado);
       
       // Recargar los pedidos después de actualizar
@@ -65,30 +58,14 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         tipo: 'error',
         mensaje: 'Error al actualizar el estado del pedido'
       });
-      setTimeout(() => setModalConfirmacion(null), 3000);
     } finally {
       setCargandoEstado(null);
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: Marcar pedido como listo (para control por voz)
+  // ✅ NUEVA FUNCIÓN: Marcar pedido como listo (para control por voz)
   const marcarPedidoListoPorVoz = async (pedidoId) => {
     console.log(`🎤 Control por voz: Marcando pedido ${pedidoId} como listo`);
-    
-    // Verificar que el pedido existe y está en proceso
-    const pedido = pedidos.find(p => p.id === pedidoId && p.estado === 'EnProceso');
-    
-    if (!pedido) {
-      console.error(`❌ Pedido ${pedidoId} no encontrado o no está en proceso`);
-      setModalConfirmacion({
-        tipo: 'error',
-        mensaje: `Pedido ${pedidoId} no encontrado o no está en proceso`
-      });
-      setTimeout(() => setModalConfirmacion(null), 3000);
-      return;
-    }
-
-    // Llamar a la función de cambio de estado
     await cambiarEstadoPedido(pedidoId, 'Listo');
   };
 
@@ -142,19 +119,20 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header compacto */}
       <header className="bg-gray-800 border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-full mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <ChefHat className="text-orange-500" size={32} />
+              <ChefHat className="text-orange-500" size={28} />
               <div>
-                <h1 className="text-2xl font-bold">Órdenes de Cocina</h1>
-                <p className="text-gray-400">Restaurante Délice</p>
+                <h1 className="text-xl font-bold">Órdenes de Cocina</h1>
+                <p className="text-sm text-gray-400">Restaurante Délice</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-lg font-semibold">{new Date().toLocaleTimeString()}</p>
-              <p className="text-gray-400">{new Date().toLocaleDateString()}</p>
+              <p className="text-base font-semibold">{new Date().toLocaleTimeString()}</p>
+              <p className="text-xs text-gray-400">{new Date().toLocaleDateString()}</p>
               {usuario && (
                 <p className="text-xs text-gray-500 mt-1">
                   {usuario.nombre} ({usuario.rol})
@@ -165,51 +143,40 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div className="bg-gray-800 p-6 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-300">Total de Órdenes</p>
-                <p className="text-3xl font-bold text-white">{pedidosFiltrados.length}</p>
-              </div>
-              <ChefHat className="text-orange-500" size={32} />
-            </div>
-          </div>
-          
-          <div className="bg-gray-800 p-6 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-300">Mesas Activas</p>
-                <p className="text-3xl font-bold text-white">{mesasUnicas.length}</p>
-              </div>
-              <Users className="text-blue-500" size={32} />
-            </div>
-          </div>
-        </div>
-
-        {/* Filtros de Mesa - Solo para Administrador y Caja */}
-        {pedidos.length > 0 && puedeFiltrarMesas() && (
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+      <div className="max-w-full mx-auto px-4 py-4">
+        {/* Filtro de mesas compacto */}
+        {puedeFiltrarMesas() && mesasUnicas.length > 0 && (
+          <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => setFiltroMesa('todas')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                filtroMesa === 'todas' ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap ${
+                filtroMesa === 'todas'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              Todas las Mesas
+              Todas ({pedidos.filter(p => p.estado !== 'Pagado' && p.estado !== 'Cancelado').length})
             </button>
-            {mesasUnicas.map(mesa => (
-              <button 
-                key={mesa} 
-                onClick={() => setFiltroMesa(mesa.toString())}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                  filtroMesa === mesa.toString() ? 'bg-orange-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Mesa {mesa}
-              </button>
-            ))}
+            {mesasUnicas.map(mesa => {
+              const pedidosMesa = pedidos.filter(p => 
+                p.mesa === mesa && 
+                p.estado !== 'Pagado' && 
+                p.estado !== 'Cancelado'
+              );
+              return (
+                <button
+                  key={mesa}
+                  onClick={() => setFiltroMesa(mesa.toString())}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap ${
+                    filtroMesa === mesa.toString()
+                      ? 'bg-orange-500 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  Mesa {mesa} ({pedidosMesa.length})
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -229,51 +196,54 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          // ✅ GRID RESPONSIVE CON MÚLTIPLES COLUMNAS
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {pedidosFiltrados.map(pedido => {
               const estadoInfo = getEstadoTexto(pedido.estado);
               
               return (
                 <div 
                   key={pedido.id} 
-                  className={`bg-gray-800 rounded-lg border-2 overflow-hidden transition-all ${getEstadoColor(pedido.estado)}`}
+                  className={`bg-gray-800 rounded-lg border-2 overflow-hidden transition-all hover:shadow-xl ${getEstadoColor(pedido.estado)}`}
                 >
-                  <div className="p-4 bg-gray-700 border-b border-gray-600">
+                  {/* Header compacto */}
+                  <div className="p-3 bg-gray-700 border-b border-gray-600">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="text-xl font-bold text-white">Orden #{pedido.id}</h3>
-                        <p className="text-gray-300 flex items-center gap-2 mt-1">
-                          <Users size={16} />
+                        <h3 className="text-lg font-bold text-white">Orden #{pedido.id}</h3>
+                        <p className="text-sm text-gray-300 flex items-center gap-1 mt-1">
+                          <Users size={14} />
                           Mesa {pedido.mesa}
                         </p>
-                        <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-semibold ${estadoInfo.color} bg-gray-800`}>
+                        <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${estadoInfo.color} bg-gray-800`}>
                           {estadoInfo.texto}
                         </span>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center gap-2 text-gray-300">
-                          <Clock size={16} />
-                          <span>Hace {calcularTiempoTranscurrido(pedido.hora)} min</span>
+                        <div className="flex items-center gap-1 text-gray-300">
+                          <Clock size={14} />
+                          <span className="text-xs">{calcularTiempoTranscurrido(pedido.hora)} min</span>
                         </div>
-                        <p className="text-sm text-gray-400">{pedido.hora.toLocaleTimeString()}</p>
+                        <p className="text-xs text-gray-400">{pedido.hora.toLocaleTimeString()}</p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-4">
-                    <h4 className="text-lg font-semibold text-orange-400 mb-3">Platos:</h4>
-                    <div className="space-y-3">
+                  {/* Platos compactos */}
+                  <div className="p-3">
+                    <h4 className="text-sm font-semibold text-orange-400 mb-2">Platos:</h4>
+                    <div className="space-y-2">
                       {pedido.items.map((item, index) => (
-                        <div key={index} className="bg-gray-700 p-3 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <span className="bg-orange-500 text-white px-2 py-1 rounded-full text-sm font-bold min-w-[2rem] text-center">
+                        <div key={index} className="bg-gray-700 p-2 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <span className="bg-orange-500 text-white px-1.5 py-0.5 rounded-full text-xs font-bold min-w-[1.5rem] text-center">
                               {item.cantidad}
                             </span>
-                            <span className="font-medium text-white text-lg">{item.nombre}</span>
+                            <span className="font-medium text-white text-sm truncate">{item.nombre}</span>
                           </div>
                           {item.notas && (
-                            <div className="mt-2 ml-11 p-2 bg-yellow-800 border-l-4 border-yellow-500 rounded">
-                              <p className="text-sm text-yellow-200">📝 Nota: {item.notas}</p>
+                            <div className="mt-1.5 ml-7 p-1.5 bg-yellow-800 border-l-2 border-yellow-500 rounded">
+                              <p className="text-xs text-yellow-200">📝 {item.notas}</p>
                             </div>
                           )}
                         </div>
@@ -281,40 +251,40 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                     </div>
                   </div>
 
-                  {/* BOTONES DE ACCIÓN - Solo para Administrador y Caja */}
+                  {/* BOTONES DE ACCIÓN - Compactos */}
                   {puedeModificarEstados() && (
-                    <div className="px-4 pb-4 pt-2 border-t border-gray-600">
-                      <div className="flex gap-3">
+                    <div className="px-3 pb-3 pt-2 border-t border-gray-600">
+                      <div className="flex gap-2">
                         {pedido.estado === 'EnProceso' && (
                           <button
                             onClick={() => confirmarCambioEstado(pedido.id, 'Listo', pedido.mesa)}
                             disabled={cargandoEstado === pedido.id}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                           >
-                            <Package size={20} />
-                            {cargandoEstado === pedido.id ? 'Procesando...' : 'Marcar Listo'}
+                            <Package size={16} />
+                            {cargandoEstado === pedido.id ? 'Procesando...' : 'Listo'}
                           </button>
                         )}
                         {pedido.estado === 'Listo' && (
                           <button
                             onClick={() => confirmarCambioEstado(pedido.id, 'Entregado', pedido.mesa)}
                             disabled={cargandoEstado === pedido.id}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                           >
-                            <CheckCircle size={20} />
-                            {cargandoEstado === pedido.id ? 'Procesando...' : 'Marcar Entregado'}
+                            <CheckCircle size={16} />
+                            {cargandoEstado === pedido.id ? 'Procesando...' : 'Entregado'}
                           </button>
                         )}
                       </div>
                     </div>
                   )}
 
-                  {/* Información adicional */}
-                  <div className="px-4 pb-4 pt-2 border-t border-gray-600">
-                    <div className="flex justify-between items-center text-sm text-gray-400">
-                      <span>Total items: {pedido.items.reduce((sum, item) => sum + item.cantidad, 0)}</span>
+                  {/* Información adicional compacta */}
+                  <div className="px-3 pb-2 pt-1.5 border-t border-gray-600">
+                    <div className="flex justify-between items-center text-xs text-gray-400">
+                      <span>Items: {pedido.items.reduce((sum, item) => sum + item.cantidad, 0)}</span>
                       {pedido.tiempoEstimado && (
-                        <span>Tiempo est.: {pedido.tiempoEstimado} min</span>
+                        <span>Est.: {pedido.tiempoEstimado} min</span>
                       )}
                     </div>
                   </div>
@@ -325,13 +295,13 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         )}
       </div>
 
-      {/* ✅ Componente de Control por Voz */}
+      {/* ✅ Componente de Control por Voz - Sin cambios */}
       <VoiceControlCocina 
         pedidos={pedidosFiltrados}
         onMarcarListo={marcarPedidoListoPorVoz}
       />
 
-      {/* Modal de Confirmación */}
+      {/* Modal de Confirmación - Sin cambios */}
       {modalConfirmacion && modalConfirmacion.tipo === 'confirmar' && (
         <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-2xl max-w-md w-full p-6 border-2 border-gray-600">
@@ -360,7 +330,7 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         </div>
       )}
 
-      {/* Modal de Alerta */}
+      {/* Modal de Alerta - Sin cambios */}
       {modalConfirmacion && (modalConfirmacion.tipo === 'exito' || modalConfirmacion.tipo === 'error') && (
         <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-2xl max-w-md w-full p-6 border-2 border-gray-600">
