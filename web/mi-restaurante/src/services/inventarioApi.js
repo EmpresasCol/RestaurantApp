@@ -1,7 +1,7 @@
 // ==================== SERVICIOS API - MÓDULO DE INVENTARIO ====================
 // Archivo: src/services/inventarioApi.js
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://pulingly-unpromising-gracie.ngrok-free.dev/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://shadowgraphic-punctiliously-sharleen.ngrok-free.dev/api';
 
 // Helper para headers con UTF-8 y ngrok
 const fetchWithHeaders = async (url, options = {}) => {

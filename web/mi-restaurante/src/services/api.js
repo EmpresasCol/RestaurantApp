@@ -177,7 +177,7 @@ export const createPedido = async (mesaId, items) => {
       detalles: items.map(item => ({
         platilloId: item.id,
         cantidad: item.cantidad,
-        nota: item.notas || ""
+        nota: item.nota || item.notas || ""
       }))
     };
 
@@ -204,16 +204,14 @@ export const createPedido = async (mesaId, items) => {
 
 /**
  * Actualiza el estado de un pedido
- * ✅ CORREGIDO: Usa el endpoint /estado para cambios de estado
  * @param {number} id - ID del pedido
- * @param {string} estado - Nuevo estado (EnProceso, Listo, Entregado, Pagado, Cancelado)
+ * @param {string} estado - Nuevo estado (Pendiente, EnPreparacion, Listo, Entregado, Pagado, Cancelado)
  * @returns {Promise} - Resultado de la actualización
  */
 export const updatePedido = async (id, estado) => {
   try {
     console.log('🔄 Actualizando estado del pedido:', { id, estado });
 
-    // ✅ CORRECCIÓN: Usar endpoint específico /estado
     const response = await fetchWithHeaders(`${API_URL}/pedidos/${id}/estado`, {
       method: 'PUT',
       body: JSON.stringify({ estado: estado })
@@ -237,6 +235,44 @@ export const updatePedido = async (id, estado) => {
     return data;
   } catch (error) {
     console.error('❌ Error en updatePedido:', error);
+    throw error;
+  }
+};
+
+/**
+ * Actualiza el estado de un pedido (alias para compatibilidad)
+ * @param {number} pedidoId - ID del pedido
+ * @param {string} nuevoEstado - Nuevo estado del pedido
+ * @returns {Promise} - Resultado de la actualización
+ */
+export const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
+  try {
+    console.log(`🔄 Actualizando pedido ${pedidoId} → ${nuevoEstado}`);
+    console.log(`📍 URL: ${API_URL}/pedidos/${pedidoId}/estado`);
+    
+    const response = await fetchWithHeaders(`${API_URL}/pedidos/${pedidoId}/estado`, {
+      method: 'PUT',
+      body: JSON.stringify({ estado: nuevoEstado })
+    });
+
+    console.log(`📡 Status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Error del servidor: ${errorText}`);
+      throw new Error(`Error al actualizar estado del pedido: ${errorText}`);
+    }
+
+    if (response.status === 204) {
+      console.log('✅ Pedido actualizado exitosamente (204 No Content)');
+      return { success: true };
+    }
+
+    const resultado = await response.json();
+    console.log('✅ Pedido actualizado:', resultado);
+    return resultado;
+  } catch (error) {
+    console.error('❌ Error en actualizarEstadoPedido:', error);
     throw error;
   }
 };
@@ -441,41 +477,6 @@ export const deleteUsuario = async (id) => {
     return { success: true };
   } catch (error) {
     console.error('❌ Error en deleteUsuario:', error);
-    throw error;
-  }
-};
-
-// ==================== ESTADO PEDIDO COCINA ====================
-/**
- * Actualiza el estado de un pedido (usado principalmente en módulo de cocina)
- * ✅ Esta función ya usaba el endpoint correcto /estado
- * @param {number} pedidoId - ID del pedido
- * @param {string} nuevoEstado - Nuevo estado del pedido
- * @returns {Promise} - Resultado de la actualización
- */
-export const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
-  try {
-    console.log(`🔄 [VOZ] Actualizando pedido ${pedidoId} → ${nuevoEstado}`);
-    console.log(`📍 URL: ${API_URL}/pedidos/${pedidoId}/estado`);
-    
-    const response = await fetchWithHeaders(`${API_URL}/pedidos/${pedidoId}/estado`, {
-      method: 'PUT',
-      body: JSON.stringify({ estado: nuevoEstado })
-    });
-
-    console.log(`📡 [VOZ] Status: ${response.status}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [VOZ] Error del servidor: ${errorText}`);
-      throw new Error(`Error al actualizar estado del pedido: ${errorText}`);
-    }
-
-    const resultado = await response.json();
-    console.log('✅ [VOZ] Pedido actualizado:', resultado);
-    return resultado;
-  } catch (error) {
-    console.error('❌ [VOZ] Error en actualizarEstadoPedido:', error);
     throw error;
   }
 };

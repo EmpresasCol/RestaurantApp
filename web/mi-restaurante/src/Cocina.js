@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Users, ChefHat, Clock, CheckCircle, Package } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Users, ChefHat, Clock, CheckCircle, Package, Truck } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
 import * as api from './services/api';
+import { getDomiciliosActivos, actualizarEstadoDomicilio } from './services/domiciliosApi';
 import VoiceControlCocina from './components/VoiceControlCocina'; 
 
 function Cocina({ pedidos = [], onActualizarPedidos }) {
@@ -9,46 +10,149 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
   const [filtroMesa, setFiltroMesa] = useState('todas');
   const [cargandoEstado, setCargandoEstado] = useState(null);
   const [modalConfirmacion, setModalConfirmacion] = useState(null);
+  const [todosLosPedidos, setTodosLosPedidos] = useState([]);
+  
+  // ✅ SOLUCIÓN CLOSURE: Referencia para todosLosPedidos
+  const todosLosPedidosRef = useRef([]);
+
+  // ✅ Actualizar referencia cuando cambien los pedidos
+  useEffect(() => {
+    todosLosPedidosRef.current = todosLosPedidos;
+    console.log('🔄 Cocina.js - Actualizando referencia:', todosLosPedidos.length);
+  }, [todosLosPedidos]);
+
+  useEffect(() => {
+    cargarTodosLosDatos();
+  }, [pedidos]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Actualizar reloj cada minuto
-    }, 60000);
+      cargarDomiciliosSoloActualizacion();
+    }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [pedidos]);
+
+  // ✅ FUNCIÓN PRINCIPAL: Cargar pedidos + domicilios
+  const cargarTodosLosDatos = async () => {
+    try {
+      const pedidosMesas = pedidos || [];
+      
+      // Cargar domicilios activos
+      const domiciliosData = await getDomiciliosActivos();
+      
+      const domiciliosTransformados = Array.isArray(domiciliosData) 
+        ? domiciliosData
+            .filter(d => d.estado === 'EnProceso')
+            .map(d => ({
+              id: `D${d.id}`,
+              domicilioId: d.id,
+              mesa: `Domicilio #${d.id}`,
+              cliente: d.clienteNombre,
+              telefono: d.clienteTelefono,
+              direccion: d.direccionCompleta,
+              items: d.detalles.map(det => ({
+                id: det.id,
+                nombre: det.platilloNombre,
+                cantidad: det.cantidad,
+                notas: det.nota || ""
+              })),
+              hora: new Date(d.fechaPedido),
+              estado: 'EnProceso',
+              tipo: 'domicilio',
+              notasCliente: d.notasCliente
+            }))
+        : [];
+
+      const pedidosMesasTransformados = pedidosMesas.map(p => ({
+        ...p,
+        tipo: 'mesa'
+      }));
+
+      const combinados = [...pedidosMesasTransformados, ...domiciliosTransformados];
+      setTodosLosPedidos(combinados);
+    } catch (error) {
+      console.error('Error al cargar datos:', error);
+    }
+  };
+
+  // ✅ FUNCIÓN SOLO PARA ACTUALIZACIÓN PERIÓDICA
+  const cargarDomiciliosSoloActualizacion = async () => {
+    try {
+      const domiciliosData = await getDomiciliosActivos();
+      
+      const domiciliosTransformados = Array.isArray(domiciliosData) 
+        ? domiciliosData
+            .filter(d => d.estado === 'EnProceso')
+            .map(d => ({
+              id: `D${d.id}`,
+              domicilioId: d.id,
+              mesa: `Domicilio #${d.id}`,
+              cliente: d.clienteNombre,
+              telefono: d.clienteTelefono,
+              direccion: d.direccionCompleta,
+              items: d.detalles.map(det => ({
+                id: det.id,
+                nombre: det.platilloNombre,
+                cantidad: det.cantidad,
+                notas: det.nota || ""
+              })),
+              hora: new Date(d.fechaPedido),
+              estado: 'EnProceso',
+              tipo: 'domicilio',
+              notasCliente: d.notasCliente
+            }))
+        : [];
+
+      const pedidosMesasTransformados = pedidos.map(p => ({
+        ...p,
+        tipo: 'mesa'
+      }));
+
+      const combinados = [...pedidosMesasTransformados, ...domiciliosTransformados];
+      setTodosLosPedidos(combinados);
+    } catch (error) {
+      console.error('Error al actualizar domicilios:', error);
+    }
+  };
 
   const calcularTiempoTranscurrido = (horaInicio) => {
     const ahora = new Date();
     return Math.floor((ahora - horaInicio) / 60000);
   };
 
-  // Verificar si el usuario puede cambiar estados
   const puedeModificarEstados = () => {
     if (!usuario) return false;
     const rol = usuario.rol?.toLowerCase();
     return rol === 'administrador' || rol === 'caja';
   };
 
-  // Verificar si el usuario puede filtrar por mesas
   const puedeFiltrarMesas = () => {
     if (!usuario) return false;
     const rol = usuario.rol?.toLowerCase();
     return rol === 'administrador' || rol === 'caja';
   };
 
-  const cambiarEstadoPedido = async (pedidoId, nuevoEstado) => {
+  // ✅ FUNCIÓN ACTUALIZADA: Manejar mesas y domicilios
+  const cambiarEstadoPedido = async (pedido, nuevoEstado) => {
+    const pedidoId = pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id;
     setCargandoEstado(pedidoId);
     try {
-      await api.actualizarEstadoPedido(pedidoId, nuevoEstado);
+      if (pedido.tipo === 'domicilio') {
+        await actualizarEstadoDomicilio(pedido.domicilioId, 'EnCamino');
+      } else {
+        await api.actualizarEstadoPedido(pedidoId, nuevoEstado);
+      }
       
-      // Recargar los pedidos después de actualizar
       if (onActualizarPedidos) {
         await onActualizarPedidos();
       }
+      await cargarTodosLosDatos();
       
       setModalConfirmacion({
         tipo: 'exito',
-        mensaje: `Pedido marcado como ${nuevoEstado === 'Listo' ? 'Listo' : 'Entregado'}`
+        mensaje: pedido.tipo === 'domicilio' 
+          ? '🚲 Domicilio listo para envío'
+          : `Pedido marcado como ${nuevoEstado === 'Listo' ? 'Listo' : 'Entregado'}`
       });
       
       setTimeout(() => setModalConfirmacion(null), 2000);
@@ -63,30 +167,124 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Marcar pedido como listo (para control por voz)
-  const marcarPedidoListoPorVoz = async (pedidoId) => {
-    console.log(`🎤 Control por voz: Marcando pedido ${pedidoId} como listo`);
-    await cambiarEstadoPedido(pedidoId, 'Listo');
+  // ✅ FUNCIÓN ACTUALIZADA: Marcar listo por voz (mesas y domicilios)
+  const marcarPedidoListoPorVoz = async (pedidoId, tipoEspecificado = null) => {
+    // ✅ USAR LA REFERENCIA ACTUALIZADA, NO EL STATE DIRECTAMENTE
+    const pedidosActuales = todosLosPedidosRef.current;
+    
+    console.log(`🎤 Control por voz: Buscando ${tipoEspecificado || 'pedido/domicilio'} con ID ${pedidoId} (tipo: ${typeof pedidoId})`);
+    console.log('📋 Pedidos disponibles:', pedidosActuales.map(p => ({
+      id: p.id,
+      idTipo: typeof p.id,
+      domicilioId: p.domicilioId,
+      domicilioIdTipo: typeof p.domicilioId,
+      tipo: p.tipo,
+      estado: p.estado
+    })));
+    
+    let pedido = null;
+    let tipoEncontrado = null;
+    
+    // ✅ SI SE ESPECIFICÓ EL TIPO, BUSCAR SOLO EN ESE TIPO
+    if (tipoEspecificado === 'mesa') {
+      // Buscar SOLO en pedidos de mesa
+      pedido = pedidosActuales.find(p => 
+        p.tipo === 'mesa' && 
+        (p.id === pedidoId || p.id === String(pedidoId) || String(p.id) === String(pedidoId)) && 
+        p.estado === 'EnProceso'
+      );
+      
+      if (pedido) {
+        tipoEncontrado = 'mesa';
+        console.log(`✅ Pedido de mesa encontrado:`, pedido);
+      } else {
+        console.log(`❌ No se encontró PEDIDO de mesa con ID ${pedidoId} en estado EnProceso`);
+      }
+    } else if (tipoEspecificado === 'domicilio') {
+      // Buscar SOLO en domicilios
+      pedido = pedidosActuales.find(p => 
+        p.tipo === 'domicilio' && 
+        (p.domicilioId === pedidoId || p.domicilioId === String(pedidoId) || String(p.domicilioId) === String(pedidoId)) &&
+        p.estado === 'EnProceso'
+      );
+      
+      if (pedido) {
+        tipoEncontrado = 'domicilio';
+        console.log(`✅ Domicilio encontrado:`, pedido);
+      } else {
+        console.log(`❌ No se encontró DOMICILIO con ID ${pedidoId} en estado EnProceso`);
+      }
+    } else {
+      // ✅ SI NO SE ESPECIFICÓ TIPO, BUSCAR PRIMERO EN MESAS, LUEGO EN DOMICILIOS (fallback)
+      pedido = pedidosActuales.find(p => 
+        p.tipo === 'mesa' && 
+        (p.id === pedidoId || p.id === String(pedidoId) || String(p.id) === String(pedidoId)) && 
+        p.estado === 'EnProceso'
+      );
+      
+      if (pedido) {
+        tipoEncontrado = 'mesa';
+        console.log(`✅ Pedido de mesa encontrado:`, pedido);
+      }
+      
+      // Si no se encuentra, buscar en domicilios
+      if (!pedido) {
+        pedido = pedidosActuales.find(p => 
+          p.tipo === 'domicilio' && 
+          (p.domicilioId === pedidoId || p.domicilioId === String(pedidoId) || String(p.domicilioId) === String(pedidoId)) &&
+          p.estado === 'EnProceso'
+        );
+        if (pedido) {
+          tipoEncontrado = 'domicilio';
+          console.log(`✅ Domicilio encontrado:`, pedido);
+        }
+      }
+    }
+    
+    if (pedido) {
+      console.log(`✅ Marcando como listo - Tipo: ${tipoEncontrado}`);
+      // ✅ cambiarEstadoPedido ya maneja el feedback, no duplicar aquí
+      await cambiarEstadoPedido(pedido, tipoEncontrado === 'domicilio' ? 'EnCamino' : 'Listo');
+    } else {
+      console.error(`❌ No se encontró ${tipoEspecificado || 'pedido/domicilio'} con ID ${pedidoId}`);
+      console.log('IDs disponibles:', {
+        mesas: pedidosActuales.filter(p => p.tipo === 'mesa').map(p => ({ id: p.id, estado: p.estado })),
+        domicilios: pedidosActuales.filter(p => p.tipo === 'domicilio').map(p => ({ domicilioId: p.domicilioId, estado: p.estado }))
+      });
+      
+      // ✅ Mostrar error con información útil
+      const tipoMensaje = tipoEspecificado === 'mesa' ? 'pedido' : tipoEspecificado === 'domicilio' ? 'domicilio' : 'pedido/domicilio';
+      setModalConfirmacion({
+        tipo: 'error',
+        mensaje: `❌ No se encontró ${tipoMensaje} #${pedidoId} en proceso`
+      });
+      
+      setTimeout(() => setModalConfirmacion(null), 3000);
+    }
   };
 
-  const confirmarCambioEstado = (pedidoId, nuevoEstado, numeroMesa) => {
+  const confirmarCambioEstado = (pedido, nuevoEstado, numeroMesa) => {
     setModalConfirmacion({
       tipo: 'confirmar',
       titulo: `¿Marcar como ${nuevoEstado}?`,
-      mensaje: `Mesa ${numeroMesa} - Pedido #${pedidoId}`,
-      pedidoId,
+      mensaje: `${numeroMesa} - ${pedido.tipo === 'domicilio' ? 'Domicilio' : 'Pedido'} #${pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id}`,
+      pedido,
       nuevoEstado,
       onConfirmar: () => {
-        cambiarEstadoPedido(pedidoId, nuevoEstado);
+        cambiarEstadoPedido(pedido, nuevoEstado);
         setModalConfirmacion(null);
       },
       onCancelar: () => setModalConfirmacion(null)
     });
   };
 
-  const mesasUnicas = [...new Set(pedidos.map(p => p.mesa))].sort((a, b) => a - b);
+  const mesasUnicas = [...new Set(todosLosPedidos.map(p => p.mesa))].sort((a, b) => {
+    const aNum = typeof a === 'number' ? a : 999;
+    const bNum = typeof b === 'number' ? b : 999;
+    return aNum - bNum;
+  });
 
-  const pedidosFiltrados = pedidos
+  const pedidosFiltrados = todosLosPedidos
     .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
     .filter(pedido => {
       if (!puedeFiltrarMesas()) return true;
@@ -94,6 +292,10 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
       return pedido.mesa.toString() === filtroMesa;
     })
     .sort((a, b) => new Date(a.hora) - new Date(b.hora));
+
+  // ✅ Log para debugging
+  console.log('🔍 Cocina.js - todosLosPedidos:', todosLosPedidos.length);
+  console.log('🔍 Cocina.js - pedidosFiltrados:', pedidosFiltrados.length);
 
   const getEstadoColor = (estado) => {
     switch (estado) {
@@ -155,10 +357,10 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
-              Todas ({pedidos.filter(p => p.estado !== 'Pagado' && p.estado !== 'Cancelado').length})
+              Todas ({pedidosFiltrados.length})
             </button>
             {mesasUnicas.map(mesa => {
-              const pedidosMesa = pedidos.filter(p => 
+              const pedidosMesa = todosLosPedidos.filter(p => 
                 p.mesa === mesa && 
                 p.estado !== 'Pagado' && 
                 p.estado !== 'Cancelado'
@@ -173,7 +375,7 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                 >
-                  Mesa {mesa} ({pedidosMesa.length})
+                  {typeof mesa === 'number' ? `Mesa ${mesa}` : mesa} ({pedidosMesa.length})
                 </button>
               );
             })}
@@ -183,20 +385,10 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         {pedidosFiltrados.length === 0 ? (
           <div className="bg-gray-800 rounded-lg p-12 text-center">
             <ChefHat className="mx-auto text-gray-500 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-400 mb-2">
-              {pedidos.length === 0 ? 'No hay órdenes' : puedeFiltrarMesas() ? 'No hay órdenes para esta mesa' : 'No hay órdenes'}
-            </h3>
-            <p className="text-gray-500">
-              {pedidos.length === 0 
-                ? 'Las órdenes aparecerán aquí cuando los clientes hagan pedidos'
-                : puedeFiltrarMesas() 
-                  ? 'Selecciona otra mesa para ver sus órdenes'
-                  : 'Las órdenes aparecerán aquí cuando los clientes hagan pedidos'
-              }
-            </p>
+            <h3 className="text-xl font-semibold text-gray-400 mb-2">No hay órdenes</h3>
+            <p className="text-gray-500">Las órdenes aparecerán aquí cuando se creen</p>
           </div>
         ) : (
-          // ✅ GRID RESPONSIVE CON MÚLTIPLES COLUMNAS
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {pedidosFiltrados.map(pedido => {
               const estadoInfo = getEstadoTexto(pedido.estado);
@@ -206,15 +398,36 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                   key={pedido.id} 
                   className={`bg-gray-800 rounded-lg border-2 overflow-hidden transition-all hover:shadow-xl ${getEstadoColor(pedido.estado)}`}
                 >
-                  {/* Header compacto */}
-                  <div className="p-3 bg-gray-700 border-b border-gray-600">
+                  {/* ✅ Header con identificación de domicilio */}
+                  <div className={`p-3 border-b border-gray-600 ${
+                    pedido.tipo === 'domicilio' ? 'bg-gradient-to-r from-purple-600 to-purple-500' : 'bg-gray-700'
+                  }`}>
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="text-lg font-bold text-white">Orden #{pedido.id}</h3>
+                        <h3 className="text-lg font-bold text-white">
+                          Orden #{pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id}
+                        </h3>
                         <p className="text-sm text-gray-300 flex items-center gap-1 mt-1">
-                          <Users size={14} />
-                          Mesa {pedido.mesa}
+                          {pedido.tipo === 'domicilio' ? (
+                            <>
+                              <Truck size={14} />
+                              {pedido.mesa}
+                            </>
+                          ) : (
+                            <>
+                              <Users size={14} />
+                              Mesa {pedido.mesa}
+                            </>
+                          )}
                         </p>
+                        
+                        {/* ✅ Badge de domicilio */}
+                        {pedido.tipo === 'domicilio' && (
+                          <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-white text-purple-700">
+                            🚲 DOMICILIO
+                          </span>
+                        )}
+                        
                         <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${estadoInfo.color} bg-gray-800`}>
                           {estadoInfo.texto}
                         </span>
@@ -227,6 +440,15 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                         <p className="text-xs text-gray-400">{pedido.hora.toLocaleTimeString()}</p>
                       </div>
                     </div>
+
+                    {/* ✅ Info adicional para domicilios */}
+                    {pedido.tipo === 'domicilio' && (
+                      <div className="text-sm space-y-1 bg-white/10 rounded p-2 mt-2">
+                        <p>👤 {pedido.cliente}</p>
+                        <p>📱 {pedido.telefono}</p>
+                        <p>📍 {pedido.direccion}</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Platos compactos */}
@@ -251,23 +473,34 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                     </div>
                   </div>
 
+                  {/* ✅ Notas del cliente (domicilios) */}
+                  {pedido.notasCliente && (
+                    <div className="px-3 pb-2">
+                      <div className="bg-yellow-900/30 border border-yellow-500/50 rounded p-2">
+                        <p className="text-yellow-300 text-xs">
+                          <strong>Notas:</strong> {pedido.notasCliente}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* BOTONES DE ACCIÓN - Compactos */}
                   {puedeModificarEstados() && (
                     <div className="px-3 pb-3 pt-2 border-t border-gray-600">
                       <div className="flex gap-2">
                         {pedido.estado === 'EnProceso' && (
                           <button
-                            onClick={() => confirmarCambioEstado(pedido.id, 'Listo', pedido.mesa)}
-                            disabled={cargandoEstado === pedido.id}
+                            onClick={() => confirmarCambioEstado(pedido, pedido.tipo === 'domicilio' ? 'EnCamino' : 'Listo', pedido.mesa)}
+                            disabled={cargandoEstado === (pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id)}
                             className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                           >
                             <Package size={16} />
-                            {cargandoEstado === pedido.id ? 'Procesando...' : 'Listo'}
+                            {cargandoEstado === (pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id) ? 'Procesando...' : (pedido.tipo === 'domicilio' ? 'Listo para Envío' : 'Listo')}
                           </button>
                         )}
-                        {pedido.estado === 'Listo' && (
+                        {pedido.estado === 'Listo' && pedido.tipo === 'mesa' && (
                           <button
-                            onClick={() => confirmarCambioEstado(pedido.id, 'Entregado', pedido.mesa)}
+                            onClick={() => confirmarCambioEstado(pedido, 'Entregado', pedido.mesa)}
                             disabled={cargandoEstado === pedido.id}
                             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
                           >
@@ -283,9 +516,6 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                   <div className="px-3 pb-2 pt-1.5 border-t border-gray-600">
                     <div className="flex justify-between items-center text-xs text-gray-400">
                       <span>Items: {pedido.items.reduce((sum, item) => sum + item.cantidad, 0)}</span>
-                      {pedido.tiempoEstimado && (
-                        <span>Est.: {pedido.tiempoEstimado} min</span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -295,13 +525,13 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         )}
       </div>
 
-      {/* ✅ Componente de Control por Voz - Sin cambios */}
+      {/* ✅ Control por voz actualizado */}
       <VoiceControlCocina 
         pedidos={pedidosFiltrados}
         onMarcarListo={marcarPedidoListoPorVoz}
       />
 
-      {/* Modal de Confirmación - Sin cambios */}
+      {/* Modal de Confirmación */}
       {modalConfirmacion && modalConfirmacion.tipo === 'confirmar' && (
         <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-2xl max-w-md w-full p-6 border-2 border-gray-600">
@@ -330,7 +560,7 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
         </div>
       )}
 
-      {/* Modal de Alerta - Sin cambios */}
+      {/* Modal de Alerta */}
       {modalConfirmacion && (modalConfirmacion.tipo === 'exito' || modalConfirmacion.tipo === 'error') && (
         <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800 rounded-2xl max-w-md w-full p-6 border-2 border-gray-600">

@@ -13,6 +13,25 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
   
   const reconocimientoRef = useRef(null);
   const escuchandoRef = useRef(false);
+  const pedidosRef = useRef(pedidos); // ✅ NUEVO: Referencia a pedidos
+
+  // ✅ NUEVO: Actualizar la referencia cada vez que cambian los pedidos
+  useEffect(() => {
+    pedidosRef.current = pedidos;
+    console.log('🔄 Actualizando referencia de pedidos:', pedidos?.length || 0);
+  }, [pedidos]);
+
+  // ✅ LOGGING: Ver qué pedidos recibe el componente
+  useEffect(() => {
+    console.log('🎤 VoiceControlCocina - Pedidos recibidos:', pedidos?.length || 0);
+    console.log('📋 VoiceControlCocina - Detalle de pedidos:', pedidos?.map(p => ({
+      id: p.id,
+      tipo: p.tipo,
+      domicilioId: p.domicilioId,
+      estado: p.estado,
+      mesa: p.mesa
+    })));
+  }, [pedidos]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -80,7 +99,6 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
 
     recognition.onend = () => {
       console.log('🎤 Reconocimiento finalizado');
-      // Si debe seguir escuchando, reiniciar automáticamente
       if (escuchandoRef.current) {
         console.log('🔄 Reiniciando reconocimiento automáticamente...');
         setTimeout(() => reiniciarReconocimiento(), 100);
@@ -104,15 +122,13 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     };
 
     setReconocimiento(recognition);
-    reconocimientoRef.current = recognition; // ✅ NUEVO: Guardar referencia
+    reconocimientoRef.current = recognition;
 
-    // ✅ NUEVO: Monitorear visibilidad de la página
     const handleVisibilityChange = () => {
       if (document.hidden) {
         console.log('👁️ Ventana en segundo plano - Manteniendo reconocimiento activo');
       } else {
         console.log('👁️ Ventana en primer plano');
-        // Verificar que el reconocimiento sigue activo
         if (escuchandoRef.current) {
           console.log('🔄 Verificando estado del reconocimiento...');
           setTimeout(() => {
@@ -126,14 +142,12 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // ✅ NUEVO: Health check cada 5 segundos
     const healthCheckInterval = setInterval(() => {
       if (escuchandoRef.current) {
         console.log('🏥 Health check - Reconocimiento activo');
       }
     }, 5000);
 
-    // Cleanup
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(healthCheckInterval);
@@ -151,7 +165,6 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     };
   }, [escuchando]);
 
-  // ✅ NUEVA FUNCIÓN: Reiniciar reconocimiento de forma segura
   const reiniciarReconocimiento = () => {
     const recognition = reconocimientoRef.current;
     
@@ -185,15 +198,7 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
   const procesarComando = (comando) => {
     console.log('🔍 Procesando comando:', comando);
 
-    const patronNumero = /pedido\s+(?:número\s+)?(\d+)\s+listo/i;
-    const matchNumero = comando.match(patronNumero);
-    
-    if (matchNumero) {
-      const idPedido = parseInt(matchNumero[1]);
-      marcarPedidoListo(idPedido);
-      return;
-    }
-
+    // ✅ NÚMEROS EN PALABRAS
     const numerosEnPalabras = {
       'uno': 1, 'dos': 2, 'tres': 3, 'cuatro': 4, 'cinco': 5,
       'seis': 6, 'siete': 7, 'ocho': 8, 'nueve': 9,
@@ -210,11 +215,23 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
       'setecientos': 700, 'ochocientos': 800, 'novecientos': 900
     };
 
-    const patronPalabra = /pedido\s+(?:número\s+)?(.+?)\s+listo/i;
-    const matchPalabra = comando.match(patronPalabra);
+    // ✅ PATRÓN PARA PEDIDOS DE MESA CON NÚMERO: "pedido [número] listo"
+    const patronPedidoNumero = /pedido\s+(?:número\s+)?(\d+)\s+listo/i;
+    const matchPedidoNumero = comando.match(patronPedidoNumero);
     
-    if (matchPalabra) {
-      const palabras = matchPalabra[1].toLowerCase().trim();
+    if (matchPedidoNumero) {
+      const idPedido = parseInt(matchPedidoNumero[1]);
+      console.log('✅ Comando de PEDIDO detectado - ID:', idPedido);
+      marcarPedidoListo(idPedido, 'mesa');
+      return;
+    }
+
+    // ✅ PATRÓN PARA PEDIDOS DE MESA CON PALABRAS: "pedido cinco listo"
+    const patronPedidoPalabra = /pedido\s+(?:número\s+)?(.+?)\s+listo/i;
+    const matchPedidoPalabra = comando.match(patronPedidoPalabra);
+    
+    if (matchPedidoPalabra) {
+      const palabras = matchPedidoPalabra[1].toLowerCase().trim();
       let idPedido = numerosEnPalabras[palabras];
       
       if (!idPedido) {
@@ -222,14 +239,45 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
       }
       
       if (idPedido) {
-        marcarPedidoListo(idPedido);
+        console.log('✅ Comando de PEDIDO (palabras) detectado - ID:', idPedido);
+        marcarPedidoListo(idPedido, 'mesa');
+        return;
+      }
+    }
+
+    // ✅ PATRÓN PARA DOMICILIOS CON NÚMERO: "domicilio [número] listo"
+    const patronDomicilioNumero = /domicilio\s+(?:número\s+)?(\d+)\s+listo/i;
+    const matchDomicilioNumero = comando.match(patronDomicilioNumero);
+    
+    if (matchDomicilioNumero) {
+      const idDomicilio = parseInt(matchDomicilioNumero[1]);
+      console.log('✅ Comando de DOMICILIO detectado - ID:', idDomicilio);
+      marcarPedidoListo(idDomicilio, 'domicilio');
+      return;
+    }
+
+    // ✅ PATRÓN PARA DOMICILIOS CON PALABRAS: "domicilio cinco listo"
+    const patronDomicilioPalabra = /domicilio\s+(?:número\s+)?(.+?)\s+listo/i;
+    const matchDomicilioPalabra = comando.match(patronDomicilioPalabra);
+    
+    if (matchDomicilioPalabra) {
+      const palabras = matchDomicilioPalabra[1].toLowerCase().trim();
+      let idDomicilio = numerosEnPalabras[palabras];
+      
+      if (!idDomicilio) {
+        idDomicilio = convertirPalabrasANumero(palabras, numerosEnPalabras);
+      }
+      
+      if (idDomicilio) {
+        console.log('✅ Comando de DOMICILIO (palabras) detectado - ID:', idDomicilio);
+        marcarPedidoListo(idDomicilio, 'domicilio');
         return;
       }
     }
 
     console.log('❓ Comando no reconocido:', comando);
     mostrarFeedback('error', '❓ Comando no reconocido');
-    reproducirError('Comando no reconocido. Di pedido número listo');
+    reproducirError('Comando no reconocido. Di pedido número listo o domicilio número listo');
   };
 
   const convertirPalabrasANumero = (palabras, numerosMap) => {
@@ -249,29 +297,34 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     return total > 0 ? total : null;
   };
 
-  const marcarPedidoListo = (idPedido) => {
-    console.log(`🔍 Buscando pedido ID: ${idPedido}`);
+  const marcarPedidoListo = (id, tipoComando) => {
+    // ✅ USAR LA REFERENCIA ACTUALIZADA, NO EL PROP DIRECTAMENTE
+    const pedidosActuales = pedidosRef.current;
     
-    const pedido = pedidos.find(p => p.id === idPedido && p.estado === 'EnProceso');
+    console.log(`🎤 Comando de voz recibido: ${tipoComando} #${id}`);
+    console.log(`📋 Total de pedidos disponibles: ${pedidosActuales?.length || 0}`);
     
-    if (pedido) {
-      console.log(`✅ Pedido ${idPedido} encontrado - Marcando como listo`);
-      mostrarFeedback('exito', `✅ Pedido ${idPedido} marcado como listo`);
-      reproducirConfirmacion(`Pedido ${idPedido} listo`);
-      onMarcarListo(idPedido);
-    } else {
-      const pedidoExiste = pedidos.find(p => p.id === idPedido);
-      
-      if (pedidoExiste) {
-        console.log(`⚠️ Pedido ${idPedido} existe pero no está en proceso (Estado: ${pedidoExiste.estado})`);
-        mostrarFeedback('error', `⚠️ Pedido ${idPedido} no está en proceso`);
-        reproducirError(`El pedido ${idPedido} no está en proceso`);
-      } else {
-        console.log(`❌ Pedido ${idPedido} no encontrado`);
-        mostrarFeedback('error', `❌ Pedido ${idPedido} no encontrado`);
-        reproducirError(`No se encontró el pedido ${idPedido}`);
-      }
+    // Mostrar qué está disponible para debugging
+    const pedidosMesa = pedidosActuales?.filter(p => p.tipo === 'mesa' && p.estado === 'EnProceso') || [];
+    const domicilios = pedidosActuales?.filter(p => p.tipo === 'domicilio' && p.estado === 'EnProceso') || [];
+    
+    console.log(`📋 Disponibles en EnProceso:`, {
+      mesas: pedidosMesa.map(p => ({ id: p.id, mesa: p.mesa })),
+      domicilios: domicilios.map(p => ({ domicilioId: p.domicilioId, mesa: p.mesa }))
+    });
+    
+    // ✅ Mostrar feedback visual y auditivo basado en el comando
+    if (tipoComando === 'mesa') {
+      mostrarFeedback('info', `🔍 Buscando Pedido ${id}...`);
+      reproducirConfirmacion(`Procesando pedido ${id}`);
+    } else if (tipoComando === 'domicilio') {
+      mostrarFeedback('info', `🔍 Buscando Domicilio ${id}...`);
+      reproducirConfirmacion(`Procesando domicilio ${id}`);
     }
+    
+    // ✅ PASAR TANTO EL ID COMO EL TIPO a Cocina.js
+    console.log(`✅ Enviando ID ${id} y tipo "${tipoComando}" a marcarPedidoListoPorVoz`);
+    onMarcarListo(id, tipoComando);
   };
 
   const mostrarFeedback = (tipo, mensaje) => {
@@ -309,7 +362,7 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
         console.log('🎤 Intentando iniciar reconocimiento de voz...');
         reconocimiento.start();
         setEscuchando(true);
-        escuchandoRef.current = true; // ✅ NUEVO: Actualizar referencia
+        escuchandoRef.current = true;
         console.log('✅ Control por voz ACTIVADO');
         console.log('🔧 Configuración:', {
           lang: reconocimiento.lang,
@@ -381,7 +434,7 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
       </button>
 
       {escuchando && (
-        <div className="absolute bottom-full right-0 mb-4 bg-gray-800 rounded-lg shadow-xl p-4 w-72 border-2 border-blue-500">
+        <div className="absolute bottom-full right-0 mb-4 bg-gray-800 rounded-lg shadow-xl p-4 w-80 border-2 border-blue-500">
           <div className="flex items-start gap-2 mb-3">
             <Volume2 className="text-blue-400 flex-shrink-0 mt-1" size={20} />
             <div>
@@ -390,10 +443,17 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
             </div>
           </div>
           
-          <div className="bg-gray-900 rounded-lg p-3 mb-3">
-            <p className="text-green-400 font-mono text-center text-lg">
-              "Pedido [número] listo"
-            </p>
+          <div className="space-y-2 mb-3">
+            <div className="bg-gray-900 rounded-lg p-3">
+              <p className="text-green-400 font-mono text-center text-base font-semibold">
+                "Pedido [número] listo"
+              </p>
+            </div>
+            <div className="bg-gray-900 rounded-lg p-3">
+              <p className="text-purple-400 font-mono text-center text-base font-semibold">
+                "Domicilio [número] listo"
+              </p>
+            </div>
           </div>
 
           {transcribiendo && (
@@ -414,12 +474,17 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
           )}
 
           <div className="space-y-2 text-xs text-gray-400">
-            <p className="font-semibold text-gray-300">Ejemplos:</p>
+            <p className="font-semibold text-gray-300">Ejemplos para Mesas:</p>
             <ul className="space-y-1 ml-2">
               <li>• "Pedido 5 listo"</li>
               <li>• "Pedido número 10 listo"</li>
-              <li>• "Pedido 125 listo"</li>
               <li>• "Pedido treinta y cinco listo"</li>
+            </ul>
+            <p className="font-semibold text-gray-300 mt-3">Ejemplos para Domicilios:</p>
+            <ul className="space-y-1 ml-2">
+              <li>• "Domicilio 3 listo"</li>
+              <li>• "Domicilio número 7 listo"</li>
+              <li>• "Domicilio veinte listo"</li>
             </ul>
             <p className="text-green-300 font-semibold mt-2">
               ✨ Funciona en segundo plano

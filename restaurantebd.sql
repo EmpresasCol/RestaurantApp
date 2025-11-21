@@ -925,3 +925,316 @@ WHERE table_schema = 'RestauranteBD';
 
 -- Verificar usuarios
 SELECT Id, Nombre, Usuario, Rol FROM Usuarios ORDER BY Id;
+
+
+-- =====================================================
+-- EXTENSIÓN: SISTEMA DE DOMICILIOS
+-- Se agrega al RestauranteBD existente
+-- Fecha: 2025-01-19
+-- =====================================================
+
+USE RestauranteBD;
+
+-- =====================================================
+-- TABLA: Clientes (para domicilios)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS Clientes (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    Nombre VARCHAR(100) NOT NULL,
+    Telefono VARCHAR(20) NOT NULL,
+    Email VARCHAR(100),
+    FechaRegistro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX idx_telefono (Telefono),
+    INDEX idx_nombre (Nombre)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: Direcciones (múltiples por cliente)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS Direcciones (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    ClienteId INT NOT NULL,
+    Direccion VARCHAR(255) NOT NULL,
+    Barrio VARCHAR(100),
+    Ciudad VARCHAR(100) DEFAULT 'Sincelejo',
+    Departamento VARCHAR(100) DEFAULT 'Sucre',
+    ReferenciasAdicionales TEXT COMMENT 'Indicaciones para encontrar la dirección',
+    EsPrincipal BOOLEAN DEFAULT FALSE,
+    Activa BOOLEAN DEFAULT TRUE,
+    FechaCreacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (ClienteId) REFERENCES Clientes(Id) ON DELETE CASCADE,
+    INDEX idx_cliente (ClienteId),
+    INDEX idx_ciudad (Ciudad)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: Domicilios
+-- =====================================================
+CREATE TABLE IF NOT EXISTS Domicilios (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    ClienteId INT NOT NULL,
+    DireccionId INT NOT NULL,
+    Estado ENUM('Pendiente','EnPreparacion','EnCamino','Entregado','Cancelado') DEFAULT 'Pendiente',
+    FechaPedido DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FechaEstimadaEntrega DATETIME,
+    FechaEntrega DATETIME,
+    
+    -- Información del pedido
+    Subtotal DECIMAL(10,2) NOT NULL DEFAULT 0,
+    CostoEnvio DECIMAL(10,2) NOT NULL DEFAULT 0,
+    Total DECIMAL(10,2) GENERATED ALWAYS AS (Subtotal + CostoEnvio) STORED,
+    
+    -- Método de pago
+    MetodoPago ENUM('Efectivo','Transferencia','Tarjeta','Nequi','Daviplata') NOT NULL DEFAULT 'Efectivo',
+    PagadoAnticipado BOOLEAN DEFAULT FALSE,
+    
+    -- Domiciliario asignado
+    DomiciliarioId INT,
+    
+    -- Notas
+    NotasCliente TEXT,
+    NotasInternas TEXT,
+    
+    -- Auditoría
+    UsuarioCreadorId INT NOT NULL,
+    FechaCreacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FechaActualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (ClienteId) REFERENCES Clientes(Id) ON DELETE RESTRICT,
+    FOREIGN KEY (DireccionId) REFERENCES Direcciones(Id) ON DELETE RESTRICT,
+    FOREIGN KEY (DomiciliarioId) REFERENCES Usuarios(Id) ON DELETE SET NULL,
+    FOREIGN KEY (UsuarioCreadorId) REFERENCES Usuarios(Id) ON DELETE RESTRICT,
+    
+    INDEX idx_estado (Estado),
+    INDEX idx_cliente (ClienteId),
+    INDEX idx_fecha_pedido (FechaPedido),
+    INDEX idx_domiciliario (DomiciliarioId),
+    INDEX idx_estado_fecha (Estado, FechaPedido)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: DomicilioDetalles
+-- =====================================================
+CREATE TABLE IF NOT EXISTS DomicilioDetalles (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    DomicilioId INT NOT NULL,
+    PlatilloId INT NOT NULL,
+    Cantidad INT NOT NULL,
+    PrecioUnitario DECIMAL(10,2) NOT NULL,
+    Subtotal DECIMAL(10,2) GENERATED ALWAYS AS (Cantidad * PrecioUnitario) STORED,
+    Nota TEXT,
+    
+    FOREIGN KEY (DomicilioId) REFERENCES Domicilios(Id) ON DELETE CASCADE,
+    FOREIGN KEY (PlatilloId) REFERENCES Platillos(Id) ON DELETE RESTRICT,
+    
+    INDEX idx_domicilio (DomicilioId),
+    INDEX idx_platillo (PlatilloId),
+    
+    CONSTRAINT chk_domicilio_cantidad_positive CHECK (Cantidad > 0),
+    CONSTRAINT chk_domicilio_precio_nonneg CHECK (PrecioUnitario >= 0)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: HistorialEstadosDomicilio (para tracking)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS HistorialEstadosDomicilio (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    DomicilioId INT NOT NULL,
+    EstadoAnterior VARCHAR(50),
+    EstadoNuevo VARCHAR(50) NOT NULL,
+    UsuarioId INT,
+    Comentario TEXT,
+    Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (DomicilioId) REFERENCES Domicilios(Id) ON DELETE CASCADE,
+    FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE SET NULL,
+    
+    INDEX idx_domicilio (DomicilioId),
+    INDEX idx_fecha (Fecha)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- TABLA: ConfiguracionDomicilios
+-- =====================================================
+CREATE TABLE IF NOT EXISTS ConfiguracionDomicilios (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    CostoEnvioBase DECIMAL(10,2) NOT NULL DEFAULT 3000.00,
+    CostoEnvioPorKm DECIMAL(10,2) NOT NULL DEFAULT 1000.00,
+    TiempoEstimadoPreparacion INT NOT NULL DEFAULT 30 COMMENT 'Minutos',
+    TiempoEstimadoEntrega INT NOT NULL DEFAULT 20 COMMENT 'Minutos',
+    PedidoMinimo DECIMAL(10,2) NOT NULL DEFAULT 15000.00,
+    ZonasCobertura JSON COMMENT 'Lista de zonas y sus costos',
+    HorarioInicio TIME DEFAULT '10:00:00',
+    HorarioCierre TIME DEFAULT '22:00:00',
+    DiasCierre JSON COMMENT 'Array de días cerrados',
+    Activo BOOLEAN DEFAULT TRUE,
+    FechaActualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =====================================================
+-- DATOS INICIALES
+-- =====================================================
+
+-- Configuración inicial de domicilios
+INSERT INTO ConfiguracionDomicilios (
+    CostoEnvioBase, 
+    CostoEnvioPorKm, 
+    TiempoEstimadoPreparacion, 
+    TiempoEstimadoEntrega,
+    PedidoMinimo,
+    Activo
+) VALUES (
+    3000.00,  -- $3.000 base
+    1000.00,  -- $1.000 por km adicional
+    30,       -- 30 minutos preparación
+    20,       -- 20 minutos entrega
+    15000.00, -- Pedido mínimo $15.000
+    TRUE
+);
+
+-- Cliente de ejemplo (para pruebas)
+INSERT INTO Clientes (Nombre, Telefono, Email) VALUES
+('Cliente Ejemplo', '3001234567', 'cliente@ejemplo.com');
+
+-- Dirección de ejemplo
+INSERT INTO Direcciones (ClienteId, Direccion, Barrio, Ciudad, EsPrincipal) VALUES
+(1, 'Calle 25 #15-30', 'Centro', 'Sincelejo', TRUE);
+
+-- =====================================================
+-- VISTAS DE REPORTES
+-- =====================================================
+
+-- Vista: Domicilios activos con información completa
+CREATE OR REPLACE VIEW vw_domicilios_activos AS
+SELECT 
+    d.Id AS DomicilioId,
+    d.Estado,
+    d.FechaPedido,
+    d.FechaEstimadaEntrega,
+    c.Id AS ClienteId,
+    c.Nombre AS ClienteNombre,
+    c.Telefono AS ClienteTelefono,
+    dir.Direccion,
+    dir.Barrio,
+    dir.ReferenciasAdicionales,
+    d.Subtotal,
+    d.CostoEnvio,
+    d.Total,
+    d.MetodoPago,
+    u.Nombre AS DomiciliarioNombre,
+    d.NotasCliente,
+    COUNT(dd.Id) AS CantidadItems,
+    SUM(dd.Cantidad) AS TotalProductos
+FROM Domicilios d
+INNER JOIN Clientes c ON d.ClienteId = c.Id
+INNER JOIN Direcciones dir ON d.DireccionId = dir.Id
+LEFT JOIN Usuarios u ON d.DomiciliarioId = u.Id
+LEFT JOIN DomicilioDetalles dd ON d.Id = dd.DomicilioId
+WHERE d.Estado IN ('Pendiente', 'EnPreparacion', 'EnCamino')
+GROUP BY d.Id, d.Estado, d.FechaPedido, d.FechaEstimadaEntrega,
+         c.Id, c.Nombre, c.Telefono, dir.Direccion, dir.Barrio, 
+         dir.ReferenciasAdicionales, d.Subtotal, d.CostoEnvio, 
+         d.Total, d.MetodoPago, u.Nombre, d.NotasCliente;
+
+-- Vista: Estadísticas de domicilios
+CREATE OR REPLACE VIEW vw_estadisticas_domicilios AS
+SELECT 
+    DATE(d.FechaPedido) AS Fecha,
+    COUNT(*) AS TotalDomicilios,
+    SUM(CASE WHEN d.Estado = 'Entregado' THEN 1 ELSE 0 END) AS Entregados,
+    SUM(CASE WHEN d.Estado = 'Cancelado' THEN 1 ELSE 0 END) AS Cancelados,
+    SUM(CASE WHEN d.Estado IN ('Pendiente', 'EnPreparacion', 'EnCamino') THEN 1 ELSE 0 END) AS EnProceso,
+    SUM(d.Total) AS VentaTotal,
+    AVG(d.Total) AS TicketPromedio,
+    SUM(d.CostoEnvio) AS TotalCostosEnvio
+FROM Domicilios d
+GROUP BY DATE(d.FechaPedido)
+ORDER BY Fecha DESC;
+
+-- =====================================================
+-- TRIGGERS
+-- =====================================================
+
+DELIMITER $$
+
+-- Trigger: Registrar cambio de estado en historial
+CREATE TRIGGER trg_domicilio_cambio_estado 
+AFTER UPDATE ON Domicilios
+FOR EACH ROW
+BEGIN
+    IF NEW.Estado != OLD.Estado THEN
+        INSERT INTO HistorialEstadosDomicilio (
+            DomicilioId, 
+            EstadoAnterior, 
+            EstadoNuevo,
+            UsuarioId
+        ) VALUES (
+            NEW.Id,
+            OLD.Estado,
+            NEW.Estado,
+            NEW.UsuarioCreadorId
+        );
+    END IF;
+END$$
+
+-- Trigger: Actualizar subtotal del domicilio
+CREATE TRIGGER trg_domicilio_actualizar_subtotal_insert
+AFTER INSERT ON DomicilioDetalles
+FOR EACH ROW
+BEGIN
+    UPDATE Domicilios 
+    SET Subtotal = (
+        SELECT COALESCE(SUM(Subtotal), 0) 
+        FROM DomicilioDetalles 
+        WHERE DomicilioId = NEW.DomicilioId
+    )
+    WHERE Id = NEW.DomicilioId;
+END$$
+
+CREATE TRIGGER trg_domicilio_actualizar_subtotal_update
+AFTER UPDATE ON DomicilioDetalles
+FOR EACH ROW
+BEGIN
+    UPDATE Domicilios 
+    SET Subtotal = (
+        SELECT COALESCE(SUM(Subtotal), 0) 
+        FROM DomicilioDetalles 
+        WHERE DomicilioId = NEW.DomicilioId
+    )
+    WHERE Id = NEW.DomicilioId;
+END$$
+
+CREATE TRIGGER trg_domicilio_actualizar_subtotal_delete
+AFTER DELETE ON DomicilioDetalles
+FOR EACH ROW
+BEGIN
+    UPDATE Domicilios 
+    SET Subtotal = (
+        SELECT COALESCE(SUM(Subtotal), 0) 
+        FROM DomicilioDetalles 
+        WHERE DomicilioId = OLD.DomicilioId
+    )
+    WHERE Id = OLD.DomicilioId;
+END$$
+
+DELIMITER ;
+
+-- =====================================================
+-- VERIFICACIÓN
+-- =====================================================
+
+SELECT '✅ Extensión de Domicilios instalada correctamente' AS Status;
+SELECT 'Tablas creadas:' AS Mensaje;
+SELECT TABLE_NAME FROM information_schema.TABLES 
+WHERE TABLE_SCHEMA = 'RestauranteBD' 
+  AND TABLE_NAME IN ('Clientes', 'Direcciones', 'Domicilios', 'DomicilioDetalles', 
+                     'HistorialEstadosDomicilio', 'ConfiguracionDomicilios')
+ORDER BY TABLE_NAME;
+
+
+USE RestauranteBD;
+ALTER TABLE domicilios MODIFY COLUMN Estado VARCHAR(50) NOT NULL DEFAULT 'EnProceso';
+
+SELECT * FROM domicilios ORDER BY Id DESC LIMIT 1;

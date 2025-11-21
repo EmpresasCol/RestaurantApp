@@ -16,7 +16,8 @@ import {
   Filter,
   Calendar,
   TrendingDown,
-  Barcode
+  Barcode,
+  AlertTriangle  // ✅ AGREGAR ESTA LÍNEA
 } from 'lucide-react';
 import * as inventarioApi from '../../services/inventarioApi';
 
