@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notificacion_provider.dart';
-import '../models/usuario.dart';
 import 'nuevo_pedido_screen.dart';
 import 'pedidos_activos_screen.dart';
 

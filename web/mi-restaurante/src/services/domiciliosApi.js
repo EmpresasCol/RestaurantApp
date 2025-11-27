@@ -1,5 +1,5 @@
 // src/services/domiciliosApi.js
-const API_URL = process.env.REACT_APP_API_URL || 'https://shadowgraphic-punctiliously-sharleen.ngrok-free.dev/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://pulingly-unpromising-gracie.ngrok-free.dev/api';
 
 const fetchWithHeaders = async (url, options = {}) => {
   const headers = {

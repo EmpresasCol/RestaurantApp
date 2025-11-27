@@ -515,7 +515,7 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                   {/* Información adicional compacta */}
                   <div className="px-3 pb-2 pt-1.5 border-t border-gray-600">
                     <div className="flex justify-between items-center text-xs text-gray-400">
-                      <span>Items: {pedido.items.reduce((sum, item) => sum + item.cantidad, 0)}</span>
+                      <span>Platos: {pedido.items.reduce((sum, item) => sum + item.cantidad, 0)}</span>
                     </div>
                   </div>
                 </div>
