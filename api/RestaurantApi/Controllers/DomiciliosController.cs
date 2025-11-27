@@ -85,7 +85,7 @@ namespace RestaurantApi.Controllers
                         .ThenInclude(dd => dd.Platillo)
                     .Include(d => d.UsuarioCreador)
                     .Include(d => d.Domiciliario)
-                    .Where(d => d.Estado == "EnProceso" || d.Estado == "EnCamino")
+                    .Where(d => d.Estado == "EnPreparacion" || d.Estado == "EnCamino")
                     .OrderBy(d => d.FechaPedido)
                     .ToListAsync();
 
@@ -244,13 +244,13 @@ namespace RestaurantApi.Controllers
 
                 decimal total = subtotal + dto.CostoEnvio;
 
-                // Crear domicilio con estado EnProceso
+                // Crear domicilio con estado EnPreparacion
                 var domicilio = new Domicilio
                 {
                     ClienteId = dto.ClienteId,
                     DireccionId = dto.DireccionId,
                     FechaPedido = DateTime.Now,
-                    Estado = "EnProceso",
+                    Estado = "EnPreparacion",
                     Subtotal = subtotal,
                     CostoEnvio = dto.CostoEnvio,
                     Total = total,
@@ -357,7 +357,7 @@ namespace RestaurantApi.Controllers
                 return NotFound(new { message = "Domicilio no encontrado" });
             }
 
-            var estadosValidos = new[] { "Pendiente", "EnPreparacion", "EnCamino", "Entregado", "Cancelado" };
+            var estadosValidos = new[] { "EnPreparacion", "Listo", "EnCamino", "Entregado", "Cancelado" };
             if (!estadosValidos.Contains(dto.Estado))
             {
                 return BadRequest(new { message = "Estado inválido" });
@@ -414,8 +414,8 @@ namespace RestaurantApi.Controllers
             var estadisticas = new EstadisticasDomiciliosDto
             {
                 TotalDomicilios = domiciliosHoy.Count,
-                Pendientes = domiciliosHoy.Count(d => d.Estado == "Pendiente"),
                 EnPreparacion = domiciliosHoy.Count(d => d.Estado == "EnPreparacion"),
+                Listo = domiciliosHoy.Count(d => d.Estado == "Listo"),
                 EnCamino = domiciliosHoy.Count(d => d.Estado == "EnCamino"),
                 Entregados = domiciliosHoy.Count(d => d.Estado == "Entregado"),
                 Cancelados = domiciliosHoy.Count(d => d.Estado == "Cancelado"),

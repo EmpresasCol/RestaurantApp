@@ -165,10 +165,10 @@ export const createDomicilio = async (domicilioData) => {
   try {
     console.log('📤 Creando domicilio:', domicilioData);
     
-    // ✅ Forzar estado inicial a "EnProceso" para que aparezca en cocina igual que pedidos de mesa
+    // ✅ Forzar estado inicial a "EnPreparacion" para que aparezca en cocina igual que pedidos de mesa
     const datosConEstado = {
       ...domicilioData,
-      estado: 'EnProceso'
+      estado: 'EnPreparacion'
     };
     
     console.log('📤 Datos a enviar al backend:', JSON.stringify(datosConEstado, null, 2));

@@ -124,8 +124,8 @@ namespace RestaurantApi.Dtos
     public class EstadisticasDomiciliosDto
     {
         public int TotalDomicilios { get; set; }
-        public int Pendientes { get; set; }
         public int EnPreparacion { get; set; }
+        public int Listo { get; set; }
         public int EnCamino { get; set; }
         public int Entregados { get; set; }
         public int Cancelados { get; set; }

@@ -22,7 +22,7 @@ namespace RestaurantApi.Models
 
         [Required]
         [MaxLength(50)]
-        public string Estado { get; set; } = "EnProceso"; // Estados: EnProceso, EnCamino, Entregado, Cancelado
+        public string Estado { get; set; } = "EnPreparacion"; // Estados: EnPreparacion, Listo, EnCamino, Entregado, Cancelado
 
         [Required]
         [Column(TypeName = "decimal(10,2)")]

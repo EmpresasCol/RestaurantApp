@@ -1,327 +1,265 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Users, ChefHat, Clock, CheckCircle, Package, Truck } from 'lucide-react';
-import { useAuth } from './context/AuthContext';
-import * as api from './services/api';
-import { getDomiciliosActivos, actualizarEstadoDomicilio } from './services/domiciliosApi';
-import VoiceControlCocina from './components/VoiceControlCocina'; 
+import { useState, useEffect, useRef } from "react"
+import { Users, ChefHat, Clock, CheckCircle, Truck } from "lucide-react"
+import { useAuth } from "./context/AuthContext"
+import * as api from "./services/api"
+import { getDomiciliosActivos, actualizarEstadoDomicilio } from "./services/domiciliosApi"
+import VoiceControlCocina from "./components/VoiceControlCocina.js"
 
 function Cocina({ pedidos = [], onActualizarPedidos }) {
-  const { usuario } = useAuth();
-  const [filtroMesa, setFiltroMesa] = useState('todas');
-  const [cargandoEstado, setCargandoEstado] = useState(null);
-  const [modalConfirmacion, setModalConfirmacion] = useState(null);
-  const [todosLosPedidos, setTodosLosPedidos] = useState([]);
-  
-  // ✅ SOLUCIÓN CLOSURE: Referencia para todosLosPedidos
-  const todosLosPedidosRef = useRef([]);
-
-  // ✅ Actualizar referencia cuando cambien los pedidos
-  useEffect(() => {
-    todosLosPedidosRef.current = todosLosPedidos;
-    console.log('🔄 Cocina.js - Actualizando referencia:', todosLosPedidos.length);
-  }, [todosLosPedidos]);
+  const { usuario } = useAuth()
+  const [filtroMesa, setFiltroMesa] = useState("todas")
+  const [cargandoEstado, setCargandoEstado] = useState(null)
+  const [modalConfirmacion, setModalConfirmacion] = useState(null)
+  const [todosLosPedidos, setTodosLosPedidos] = useState([])
+  const todosLosPedidosRef = useRef([])
 
   useEffect(() => {
-    cargarTodosLosDatos();
-  }, [pedidos]);
+    todosLosPedidosRef.current = todosLosPedidos
+  }, [todosLosPedidos])
+
+  useEffect(() => {
+    cargarTodosLosDatos()
+  }, [pedidos])
 
   useEffect(() => {
     const interval = setInterval(() => {
-      cargarDomiciliosSoloActualizacion();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [pedidos]);
+      cargarDomiciliosSoloActualizacion()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [pedidos])
 
-  // ✅ FUNCIÓN PRINCIPAL: Cargar pedidos + domicilios
   const cargarTodosLosDatos = async () => {
     try {
-      const pedidosMesas = pedidos || [];
-      
-      // Cargar domicilios activos
-      const domiciliosData = await getDomiciliosActivos();
-      
-      const domiciliosTransformados = Array.isArray(domiciliosData) 
+      const pedidosMesas = pedidos || []
+      const domiciliosData = await getDomiciliosActivos()
+
+      const domiciliosTransformados = Array.isArray(domiciliosData)
         ? domiciliosData
-            .filter(d => d.estado === 'EnProceso')
-            .map(d => ({
+            .filter((d) => d.estado === "EnPreparacion")
+            .map((d) => ({
               id: `D${d.id}`,
               domicilioId: d.id,
               mesa: `Domicilio #${d.id}`,
               cliente: d.clienteNombre,
               telefono: d.clienteTelefono,
               direccion: d.direccionCompleta,
-              items: d.detalles.map(det => ({
+              items: d.detalles.map((det) => ({
                 id: det.id,
                 nombre: det.platilloNombre,
                 cantidad: det.cantidad,
-                notas: det.nota || ""
+                notas: det.nota || "",
               })),
               hora: new Date(d.fechaPedido),
-              estado: 'EnProceso',
-              tipo: 'domicilio',
-              notasCliente: d.notasCliente
+              estado: "EnPreparacion",
+              tipo: "domicilio",
+              notasCliente: d.notasCliente,
             }))
-        : [];
+        : []
 
-      const pedidosMesasTransformados = pedidosMesas.map(p => ({
+      const pedidosMesasTransformados = pedidosMesas.map((p) => ({
         ...p,
-        tipo: 'mesa'
-      }));
+        tipo: "mesa",
+      }))
 
-      const combinados = [...pedidosMesasTransformados, ...domiciliosTransformados];
-      setTodosLosPedidos(combinados);
+      const combinados = [...pedidosMesasTransformados, ...domiciliosTransformados]
+      setTodosLosPedidos(combinados)
     } catch (error) {
-      console.error('Error al cargar datos:', error);
+      console.error("Error al cargar datos:", error)
     }
-  };
+  }
 
-  // ✅ FUNCIÓN SOLO PARA ACTUALIZACIÓN PERIÓDICA
   const cargarDomiciliosSoloActualizacion = async () => {
     try {
-      const domiciliosData = await getDomiciliosActivos();
-      
-      const domiciliosTransformados = Array.isArray(domiciliosData) 
+      const domiciliosData = await getDomiciliosActivos()
+
+      const domiciliosTransformados = Array.isArray(domiciliosData)
         ? domiciliosData
-            .filter(d => d.estado === 'EnProceso')
-            .map(d => ({
+            .filter((d) => d.estado === "EnPreparacion")
+            .map((d) => ({
               id: `D${d.id}`,
               domicilioId: d.id,
               mesa: `Domicilio #${d.id}`,
               cliente: d.clienteNombre,
               telefono: d.clienteTelefono,
               direccion: d.direccionCompleta,
-              items: d.detalles.map(det => ({
+              items: d.detalles.map((det) => ({
                 id: det.id,
                 nombre: det.platilloNombre,
                 cantidad: det.cantidad,
-                notas: det.nota || ""
+                notas: det.nota || "",
               })),
               hora: new Date(d.fechaPedido),
-              estado: 'EnProceso',
-              tipo: 'domicilio',
-              notasCliente: d.notasCliente
+              estado: "EnPreparacion",
+              tipo: "domicilio",
+              notasCliente: d.notasCliente,
             }))
-        : [];
+        : []
 
-      const pedidosMesasTransformados = pedidos.map(p => ({
+      const pedidosMesasTransformados = pedidos.map((p) => ({
         ...p,
-        tipo: 'mesa'
-      }));
+        tipo: "mesa",
+      }))
 
-      const combinados = [...pedidosMesasTransformados, ...domiciliosTransformados];
-      setTodosLosPedidos(combinados);
+      const combinados = [...pedidosMesasTransformados, ...domiciliosTransformados]
+      setTodosLosPedidos(combinados)
     } catch (error) {
-      console.error('Error al actualizar domicilios:', error);
+      console.error("Error al actualizar domicilios:", error)
     }
-  };
+  }
 
   const calcularTiempoTranscurrido = (horaInicio) => {
-    const ahora = new Date();
-    return Math.floor((ahora - horaInicio) / 60000);
-  };
+    const ahora = new Date()
+    return Math.floor((ahora - horaInicio) / 60000)
+  }
 
   const puedeModificarEstados = () => {
-    if (!usuario) return false;
-    const rol = usuario.rol?.toLowerCase();
-    return rol === 'administrador' || rol === 'caja';
-  };
+    if (!usuario) return false
+    const rol = usuario.rol?.toLowerCase()
+    return rol === "administrador" || rol === "caja"
+  }
 
   const puedeFiltrarMesas = () => {
-    if (!usuario) return false;
-    const rol = usuario.rol?.toLowerCase();
-    return rol === 'administrador' || rol === 'caja';
-  };
+    if (!usuario) return false
+    const rol = usuario.rol?.toLowerCase()
+    return rol === "administrador" || rol === "caja"
+  }
 
-  // ✅ FUNCIÓN ACTUALIZADA: Manejar mesas y domicilios
   const cambiarEstadoPedido = async (pedido, nuevoEstado) => {
-    const pedidoId = pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id;
-    setCargandoEstado(pedidoId);
+    const pedidoId = pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
+    setCargandoEstado(pedidoId)
     try {
-      if (pedido.tipo === 'domicilio') {
-        await actualizarEstadoDomicilio(pedido.domicilioId, 'EnCamino');
+      if (pedido.tipo === "domicilio") {
+        await actualizarEstadoDomicilio(pedido.domicilioId, "Listo")
       } else {
-        await api.actualizarEstadoPedido(pedidoId, nuevoEstado);
+        await api.actualizarEstadoPedido(pedidoId, nuevoEstado)
       }
-      
-      if (onActualizarPedidos) {
-        await onActualizarPedidos();
-      }
-      await cargarTodosLosDatos();
-      
-      setModalConfirmacion({
-        tipo: 'exito',
-        mensaje: pedido.tipo === 'domicilio' 
-          ? '🚲 Domicilio listo para envío'
-          : `Pedido marcado como ${nuevoEstado === 'Listo' ? 'Listo' : 'Entregado'}`
-      });
-      
-      setTimeout(() => setModalConfirmacion(null), 2000);
-    } catch (error) {
-      console.error('Error al actualizar estado:', error);
-      setModalConfirmacion({
-        tipo: 'error',
-        mensaje: 'Error al actualizar el estado del pedido'
-      });
-    } finally {
-      setCargandoEstado(null);
-    }
-  };
 
-  // ✅ FUNCIÓN ACTUALIZADA: Marcar listo por voz (mesas y domicilios)
-  const marcarPedidoListoPorVoz = async (pedidoId, tipoEspecificado = null) => {
-    // ✅ USAR LA REFERENCIA ACTUALIZADA, NO EL STATE DIRECTAMENTE
-    const pedidosActuales = todosLosPedidosRef.current;
-    
-    console.log(`🎤 Control por voz: Buscando ${tipoEspecificado || 'pedido/domicilio'} con ID ${pedidoId} (tipo: ${typeof pedidoId})`);
-    console.log('📋 Pedidos disponibles:', pedidosActuales.map(p => ({
-      id: p.id,
-      idTipo: typeof p.id,
-      domicilioId: p.domicilioId,
-      domicilioIdTipo: typeof p.domicilioId,
-      tipo: p.tipo,
-      estado: p.estado
-    })));
-    
-    let pedido = null;
-    let tipoEncontrado = null;
-    
-    // ✅ SI SE ESPECIFICÓ EL TIPO, BUSCAR SOLO EN ESE TIPO
-    if (tipoEspecificado === 'mesa') {
-      // Buscar SOLO en pedidos de mesa
-      pedido = pedidosActuales.find(p => 
-        p.tipo === 'mesa' && 
-        (p.id === pedidoId || p.id === String(pedidoId) || String(p.id) === String(pedidoId)) && 
-        p.estado === 'EnProceso'
-      );
-      
-      if (pedido) {
-        tipoEncontrado = 'mesa';
-        console.log(`✅ Pedido de mesa encontrado:`, pedido);
-      } else {
-        console.log(`❌ No se encontró PEDIDO de mesa con ID ${pedidoId} en estado EnProceso`);
+      if (onActualizarPedidos) {
+        await onActualizarPedidos()
       }
-    } else if (tipoEspecificado === 'domicilio') {
-      // Buscar SOLO en domicilios
-      pedido = pedidosActuales.find(p => 
-        p.tipo === 'domicilio' && 
-        (p.domicilioId === pedidoId || p.domicilioId === String(pedidoId) || String(p.domicilioId) === String(pedidoId)) &&
-        p.estado === 'EnProceso'
-      );
-      
-      if (pedido) {
-        tipoEncontrado = 'domicilio';
-        console.log(`✅ Domicilio encontrado:`, pedido);
-      } else {
-        console.log(`❌ No se encontró DOMICILIO con ID ${pedidoId} en estado EnProceso`);
-      }
-    } else {
-      // ✅ SI NO SE ESPECIFICÓ TIPO, BUSCAR PRIMERO EN MESAS, LUEGO EN DOMICILIOS (fallback)
-      pedido = pedidosActuales.find(p => 
-        p.tipo === 'mesa' && 
-        (p.id === pedidoId || p.id === String(pedidoId) || String(p.id) === String(pedidoId)) && 
-        p.estado === 'EnProceso'
-      );
-      
-      if (pedido) {
-        tipoEncontrado = 'mesa';
-        console.log(`✅ Pedido de mesa encontrado:`, pedido);
-      }
-      
-      // Si no se encuentra, buscar en domicilios
-      if (!pedido) {
-        pedido = pedidosActuales.find(p => 
-          p.tipo === 'domicilio' && 
-          (p.domicilioId === pedidoId || p.domicilioId === String(pedidoId) || String(p.domicilioId) === String(pedidoId)) &&
-          p.estado === 'EnProceso'
-        );
-        if (pedido) {
-          tipoEncontrado = 'domicilio';
-          console.log(`✅ Domicilio encontrado:`, pedido);
-        }
-      }
-    }
-    
-    if (pedido) {
-      console.log(`✅ Marcando como listo - Tipo: ${tipoEncontrado}`);
-      // ✅ cambiarEstadoPedido ya maneja el feedback, no duplicar aquí
-      await cambiarEstadoPedido(pedido, tipoEncontrado === 'domicilio' ? 'EnCamino' : 'Listo');
-    } else {
-      console.error(`❌ No se encontró ${tipoEspecificado || 'pedido/domicilio'} con ID ${pedidoId}`);
-      console.log('IDs disponibles:', {
-        mesas: pedidosActuales.filter(p => p.tipo === 'mesa').map(p => ({ id: p.id, estado: p.estado })),
-        domicilios: pedidosActuales.filter(p => p.tipo === 'domicilio').map(p => ({ domicilioId: p.domicilioId, estado: p.estado }))
-      });
-      
-      // ✅ Mostrar error con información útil
-      const tipoMensaje = tipoEspecificado === 'mesa' ? 'pedido' : tipoEspecificado === 'domicilio' ? 'domicilio' : 'pedido/domicilio';
+      await cargarTodosLosDatos()
+
       setModalConfirmacion({
-        tipo: 'error',
-        mensaje: `❌ No se encontró ${tipoMensaje} #${pedidoId} en proceso`
-      });
-      
-      setTimeout(() => setModalConfirmacion(null), 3000);
+        tipo: "exito",
+        mensaje:
+          pedido.tipo === "domicilio"
+            ? "🚲 Domicilio listo para envío"
+            : `Pedido marcado como ${nuevoEstado === "Listo" ? "Listo" : "Entregado"}`,
+      })
+
+      setTimeout(() => setModalConfirmacion(null), 2000)
+    } catch (error) {
+      console.error("Error al actualizar estado:", error)
+      setModalConfirmacion({
+        tipo: "error",
+        mensaje: "Error al actualizar el estado del pedido",
+      })
+    } finally {
+      setCargandoEstado(null)
     }
-  };
+  }
+
+  const marcarPedidoListoPorVoz = async (pedidoId, tipoEspecificado = null) => {
+    const pedidosActuales = todosLosPedidosRef.current
+
+    let pedido = null
+
+    if (tipoEspecificado === "mesa") {
+      pedido = pedidosActuales.find(
+        (p) => p.tipo === "mesa" && String(p.id) === String(pedidoId) && p.estado === "EnProceso",
+      )
+    } else if (tipoEspecificado === "domicilio") {
+      pedido = pedidosActuales.find(
+        (p) => p.tipo === "domicilio" && String(p.domicilioId) === String(pedidoId) && p.estado === "EnPreparacion",
+      )
+    }
+
+    if (pedido) {
+      await cambiarEstadoPedido(pedido, "Listo")
+    } else {
+      const tipoMensaje = tipoEspecificado === "mesa" ? "pedido" : "domicilio"
+      setModalConfirmacion({
+        tipo: "error",
+        mensaje: `❌ No se encontró ${tipoMensaje} #${pedidoId} en proceso`,
+      })
+      setTimeout(() => setModalConfirmacion(null), 3000)
+    }
+  }
 
   const confirmarCambioEstado = (pedido, nuevoEstado, numeroMesa) => {
     setModalConfirmacion({
-      tipo: 'confirmar',
+      tipo: "confirmar",
       titulo: `¿Marcar como ${nuevoEstado}?`,
-      mensaje: `${numeroMesa} - ${pedido.tipo === 'domicilio' ? 'Domicilio' : 'Pedido'} #${pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id}`,
+      mensaje: `${numeroMesa} - ${pedido.tipo === "domicilio" ? "Domicilio" : "Pedido"} #${pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id}`,
       pedido,
       nuevoEstado,
       onConfirmar: () => {
-        cambiarEstadoPedido(pedido, nuevoEstado);
-        setModalConfirmacion(null);
+        cambiarEstadoPedido(pedido, nuevoEstado)
+        setModalConfirmacion(null)
       },
-      onCancelar: () => setModalConfirmacion(null)
-    });
-  };
+      onCancelar: () => setModalConfirmacion(null),
+    })
+  }
 
-  const mesasUnicas = [...new Set(todosLosPedidos.map(p => p.mesa))].sort((a, b) => {
-    const aNum = typeof a === 'number' ? a : 999;
-    const bNum = typeof b === 'number' ? b : 999;
-    return aNum - bNum;
-  });
+  const mesasUnicas = [...new Set(todosLosPedidos.map((p) => p.mesa))].sort((a, b) => {
+    const aNum = typeof a === "number" ? a : 999
+    const bNum = typeof b === "number" ? b : 999
+    return aNum - bNum
+  })
 
   const pedidosFiltrados = todosLosPedidos
-    .filter(pedido => pedido.estado !== 'Pagado' && pedido.estado !== 'Cancelado')
-    .filter(pedido => {
-      if (!puedeFiltrarMesas()) return true;
-      if (filtroMesa === 'todas') return true;
-      return pedido.mesa.toString() === filtroMesa;
+    .filter((pedido) => pedido.estado !== "Pagado" && pedido.estado !== "Cancelado")
+    .filter((pedido) => {
+      if (!puedeFiltrarMesas()) return true
+      if (filtroMesa === "todas") return true
+      return pedido.mesa.toString() === filtroMesa
     })
-    .sort((a, b) => new Date(a.hora) - new Date(b.hora));
-
-  // ✅ Log para debugging
-  console.log('🔍 Cocina.js - todosLosPedidos:', todosLosPedidos.length);
-  console.log('🔍 Cocina.js - pedidosFiltrados:', pedidosFiltrados.length);
+    .sort((a, b) => new Date(a.hora) - new Date(b.hora))
 
   const getEstadoColor = (estado) => {
     switch (estado) {
-      case 'EnProceso':
-        return 'border-yellow-500 bg-yellow-900/20';
-      case 'Listo':
-        return 'border-green-500 bg-green-900/20';
+      case "EnProceso":
+        return "border-yellow-500 bg-yellow-900/20"
+      case "Listo":
+        return "border-green-500 bg-green-900/20"
+      case "Entregado":
+        return "border-blue-500 bg-blue-900/20"
+      case "Pagado":
+        return "border-purple-500 bg-purple-900/20"
+      case "Cancelado":
+        return "border-red-500 bg-red-900/20"
+      case "EnPreparacion":
+        return "border-yellow-500 bg-yellow-900/20"
+      case "EnCamino":
+        return "border-blue-500 bg-blue-900/20"
       default:
-        return 'border-gray-500';
+        return "border-gray-500"
     }
-  };
+  }
 
   const getEstadoTexto = (estado) => {
     switch (estado) {
-      case 'EnProceso':
-        return { texto: 'En Proceso', color: 'text-yellow-400' };
-      case 'Listo':
-        return { texto: 'Listo para Entregar', color: 'text-green-400' };
+      case "EnProceso":
+        return { texto: "En Proceso", color: "text-yellow-400" }
+      case "Listo":
+        return { texto: "Listo para Entregar", color: "text-green-400" }
+      case "Entregado":
+        return { texto: "Entregado", color: "text-blue-400" }
+      case "Pagado":
+        return { texto: "Pagado", color: "text-purple-400" }
+      case "Cancelado":
+        return { texto: "Cancelado", color: "text-red-400" }
+      case "EnPreparacion":
+        return { texto: "En Preparación", color: "text-yellow-400" }
+      case "EnCamino":
+        return { texto: "En Camino", color: "text-blue-400" }
       default:
-        return { texto: estado, color: 'text-gray-400' };
+        return { texto: estado, color: "text-gray-400" }
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header compacto */}
       <header className="bg-gray-800 border-b border-gray-700">
         <div className="max-w-full mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -346,38 +284,33 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
       </header>
 
       <div className="max-w-full mx-auto px-4 py-4">
-        {/* Filtro de mesas compacto */}
         {puedeFiltrarMesas() && mesasUnicas.length > 0 && (
           <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
             <button
-              onClick={() => setFiltroMesa('todas')}
+              onClick={() => setFiltroMesa("todas")}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap ${
-                filtroMesa === 'todas'
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                filtroMesa === "todas" ? "bg-orange-500 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"
               }`}
             >
               Todas ({pedidosFiltrados.length})
             </button>
-            {mesasUnicas.map(mesa => {
-              const pedidosMesa = todosLosPedidos.filter(p => 
-                p.mesa === mesa && 
-                p.estado !== 'Pagado' && 
-                p.estado !== 'Cancelado'
-              );
+            {mesasUnicas.map((mesa) => {
+              const pedidosMesa = todosLosPedidos.filter(
+                (p) => p.mesa === mesa && p.estado !== "Pagado" && p.estado !== "Cancelado",
+              )
               return (
                 <button
                   key={mesa}
                   onClick={() => setFiltroMesa(mesa.toString())}
                   className={`px-3 py-1.5 rounded-lg text-sm font-semibold whitespace-nowrap ${
                     filtroMesa === mesa.toString()
-                      ? 'bg-orange-500 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      ? "bg-orange-500 text-white"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
                   }`}
                 >
-                  {typeof mesa === 'number' ? `Mesa ${mesa}` : mesa} ({pedidosMesa.length})
+                  {typeof mesa === "number" ? `Mesa ${mesa}` : mesa} ({pedidosMesa.length})
                 </button>
-              );
+              )
             })}
           </div>
         )}
@@ -390,25 +323,26 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-            {pedidosFiltrados.map(pedido => {
-              const estadoInfo = getEstadoTexto(pedido.estado);
-              
+            {pedidosFiltrados.map((pedido) => {
+              const estadoInfo = getEstadoTexto(pedido.estado)
+
               return (
-                <div 
-                  key={pedido.id} 
+                <div
+                  key={pedido.id}
                   className={`bg-gray-800 rounded-lg border-2 overflow-hidden transition-all hover:shadow-xl ${getEstadoColor(pedido.estado)}`}
                 >
-                  {/* ✅ Header con identificación de domicilio */}
-                  <div className={`p-3 border-b border-gray-600 ${
-                    pedido.tipo === 'domicilio' ? 'bg-gradient-to-r from-purple-600 to-purple-500' : 'bg-gray-700'
-                  }`}>
+                  <div
+                    className={`p-3 border-b border-gray-600 ${
+                      pedido.tipo === "domicilio" ? "bg-gradient-to-r from-purple-600 to-purple-500" : "bg-gray-700"
+                    }`}
+                  >
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="text-lg font-bold text-white">
-                          Orden #{pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id}
+                          Orden #{pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id}
                         </h3>
                         <p className="text-sm text-gray-300 flex items-center gap-1 mt-1">
-                          {pedido.tipo === 'domicilio' ? (
+                          {pedido.tipo === "domicilio" ? (
                             <>
                               <Truck size={14} />
                               {pedido.mesa}
@@ -420,15 +354,16 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                             </>
                           )}
                         </p>
-                        
-                        {/* ✅ Badge de domicilio */}
-                        {pedido.tipo === 'domicilio' && (
+
+                        {pedido.tipo === "domicilio" && (
                           <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-bold bg-white text-purple-700">
                             🚲 DOMICILIO
                           </span>
                         )}
-                        
-                        <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${estadoInfo.color} bg-gray-800`}>
+
+                        <span
+                          className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${estadoInfo.color} bg-gray-800`}
+                        >
                           {estadoInfo.texto}
                         </span>
                       </div>
@@ -441,8 +376,7 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                       </div>
                     </div>
 
-                    {/* ✅ Info adicional para domicilios */}
-                    {pedido.tipo === 'domicilio' && (
+                    {pedido.tipo === "domicilio" && (
                       <div className="text-sm space-y-1 bg-white/10 rounded p-2 mt-2">
                         <p>👤 {pedido.cliente}</p>
                         <p>📱 {pedido.telefono}</p>
@@ -451,7 +385,6 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                     )}
                   </div>
 
-                  {/* Platos compactos */}
                   <div className="p-3">
                     <h4 className="text-sm font-semibold text-orange-400 mb-2">Platos:</h4>
                     <div className="space-y-2">
@@ -473,7 +406,6 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                     </div>
                   </div>
 
-                  {/* ✅ Notas del cliente (domicilios) */}
                   {pedido.notasCliente && (
                     <div className="px-3 pb-2">
                       <div className="bg-yellow-900/30 border border-yellow-500/50 rounded p-2">
@@ -484,99 +416,88 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
                     </div>
                   )}
 
-                  {/* BOTONES DE ACCIÓN - Compactos */}
                   {puedeModificarEstados() && (
                     <div className="px-3 pb-3 pt-2 border-t border-gray-600">
                       <div className="flex gap-2">
-                        {pedido.estado === 'EnProceso' && (
+                        {pedido.estado === "EnProceso" && (
                           <button
-                            onClick={() => confirmarCambioEstado(pedido, pedido.tipo === 'domicilio' ? 'EnCamino' : 'Listo', pedido.mesa)}
-                            disabled={cargandoEstado === (pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                            onClick={() =>
+                              confirmarCambioEstado(
+                                pedido,
+                                pedido.tipo === "domicilio" ? "Listo" : "Listo",
+                                pedido.mesa,
+                              )
+                            }
+                            disabled={cargandoEstado === (pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id)}
+                            className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white py-1 rounded text-xs font-semibold transition-colors"
                           >
-                            <Package size={16} />
-                            {cargandoEstado === (pedido.tipo === 'domicilio' ? pedido.domicilioId : pedido.id) ? 'Procesando...' : (pedido.tipo === 'domicilio' ? 'Listo para Envío' : 'Listo')}
+                            {cargandoEstado === (pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id)
+                              ? "Procesando..."
+                              : "✓ Listo"}
                           </button>
                         )}
-                        {pedido.estado === 'Listo' && pedido.tipo === 'mesa' && (
+                        {pedido.estado === "Listo" && (
                           <button
-                            onClick={() => confirmarCambioEstado(pedido, 'Entregado', pedido.mesa)}
-                            disabled={cargandoEstado === pedido.id}
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                            onClick={() => confirmarCambioEstado(pedido, "Entregado", pedido.mesa)}
+                            disabled={cargandoEstado === (pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id)}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white py-1 rounded text-xs font-semibold transition-colors"
                           >
-                            <CheckCircle size={16} />
-                            {cargandoEstado === pedido.id ? 'Procesando...' : 'Entregado'}
+                            {cargandoEstado === (pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id)
+                              ? "Procesando..."
+                              : "📦 Entregado"}
                           </button>
                         )}
                       </div>
                     </div>
                   )}
-
-                  {/* Información adicional compacta */}
-                  <div className="px-3 pb-2 pt-1.5 border-t border-gray-600">
-                    <div className="flex justify-between items-center text-xs text-gray-400">
-                      <span>Platos: {pedido.items.reduce((sum, item) => sum + item.cantidad, 0)}</span>
-                    </div>
-                  </div>
                 </div>
-              );
+              )
             })}
           </div>
         )}
       </div>
 
-      {/* ✅ Control por voz actualizado */}
-      <VoiceControlCocina 
-        pedidos={pedidosFiltrados}
-        onMarcarListo={marcarPedidoListoPorVoz}
-      />
-
-      {/* Modal de Confirmación */}
-      {modalConfirmacion && modalConfirmacion.tipo === 'confirmar' && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl max-w-md w-full p-6 border-2 border-gray-600">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-4xl">❓</span>
-              </div>
-              <h3 className="text-2xl font-bold mb-2 text-white">{modalConfirmacion.titulo}</h3>
-              <p className="text-gray-300">{modalConfirmacion.mensaje}</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={modalConfirmacion.onCancelar}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg font-semibold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={modalConfirmacion.onConfirmar}
-                className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-semibold transition-colors"
-              >
-                Confirmar
-              </button>
-            </div>
+      {modalConfirmacion && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-sm w-full border border-gray-700">
+            {modalConfirmacion.tipo === "confirmar" && (
+              <>
+                <h3 className="text-lg font-bold text-white mb-2">{modalConfirmacion.titulo}</h3>
+                <p className="text-gray-300 mb-6">{modalConfirmacion.mensaje}</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={modalConfirmacion.onCancelar}
+                    className="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded font-semibold transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={modalConfirmacion.onConfirmar}
+                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-2 rounded font-semibold transition-colors"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </>
+            )}
+            {modalConfirmacion.tipo === "exito" && (
+              <>
+                <CheckCircle className="text-green-400 mb-3" size={40} />
+                <p className="text-white font-semibold">{modalConfirmacion.mensaje}</p>
+              </>
+            )}
+            {modalConfirmacion.tipo === "error" && (
+              <>
+                <p className="text-red-400 font-semibold">{modalConfirmacion.mensaje}</p>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      {/* Modal de Alerta */}
-      {modalConfirmacion && (modalConfirmacion.tipo === 'exito' || modalConfirmacion.tipo === 'error') && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-2xl max-w-md w-full p-6 border-2 border-gray-600">
-            <div className="text-center">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                modalConfirmacion.tipo === 'exito' ? 'bg-green-600' : 'bg-red-600'
-              }`}>
-                <span className="text-4xl">{modalConfirmacion.tipo === 'exito' ? '✅' : '❌'}</span>
-              </div>
-              <p className="text-white text-lg font-semibold">{modalConfirmacion.mensaje}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      <VoiceControlCocina onMarcarListo={marcarPedidoListoPorVoz} />
     </div>
-  );
+  )
 }
 
-export default Cocina;
+export default Cocina

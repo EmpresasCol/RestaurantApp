@@ -220,7 +220,7 @@ CREATE TABLE Almacenes (
     INDEX idx_tipo (Tipo),
     INDEX idx_activo (Activo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+delimiter &&
 -- Tabla: Stock
 -- Stock actual de productos por almacén
 CREATE TABLE Stock (
@@ -968,7 +968,7 @@ CREATE TABLE IF NOT EXISTS Direcciones (
     INDEX idx_cliente (ClienteId),
     INDEX idx_ciudad (Ciudad)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
+delimiter &&
 -- =====================================================
 -- TABLA: Domicilios
 -- =====================================================
@@ -976,7 +976,7 @@ CREATE TABLE IF NOT EXISTS Domicilios (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     ClienteId INT NOT NULL,
     DireccionId INT NOT NULL,
-    Estado ENUM('Pendiente','EnPreparacion','EnCamino','Entregado','Cancelado') DEFAULT 'Pendiente',
+    Estado ENUM('EnPreparacion','Listo','EnCamino','Entregado','Cancelado') DEFAULT 'Pendiente',
     FechaPedido DATETIME DEFAULT CURRENT_TIMESTAMP,
     FechaEstimadaEntrega DATETIME,
     FechaEntrega DATETIME,
@@ -1232,9 +1232,3 @@ WHERE TABLE_SCHEMA = 'RestauranteBD'
   AND TABLE_NAME IN ('Clientes', 'Direcciones', 'Domicilios', 'DomicilioDetalles', 
                      'HistorialEstadosDomicilio', 'ConfiguracionDomicilios')
 ORDER BY TABLE_NAME;
-
-
-USE RestauranteBD;
-ALTER TABLE domicilios MODIFY COLUMN Estado VARCHAR(50) NOT NULL DEFAULT 'EnProceso';
-
-SELECT * FROM domicilios ORDER BY Id DESC LIMIT 1;

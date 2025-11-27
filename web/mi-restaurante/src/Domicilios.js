@@ -26,7 +26,7 @@ import {
 
 // ✅ SIN "EnPreparacion"
 const ESTADOS = {
-  EnProceso: { color: 'bg-yellow-100 text-yellow-800', icon: Package, label: 'En Proceso' },
+  EnPreparacion: { color: 'bg-yellow-100 text-yellow-800', icon: Package, label: 'En Preparacion' },
   EnCamino: { color: 'bg-purple-100 text-purple-800', icon: Truck, label: 'En Camino' },
   Entregado: { color: 'bg-green-100 text-green-800', icon: CheckCircle, label: 'Entregado' },
   Cancelado: { color: 'bg-red-100 text-red-800', icon: XCircle, label: 'Cancelado' }
@@ -115,7 +115,7 @@ function Domicilios({ onNuevoDomicilio }) {
   const domiciliosFiltrados = domicilios.filter(d => {
     if (filtroEstado === 'todos') return true;
     if (filtroEstado === 'activos') {
-      return ['EnProceso', 'EnCamino'].includes(d.estado);
+      return ['EnPreparacion', 'EnCamino'].includes(d.estado);
     }
     return d.estado === filtroEstado;
   });
@@ -229,7 +229,7 @@ function Domicilios({ onNuevoDomicilio }) {
         {/* Filtros - ✅ SIN "EnPreparacion" */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
           <div className="flex flex-wrap gap-2">
-            {['activos', 'todos', 'EnProceso', 'EnCamino', 'Entregado', 'Cancelado'].map(estado => (
+            {['activos', 'todos', 'EnPreparacion', 'EnCamino', 'Entregado', 'Cancelado'].map(estado => (
               <button
                 key={estado}
                 onClick={() => setFiltroEstado(estado)}
@@ -444,7 +444,7 @@ function Domicilios({ onNuevoDomicilio }) {
                     </button>
                   )}
                   
-                  {['EnProceso', 'EnCamino'].includes(domicilio.estado) && (
+                  {['EnPreparacion', 'EnCamino'].includes(domicilio.estado) && (
                     <button
                       onClick={() => {
                         if (window.confirm('¿Seguro que deseas cancelar este domicilio?')) {

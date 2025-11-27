@@ -14,11 +14,9 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
   const reconocimientoRef = useRef(null)
   const escuchandoRef = useRef(false)
   const pedidosRef = useRef(pedidos)
-  const palabraClaveProcesandoRef = useRef(null)
 
   useEffect(() => {
     pedidosRef.current = pedidos
-    console.log("🔄 Actualizando referencia de pedidos:", pedidos?.length || 0)
   }, [pedidos])
 
   useEffect(() => {
@@ -31,25 +29,19 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     }
 
     const recognition = new SpeechRecognition()
-
     recognition.lang = "es-CO"
     recognition.continuous = true
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
     recognition.onresult = (event) => {
-      console.log("🎙️ Evento onresult disparado - Total resultados:", event.results.length)
-
       const ultimoResultado = event.results[event.results.length - 1]
       const transcript = ultimoResultado[0].transcript
       const isFinal = ultimoResultado.isFinal
       const confianza = ultimoResultado[0].confidence
 
-      console.log("📝 Transcripción:", transcript, "| Final:", isFinal, "| Confianza:", confianza)
-
-      if (isFinal) {
+      if (isFinal && confianza > 0.5) {
         const comando = transcript.toLowerCase().trim()
-        console.log("🎤 Comando detectado (final):", comando, "| Confianza:", confianza)
         setUltimoComando(comando)
         setTranscribiendo("")
 
@@ -57,36 +49,23 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
           clearTimeout(silencioTimeoutRef.current)
         }
 
-        if (confianza > 0.5) {
-          if (!modoActivo) {
-            detectarPalabraClave(comando)
-          } else {
-            procesarComando(comando)
-          }
-        } else {
-          console.log("⚠️ Confianza muy baja, no se procesará:", confianza)
+        if (!modoActivo && comando.includes("activar")) {
+          activarModoEscucha()
+        } else if (modoActivo && (comando.includes("pedido") || comando.includes("domicilio"))) {
+          procesarComandoPedido(comando)
         }
 
         setTimeout(() => reiniciarReconocimiento(), 500)
       } else {
-        console.log("👂 Escuchando (en tiempo real):", transcript)
         setTranscribiendo(transcript)
       }
     }
 
     recognition.onerror = (event) => {
-      console.error("⚠️ Error en reconocimiento:", event.error)
-
-      if (event.error === "no-speech") {
-        console.log("👂 Esperando comando de voz...")
-      } else if (event.error === "aborted") {
-        console.log("⚠️ Reconocimiento abortado - Reiniciando...")
+      if (event.error === "no-speech" || event.error === "aborted") {
         if (escuchandoRef.current) {
           setTimeout(() => reiniciarReconocimiento(), 100)
         }
-      } else if (event.error === "network") {
-        mostrarFeedback("error", "❌ Error de conexión")
-        escuchandoRef.current = false
       } else if (event.error === "not-allowed") {
         mostrarFeedback("error", "❌ Permiso denegado para usar micrófono")
         escuchandoRef.current = false
@@ -94,33 +73,17 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     }
 
     recognition.onend = () => {
-      console.log("🎤 Reconocimiento finalizado")
       if (escuchandoRef.current) {
-        console.log("🔄 Reiniciando reconocimiento automáticamente...")
         setTimeout(() => reiniciarReconocimiento(), 100)
       }
     }
 
-    recognition.onstart = () => {
-      console.log("✅ Reconocimiento iniciado correctamente")
-    }
-
-    recognition.onaudiostart = () => {
-      console.log("🔊 Audio detectado - El micrófono está capturando sonido")
-    }
-
-    recognition.onsoundstart = () => {
-      console.log("🗣️ Voz detectada - Comenzando transcripción")
-    }
-
     recognition.onsoundend = () => {
-      console.log("🔇 Voz finalizada - Procesando resultado")
       if (modoActivo) {
         if (silencioTimeoutRef.current) {
           clearTimeout(silencioTimeoutRef.current)
         }
         silencioTimeoutRef.current = setTimeout(() => {
-          console.log("⏱️ Silencio detectado - Desactivando modo activo")
           desactivarModoActivo()
         }, 3000)
       }
@@ -128,37 +91,9 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
 
     setReconocimiento(recognition)
     reconocimientoRef.current = recognition
-
     iniciarEscuchaAutomatica(recognition)
 
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log("👁️ Ventana en segundo plano")
-      } else {
-        console.log("👁️ Ventana en primer plano")
-        if (escuchandoRef.current) {
-          console.log("🔄 Verificando estado del reconocimiento...")
-          setTimeout(() => {
-            if (escuchandoRef.current) {
-              reiniciarReconocimiento()
-            }
-          }, 100)
-        }
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-
-    const healthCheckInterval = setInterval(() => {
-      if (escuchandoRef.current) {
-        console.log("🏥 Health check - Reconocimiento activo")
-      }
-    }, 5000)
-
     return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-      clearInterval(healthCheckInterval)
-
       if (recognition) {
         try {
           recognition.stop()
@@ -166,12 +101,8 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
           console.log("Error al detener en cleanup")
         }
       }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      if (silencioTimeoutRef.current) {
-        clearTimeout(silencioTimeoutRef.current)
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      if (silencioTimeoutRef.current) clearTimeout(silencioTimeoutRef.current)
     }
   }, [modoActivo])
 
@@ -182,39 +113,28 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
       escuchandoRef.current = true
       console.log("✅ Reconocimiento automático ACTIVADO")
     } catch (error) {
-      console.error("❌ Error al iniciar reconocimiento automático:", error)
-      if (error.message.includes("already started")) {
-        console.log("⚠️ Reconocimiento ya estaba activo")
-        escuchandoRef.current = true
-      } else {
-        mostrarFeedback("error", "❌ Error al iniciar micrófono")
+      if (!error.message?.includes("already started")) {
+        console.error("❌ Error al iniciar reconocimiento:", error)
       }
     }
   }
 
   const reiniciarReconocimiento = () => {
     const recognition = reconocimientoRef.current
-
-    if (!recognition || !escuchandoRef.current) {
-      return
-    }
+    if (!recognition || !escuchandoRef.current) return
 
     try {
       recognition.stop()
     } catch (e) {
-      console.log("No se pudo detener (probablemente ya estaba detenido)")
+      console.log("No se pudo detener reconocimiento")
     }
 
     setTimeout(() => {
       if (escuchandoRef.current) {
         try {
           recognition.start()
-          console.log("✅ Reconocimiento reiniciado exitosamente")
         } catch (error) {
-          if (error.message && error.message.includes("already started")) {
-            console.log("⚠️ Reconocimiento ya estaba activo")
-          } else {
-            console.error("❌ Error al reiniciar:", error)
+          if (!error.message?.includes("already started")) {
             setTimeout(() => reiniciarReconocimiento(), 1000)
           }
         }
@@ -222,42 +142,15 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     }, 200)
   }
 
-  const detectarPalabraClave = (comando) => {
-    console.log("🔍 Detectando palabra clave en:", comando)
-
-    if (comando.includes("activar")) {
-      console.log("✅ Palabra clave ACTIVAR detectada")
-      palabraClaveProcesandoRef.current = "mesa"
-      mostrarFeedback("info", "🎤 Escuchando número de pedido...")
-      reproducirConfirmacion("Di el número de pedido")
-      setModoActivo(true)
-      return
-    }
-
-    if (comando.includes("domicilio")) {
-      console.log("✅ Palabra clave DOMICILIO detectada")
-      palabraClaveProcesandoRef.current = "domicilio"
-      mostrarFeedback("info", "🎤 Escuchando número de domicilio...")
-      reproducirConfirmacion("Di el número de domicilio")
-      setModoActivo(true)
-      return
-    }
-
-    console.log("❓ Ninguna palabra clave detectada")
+  const activarModoEscucha = () => {
+    console.log("✅ Modo de escucha ACTIVADO - Di 'pedido # listo' o 'domicilio # listo'")
+    setModoActivo(true)
+    mostrarFeedback("info", "🎤 Escuchando... di pedido o domicilio")
+    reproducirConfirmacion("Dime pedido número listo, o domicilio número listo")
   }
 
-  const desactivarModoActivo = () => {
-    setModoActivo(false)
-    palabraClaveProcesandoRef.current = null
-    mostrarFeedback("info", "✅ Listo")
-    setTranscribiendo("")
-  }
-
-  const procesarComando = (comando) => {
-    console.log("🔍 Procesando comando en modo activo:", comando)
-
+  const procesarComandoPedido = (comando) => {
     if (!comando.includes("listo")) {
-      console.log("⚠️ Comando sin palabra 'listo'")
       mostrarFeedback("error", "❓ Di 'listo' al final")
       reproducirError("Di la palabra listo al final")
       return
@@ -302,95 +195,43 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
       noventa: 90,
       cien: 100,
       ciento: 100,
-      doscientos: 200,
-      trescientos: 300,
-      cuatrocientos: 400,
-      quinientos: 500,
-      seiscientos: 600,
-      setecientos: 700,
-      ochocientos: 800,
-      novecientos: 900,
     }
 
     let numero = null
-
     const numeroDirecto = comando.match(/\d+/)
     if (numeroDirecto) {
       numero = Number.parseInt(numeroDirecto[0])
-    } else {
-      const comandoLimpio = comando
-        .replace(/listo/i, "")
-        .replace(/pedido|domicilio|número/i, "")
-        .trim()
-      numero = numerosEnPalabras[comandoLimpio] || convertirPalabrasANumero(comandoLimpio, numerosEnPalabras)
     }
 
     if (numero) {
-      const tipoComando = palabraClaveProcesandoRef.current
-      console.log(`✅ Número detectado: ${numero}, tipo: ${tipoComando}`)
-      marcarPedidoListo(numero, tipoComando)
+      const tipo = comando.includes("domicilio") ? "domicilio" : "mesa"
+      console.log(`✅ Comando detectado: ${tipo} #${numero}`)
+      marcarPedidoListo(numero, tipo)
       desactivarModoActivo()
       return
     }
 
-    console.log("❓ No se detectó un número válido")
     mostrarFeedback("error", "❓ No entendí el número")
     reproducirError("No entendí el número. Intenta de nuevo")
   }
 
-  const convertirPalabrasANumero = (palabras, numerosMap) => {
-    palabras = palabras.replace(/\s+y\s+/g, " ").trim()
-    const partes = palabras.split(/\s+/)
-    let total = 0
-
-    for (const parte of partes) {
-      const valor = numerosMap[parte]
-      if (valor) {
-        total += valor
-      } else {
-        return null
-      }
-    }
-
-    return total > 0 ? total : null
+  const desactivarModoActivo = () => {
+    setModoActivo(false)
+    mostrarFeedback("info", "✅ Listo")
+    setTranscribiendo("")
   }
 
-  const marcarPedidoListo = (id, tipoComando) => {
-    const pedidosActuales = pedidosRef.current
-
-    console.log(`🎤 Comando de voz recibido: ${tipoComando} #${id}`)
-    console.log(`📋 Total de pedidos disponibles: ${pedidosActuales?.length || 0}`)
-
-    const pedidosMesa = pedidosActuales?.filter((p) => p.tipo === "mesa" && p.estado === "EnProceso") || []
-    const domicilios = pedidosActuales?.filter((p) => p.tipo === "domicilio" && p.estado === "EnProceso") || []
-
-    console.log(`📋 Disponibles en EnProceso:`, {
-      mesas: pedidosMesa.map((p) => ({ id: p.id, mesa: p.mesa })),
-      domicilios: domicilios.map((p) => ({ domicilioId: p.domicilioId, mesa: p.mesa })),
-    })
-
-    const idNumerico = Number.parseInt(id)
-
-    if (tipoComando === "mesa") {
-      mostrarFeedback("exito", `✅ Pedido ${id} marcado`)
-      reproducirConfirmacion(`Pedido ${id} marcado como listo`)
-      onMarcarListo(idNumerico, tipoComando)
-    } else if (tipoComando === "domicilio") {
-      mostrarFeedback("exito", `✅ Domicilio ${id} marcado`)
-      reproducirConfirmacion(`Domicilio ${id} marcado como en camino`)
-      onMarcarListo(idNumerico, tipoComando)
-    }
+  const marcarPedidoListo = (id, tipo) => {
+    console.log(`🎤 Marcando ${tipo} #${id} como listo`)
+    mostrarFeedback("exito", `✅ ${tipo === "domicilio" ? "Domicilio" : "Pedido"} ${id} marcado`)
+    reproducirConfirmacion(`${tipo === "domicilio" ? "Domicilio" : "Pedido"} ${id} marcado como listo`)
+    onMarcarListo(Number.parseInt(id), tipo)
   }
 
   const mostrarFeedback = (tipo, mensaje) => {
     setFeedback({ tipo, mensaje })
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    timeoutRef.current = setTimeout(() => {
-      setFeedback(null)
-    }, 3000)
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => setFeedback(null), 3000)
   }
 
   const reproducirConfirmacion = (mensaje) => {
@@ -398,7 +239,6 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     utterance.lang = "es-CO"
     utterance.rate = 1.2
     utterance.pitch = 1.1
-    utterance.volume = 1.0
     window.speechSynthesis.speak(utterance)
   }
 
@@ -407,7 +247,6 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
     utterance.lang = "es-CO"
     utterance.rate = 1.0
     utterance.pitch = 0.8
-    utterance.volume = 1.0
     window.speechSynthesis.speak(utterance)
   }
 
@@ -430,7 +269,7 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
         }`}
       >
         <Mic className="flex-shrink-0 animate-pulse" size={16} />
-        <span className="text-sm font-semibold">{modoActivo ? "🎤 Escuchando..." : "🎙️ Activo"}</span>
+        <span className="text-sm font-semibold">{modoActivo ? "🎤 Escuchando..." : "🎙️ Di 'activar'"}</span>
       </div>
 
       {feedback && (
