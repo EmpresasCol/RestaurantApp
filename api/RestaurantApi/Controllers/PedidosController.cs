@@ -303,9 +303,132 @@ namespace RestaurantApi.Controllers
                     System.Diagnostics.Debug.WriteLine($"   Stack: {ex.StackTrace}");
                 }
             }
+            if (estadoEnum == EstadoPedido.Listo)
+            {
+                System.Diagnostics.Debug.WriteLine($"🔔 El estado es LISTO, enviando notificación...");
+                try
+                {
+                    var notificationService = new FirebaseNotificationService(_context);
+                    await notificationService.EnviarNotificacionPedidoListo(
+                        pedido.Id,
+                        pedido.Mesa?.Numero ?? pedido.MesaId
+                    );
+                    System.Diagnostics.Debug.WriteLine($"✅ Notificación enviada correctamente");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"❌ ERROR enviando notificación: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"   Stack: {ex.StackTrace}");
+                }
+            }
+            // ==========================================
+            // LOGICA DE DESCUENTO DE INVENTARIO
+            // ==========================================
+            else if (estadoEnum == EstadoPedido.Pagado || estadoEnum == EstadoPedido.Entregado)
+            {
+                // Verificar si ya se descontó el inventario para evitar duplicados
+                // Podríamos usar una bandera en el pedido, pero por ahora asumimos que el cambio de estado es único
+                // Ojo: Si pasa de Entregado a Pagado, podría descontar doble. 
+                // Mejor validar si el estado ANTERIOR no era ni Pagado ni Entregado.
+                
+                // Sin embargo, como no tenemos el estado anterior aquí (ya se guardó en BD arriba),
+                // una estrategia simple es solo descontar cuando pasa a "Entregado" (consumo real)
+                // O cuando pasa a "Pagado" si no pasó por Entregado. 
+                
+                // Para simplificar en este prototipo, descontaremos en "Entregado" y "Pagado",
+                // pero necesitamos evitar dobles descuentos.
+                // Una forma es verificar si YA existen movimientos de salida para este pedido.
+                
+                var yaDescontado = await _context.MovimientosInventario
+                    .AnyAsync(m => m.Referencia == $"Pedido #{pedido.Id}");
+
+                if (!yaDescontado)
+                {
+                    System.Diagnostics.Debug.WriteLine($"📦 Descontando inventario para pedido {pedido.Id}...");
+                    
+                    try 
+                    {
+                        // Cargar detalles compltos con recetas
+                        var detalles = await _context.PedidoDetalles
+                            .Where(d => d.PedidoId == pedido.Id)
+                            .ToListAsync();
+
+                        // Buscar almacén por defecto (ej: Cocina Principal)
+                        var almacen = await _context.Almacenes.FirstOrDefaultAsync(a => a.Nombre.Contains("Cocina") || a.Nombre.Contains("Principal"));
+                        int almacenId = almacen?.Id ?? 1; // Fallback ID 1
+
+                        foreach (var detalle in detalles)
+                        {
+                            // Obtener recetas del platillo
+                            // Ojo: PlatilloId en Receta referencia al Platillo
+                            // Necesitamos traer las recetas donde PlatilloId == detalle.PlatilloId
+                            var recetas = await _context.Set<Receta>() // Usando Set<Receta> si no está en Context directamente o DBSet
+                                .Where(r => r.PlatilloId == detalle.PlatilloId)
+                                .ToListAsync();
+
+                            foreach (var receta in recetas)
+                            {
+                                decimal cantidadADescontar = receta.CantidadRequerida * detalle.Cantidad;
+                                
+                                // Registrar Movimiento (Salida)
+                                var movimiento = new MovimientoInventario
+                                {
+                                    ProductoId = receta.ProductoId,
+                                    AlmacenId = almacenId,
+                                    TipoMovimiento = "Salida",
+                                    Cantidad = cantidadADescontar,
+                                    Fecha = DateTime.Now,
+                                    Motivo = "Venta",
+                                    Referencia = $"Pedido #{pedido.Id}",
+                                    UsuarioId = pedido.UsuarioId,
+                                    CostoUnitario = receta.CostoUnitario ?? 0, // Idealmente costo promedio del stock
+                                    CostoTotal = (receta.CostoUnitario ?? 0) * cantidadADescontar
+                                };
+                                
+                                _context.MovimientosInventario.Add(movimiento);
+
+                                // Actualizar Stock
+                                var stock = await _context.Stock
+                                    .FirstOrDefaultAsync(s => s.ProductoId == receta.ProductoId && s.AlmacenId == almacenId);
+                                
+                                if (stock != null)
+                                {
+                                    stock.Cantidad -= cantidadADescontar;
+                                    stock.FechaActualizacion = DateTime.Now;
+                                    
+                                    // Actualizar costo en movimiento con el real del stock
+                                    movimiento.CostoUnitario = stock.CostoPromedio;
+                                    movimiento.CostoTotal = cantidadADescontar * stock.CostoPromedio;
+                                }
+                                else 
+                                {
+                                    // Si no hay stock creado, crearlo en negativo (técnicamente posible si permitimos)
+                                    stock = new Stock
+                                    {
+                                        ProductoId = receta.ProductoId,
+                                        AlmacenId = almacenId,
+                                        Cantidad = -cantidadADescontar,
+                                        CostoPromedio = 0,
+                                        CostoTotal = 0,
+                                        FechaActualizacion = DateTime.Now
+                                    };
+                                    _context.Stock.Add(stock);
+                                }
+                            }
+                        }
+                        
+                        await _context.SaveChangesAsync();
+                        System.Diagnostics.Debug.WriteLine($"✅ Inventario descontado correctamente");
+                    }
+                    catch (Exception ex)
+                    {
+                         System.Diagnostics.Debug.WriteLine($"❌ Error al descontar inventario: {ex.Message}");
+                    }
+                }
+            }
             else
             {
-                System.Diagnostics.Debug.WriteLine($"ℹ️ Estado no es LISTO, no se envía notificación");
+                System.Diagnostics.Debug.WriteLine($"ℹ️ Estado no es LISTO ni PAGADO/ENTREGADO, no se envía notificación ni descuenta stock");
             }
 
             System.Diagnostics.Debug.WriteLine("========================================");

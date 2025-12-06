@@ -1,4 +1,4 @@
-﻿// api/RestaurantApi/RestauranteContext.cs
+// api/RestaurantApi/RestauranteContext.cs
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 

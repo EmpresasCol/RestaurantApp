@@ -1,4 +1,4 @@
-﻿using Google;
+using Google;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi;
