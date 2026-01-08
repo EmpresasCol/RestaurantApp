@@ -4,7 +4,7 @@ import {
   Package, 
   Clock, 
   CheckCircle, 
-  XCircle, 
+  XCircle,
   DollarSign,
   TrendingUp,
   AlertCircle
