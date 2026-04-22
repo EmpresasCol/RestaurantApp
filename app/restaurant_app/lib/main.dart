@@ -11,6 +11,11 @@ import 'providers/notificacion_provider.dart';
 import 'services/notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'providers/domiciliario_provider.dart';
+import 'models/usuario.dart';
+import 'screens/login_domiciliario_screen.dart';
+import 'screens/home_domiciliario_screen.dart';
+
 
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = 
     GlobalKey<ScaffoldMessengerState>();
@@ -116,6 +121,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()..cargarUsuario()),
         ChangeNotifierProvider(create: (_) => PedidoProvider()),
+        ChangeNotifierProvider(create: (_) => DomiciliarioProvider()..cargarDesdePrefs()),
         ChangeNotifierProvider(create: (context) {
           final provider = NotificacionProvider();
           notificacionProviderGlobal = provider;
@@ -206,20 +212,89 @@ class MyApp extends StatelessWidget {
           
           useMaterial3: true,
         ),
-        home: Consumer<AuthProvider>(
-          builder: (context, auth, _) {
+        home: Consumer2<AuthProvider, DomiciliarioProvider>(
+          builder: (context, auth, dom, _) {
             if (auth.cargando) {
               return const Scaffold(
                 backgroundColor: Color(0xFF3F291A),
-                body: Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFFC79B64),
-                  ),
-                ),
+                body: Center(child: CircularProgressIndicator(color: Color(0xFFC79B64))),
               );
             }
-            return auth.estaAutenticado ? const HomeScreen() : const LoginScreen();
+
+            // 1. Ya hay sesión de domiciliario
+            if (dom.estaAutenticado) return const HomeDomiciliarioScreen();
+
+            // 2. Ya hay sesión de mesero
+            if (auth.estaAutenticado) return const HomeScreen();
+
+            // 3. Sin sesión → elegir
+            return const _SelectorLoginScreen();
           },
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectorLoginScreen extends StatelessWidget {
+  const _SelectorLoginScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F5F1),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Bienvenido a Qpro',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontSize: 28,
+                        color: const Color(0xFF3F291A),
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Selecciona cómo quieres iniciar sesión',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF73563D),
+                      ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const LoginScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.restaurant_menu),
+                  label: const Text('Entrar como mesero'),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const LoginDomiciliarioScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.delivery_dining),
+                  label: const Text('Entrar como domiciliario'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

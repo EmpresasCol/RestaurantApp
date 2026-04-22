@@ -49,7 +49,7 @@ function VoiceControlCocina({ pedidos, onMarcarListo }) {
           clearTimeout(silencioTimeoutRef.current)
         }
 
-        if (!modoActivo && comando.includes("activar")) {
+        if (!modoActivo && comando.includes("Activar")) {
           activarModoEscucha()
         } else if (modoActivo && (comando.includes("pedido") || comando.includes("domicilio"))) {
           procesarComandoPedido(comando)

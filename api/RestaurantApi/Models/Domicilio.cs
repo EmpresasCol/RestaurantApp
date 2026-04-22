@@ -57,6 +57,20 @@ namespace RestaurantApi.Models
 
         public DateTime? FechaEntrega { get; set; }
 
+        [MaxLength(32)]
+        public string? TokenSeguimiento { get; set; }
+
+        public DateTime? PuedeEditarHasta { get; set; }
+
+        public DateTime? FechaRecogida { get; set; }
+
+        public string? ObservacionCliente { get; set; }
+
+        public DateTime? FechaObservacion { get; set; }
+
+        [MaxLength(20)]
+        public string OrigenPedido { get; set; } = "Admin";
+
         // Navegación
         [ForeignKey("ClienteId")]
         public virtual Cliente Cliente { get; set; } = null!;

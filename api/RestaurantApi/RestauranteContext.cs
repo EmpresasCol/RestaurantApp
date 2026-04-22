@@ -230,6 +230,33 @@ namespace RestaurantApi
 
                 entity.HasIndex(e => e.DomiciliarioId)
                     .HasDatabaseName("idx_domiciliario");
+
+                entity.Property(e => e.TokenSeguimiento)
+                    .HasMaxLength(32)
+                    .IsRequired(false);
+
+                entity.HasIndex(e => e.TokenSeguimiento)
+                    .IsUnique()
+                    .HasDatabaseName("idx_token_seguimiento");
+
+                entity.Property(e => e.PuedeEditarHasta)
+                    .IsRequired(false);
+
+                entity.Property(e => e.FechaRecogida)
+                    .IsRequired(false);
+
+                entity.Property(e => e.ObservacionCliente)
+                    .HasColumnType("TEXT")
+                    .IsRequired(false);
+
+                entity.Property(e => e.FechaObservacion)
+                    .IsRequired(false);
+
+                entity.Property(e => e.OrigenPedido)
+                    .HasMaxLength(20)
+                    .HasDefaultValue("Admin")
+                    .IsRequired();
+
             });
 
             // DomicilioDetalle

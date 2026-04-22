@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi;
+using RestaurantApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<DomicilioRealtimeService>();
 
 // ? Configurar CORS para permitir ngrok
 builder.Services.AddCors(options =>
@@ -16,7 +18,8 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:3000",                          // React local
             "https://empresascol.github.io",                  // GitHub Pages
-            "https://shadowgraphic-punctiliously-sharleen.ngrok-free.dev"                        // ? Cualquier subdominio de ngrok
+            "https://shadowgraphic-punctiliously-sharleen.ngrok-free.dev",// ? Cualquier subdominio de ngrok
+            "https://pulingly-unpromising-gracie.ngrok-free.dev"
         )
         .AllowAnyMethod()
         .AllowAnyHeader()

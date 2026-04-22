@@ -14,7 +14,7 @@ import Cocina from './Cocina';
 import Inventario from './Inventario';
 import { Package } from 'lucide-react';
 
-// ✅ IMPORTAR COMPONENTES DE DOMICILIOS
+// IMPORTAR COMPONENTES DE DOMICILIOS
 import Domicilios from './Domicilios';
 import NuevoDomicilio from './NuevoDomicilio';
 

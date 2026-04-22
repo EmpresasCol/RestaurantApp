@@ -965,6 +965,226 @@ END$$
 DELIMITER ;
 
 -- =====================================================
+
+-- Domicilios 
+-- ============================================================================
+--  QPro · Migración: Módulo Domiciliarios + Seguimiento Público
+--  Motor: MySQL 8+
+--  Naturaleza: NO destructiva · Idempotente · Segura para prod
+--  Aplica sobre: RestauranteBD (ya existente)
+--
+--  CÓMO EJECUTAR (elige una opción):
+--
+--  Opción A — MySQL Workbench:
+--    1. Abre una pestaña de Query conectada a tu servidor.
+--    2. Pega TODO el contenido de este archivo.
+--    3. Ejecuta con el botón "Execute Script" (rayo con hoja) o Ctrl+Shift+Enter.
+--       NO uses el botón "Execute Statement" (rayo simple): ese ejecuta solo
+--       la instrucción donde está el cursor y falla con el DELIMITER.
+--
+--  Opción B — Línea de comandos (más confiable para scripts con DELIMITER):
+--    mysql -u root -p RestauranteBD < 01_migration_domiciliarios.sql
+-- ============================================================================
+
+USE RestauranteBD;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 1. Añadir rol 'Domiciliario' al ENUM (conservando los existentes)
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE Usuarios
+    MODIFY COLUMN Rol ENUM(
+        'Administrador',
+        'Mesero',
+        'Cocina',
+        'Caja',
+        'Domiciliario'
+    ) NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 2. Añadir estado 'Recogido' al ENUM de Domicilios
+--    Flujo: EnPreparacion → Listo → Recogido → EnCamino → Entregado
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE Domicilios
+    MODIFY COLUMN Estado ENUM(
+        'EnPreparacion',
+        'Listo',
+        'Recogido',
+        'EnCamino',
+        'Entregado',
+        'Cancelado'
+    ) NOT NULL DEFAULT 'EnPreparacion';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. Procedimiento auxiliar para añadir columnas de forma idempotente
+--    (solo añade si la columna no existe; re-ejecutable sin error)
+-- ─────────────────────────────────────────────────────────────────────────────
+DROP PROCEDURE IF EXISTS sp_add_column_if_not_exists;
+
+DELIMITER $$
+CREATE PROCEDURE sp_add_column_if_not_exists(
+    IN p_table   VARCHAR(64),
+    IN p_column  VARCHAR(64),
+    IN p_ddl     VARCHAR(1024)
+)
+BEGIN
+    DECLARE v_count INT DEFAULT 0;
+    SELECT COUNT(*) INTO v_count
+      FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME   = p_table
+       AND COLUMN_NAME  = p_column;
+    IF v_count = 0 THEN
+        SET @sql = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN ', p_ddl);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END$$
+DELIMITER ;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. Añadir las columnas nuevas a la tabla Domicilios
+--    NOTA: los COMMENT usan comillas simples duplicadas ('') para escapar
+--    dentro de un string delimitado por comillas simples. Compatible con
+--    MySQL Workbench y línea de comandos.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CALL sp_add_column_if_not_exists(
+    'Domicilios',
+    'TokenSeguimiento',
+    '`TokenSeguimiento` CHAR(32) NULL UNIQUE COMMENT ''Token publico para seguimiento del cliente'''
+);
+
+CALL sp_add_column_if_not_exists(
+    'Domicilios',
+    'PuedeEditarHasta',
+    '`PuedeEditarHasta` DATETIME NULL COMMENT ''Ventana de edicion de 5 min tras crear el pedido publico'''
+);
+
+CALL sp_add_column_if_not_exists(
+    'Domicilios',
+    'FechaRecogida',
+    '`FechaRecogida` DATETIME NULL COMMENT ''Momento en que el domiciliario recoge del restaurante'''
+);
+
+CALL sp_add_column_if_not_exists(
+    'Domicilios',
+    'ObservacionCliente',
+    '`ObservacionCliente` TEXT NULL COMMENT ''Observacion opcional del cliente sobre el domiciliario'''
+);
+
+CALL sp_add_column_if_not_exists(
+    'Domicilios',
+    'FechaObservacion',
+    '`FechaObservacion` DATETIME NULL COMMENT ''Fecha en que se envio la observacion del cliente'''
+);
+
+CALL sp_add_column_if_not_exists(
+    'Domicilios',
+    'OrigenPedido',
+    '`OrigenPedido` ENUM(''Admin'',''Publico'') NOT NULL DEFAULT ''Admin'' COMMENT ''Admin=sistema interno, Publico=link abierto'''
+);
+
+-- Limpiar el procedimiento auxiliar
+DROP PROCEDURE IF EXISTS sp_add_column_if_not_exists;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5. Índice sobre TokenSeguimiento (solo si no existe ya)
+-- ─────────────────────────────────────────────────────────────────────────────
+SET @idx_exists := (
+    SELECT COUNT(*)
+      FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE()
+       AND TABLE_NAME   = 'Domicilios'
+       AND INDEX_NAME   = 'idx_token_seguimiento'
+);
+
+SET @sql_idx := IF(
+    @idx_exists = 0,
+    'CREATE INDEX idx_token_seguimiento ON Domicilios(TokenSeguimiento)',
+    'SELECT 1'
+);
+
+PREPARE stmt FROM @sql_idx;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 6. Vista: rendimiento por domiciliario (panel admin)
+-- ─────────────────────────────────────────────────────────────────────────────
+DROP VIEW IF EXISTS vw_rendimiento_domiciliarios;
+
+CREATE VIEW vw_rendimiento_domiciliarios AS
+SELECT
+    u.Id                                                               AS DomiciliarioId,
+    u.Nombre                                                           AS DomiciliarioNombre,
+    u.Usuario                                                          AS DomiciliarioUsuario,
+    COUNT(d.Id)                                                        AS TotalAsignados,
+    SUM(CASE WHEN d.Estado = 'Entregado' THEN 1 ELSE 0 END)             AS TotalEntregados,
+    SUM(CASE WHEN d.Estado = 'EnCamino'  THEN 1 ELSE 0 END)             AS EnCaminoActualmente,
+    SUM(CASE WHEN d.Estado = 'Recogido'  THEN 1 ELSE 0 END)             AS RecogidosPendientes,
+    SUM(CASE WHEN DATE(d.FechaEntrega) = CURDATE()
+             AND d.Estado = 'Entregado' THEN 1 ELSE 0 END)              AS EntregadosHoy,
+    SUM(CASE WHEN YEARWEEK(d.FechaEntrega, 1) = YEARWEEK(CURDATE(), 1)
+             AND d.Estado = 'Entregado' THEN 1 ELSE 0 END)              AS EntregadosSemana,
+    SUM(CASE WHEN DATE_FORMAT(d.FechaEntrega, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')
+             AND d.Estado = 'Entregado' THEN 1 ELSE 0 END)              AS EntregadosMes,
+    AVG(CASE WHEN d.Estado = 'Entregado' AND d.FechaRecogida IS NOT NULL
+             THEN TIMESTAMPDIFF(MINUTE, d.FechaRecogida, d.FechaEntrega)
+             ELSE NULL END)                                             AS TiempoPromedioEntregaMin
+FROM Usuarios u
+LEFT JOIN Domicilios d ON d.DomiciliarioId = u.Id
+WHERE u.Rol = 'Domiciliario'
+GROUP BY u.Id, u.Nombre, u.Usuario;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 7. Vista: observaciones recibidas de clientes (panel admin)
+-- ─────────────────────────────────────────────────────────────────────────────
+DROP VIEW IF EXISTS vw_observaciones_clientes;
+
+CREATE VIEW vw_observaciones_clientes AS
+SELECT
+    d.Id                  AS DomicilioId,
+    d.FechaObservacion,
+    d.ObservacionCliente,
+    c.Id                  AS ClienteId,
+    c.Nombre              AS ClienteNombre,
+    c.Telefono            AS ClienteTelefono,
+    u.Id                  AS DomiciliarioId,
+    u.Nombre              AS DomiciliarioNombre,
+    d.FechaEntrega
+FROM Domicilios d
+INNER JOIN Clientes  c ON d.ClienteId      = c.Id
+LEFT  JOIN Usuarios  u ON d.DomiciliarioId = u.Id
+WHERE d.ObservacionCliente IS NOT NULL
+  AND d.ObservacionCliente <> ''
+ORDER BY d.FechaObservacion DESC;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 8. Usuario demo de prueba
+--    Comentar en producción si no se necesita.
+-- ─────────────────────────────────────────────────────────────────────────────
+INSERT INTO Usuarios (Nombre, Usuario, ClaveHash, Rol)
+SELECT 'Domiciliario Demo', 'domiciliario', '123', 'Domiciliario'
+  FROM DUAL
+ WHERE NOT EXISTS (
+     SELECT 1 FROM Usuarios WHERE Usuario = 'domiciliario'
+ );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Verificación final
+-- ─────────────────────────────────────────────────────────────────────────────
+SELECT 'Migracion Domiciliarios aplicada correctamente' AS Status;
+
+SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+  FROM INFORMATION_SCHEMA.COLUMNS
+ WHERE TABLE_SCHEMA = DATABASE()
+   AND TABLE_NAME   = 'Domicilios'
+   AND COLUMN_NAME IN (
+       'Estado', 'TokenSeguimiento', 'PuedeEditarHasta',
+       'FechaRecogida', 'ObservacionCliente', 'FechaObservacion', 'OrigenPedido'
+   )
+ ORDER BY ORDINAL_POSITION;
 -- VERIFICACIÓN FINAL
 -- =====================================================
 SELECT '✅ Base de datos RestauranteBD (Core + Inventario + Domicilios) creada exitosamente' AS Status;
