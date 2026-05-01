@@ -11,6 +11,7 @@ import Reportes from './Reportes';
 import GestionPlatillos from './GestionPlatillos';
 import GestionUsuarios from './GestionUsuarios';
 import Cocina from './Cocina'; 
+import CocinaView from './CocinaView'; 
 import Inventario from './Inventario';
 import { Package } from 'lucide-react';
 
@@ -35,17 +36,7 @@ function AppContent() {
   const [pedidosAnteriores, setPedidosAnteriores] = useState(0);
   const [pedidosNuevos, setPedidosNuevos] = useState([]);
 
-  const [esPantallaCocina, setEsPantallaCocina] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const esCocina = window.location.pathname.includes('/cocina') || params.get('cocina') === 'true';
-    
-    if (esCocina) {
-      setEsPantallaCocina(true);
-      setVistaActual('cocina');
-    }
-  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -61,21 +52,21 @@ function AppContent() {
 
   useEffect(() => {
     cargarPlatillos();
-    if (vistaActual === 'cocina' || esPantallaCocina) {
+    if (vistaActual === 'cocina') {
       cargarPedidos();
     }
   }, []);
 
   useEffect(() => {
-    if ((vistaActual === 'cocina' || esPantallaCocina) && !esClienteQR) {
+    if (vistaActual === 'cocina' && !esClienteQR) {
       cargarPedidos();
       const interval = setInterval(cargarPedidos, 2000);
       return () => clearInterval(interval);
     }
-  }, [vistaActual, esPantallaCocina, esClienteQR]);
+  }, [vistaActual, esClienteQR]);
 
   useEffect(() => {
-    if (usuario && !esPantallaCocina) {
+    if (usuario) {
       const rol = usuario.rol?.toLowerCase();
       if (rol === 'cocina' && vistaActual !== 'cocina') {
         setVistaActual('cocina');
@@ -83,7 +74,7 @@ function AppContent() {
         setVistaActual('facturacion');
       }
     }
-  }, [usuario, vistaActual, esPantallaCocina]);
+  }, [usuario, vistaActual]);
 
   const cargarPlatillos = async () => {
     try {
@@ -504,7 +495,11 @@ function AppContent() {
       case 'cocina':
         return (
           <ProtectedRoute permisos={['administrador', 'cocina']}>
-            <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />
+            {usuario?.rol?.toLowerCase() === 'cocina' ? (
+              <CocinaView pedidos={pedidos} onActualizarPedidos={cargarPedidos} />
+            ) : (
+              <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />
+            )}
           </ProtectedRoute>
         );
       case 'facturacion':
@@ -544,9 +539,6 @@ function AppContent() {
     }
   };
 
-  if (esPantallaCocina) {
-    return <Cocina pedidos={pedidos} onActualizarPedidos={cargarPedidos} />;
-  }
 
   if (cargandoAuth) {
     return (
@@ -568,6 +560,15 @@ function AppContent() {
   }
 
   const rol = usuario?.rol?.toLowerCase();
+
+
+  if (rol === 'cocina') {
+    return (
+      <div className="min-h-screen">
+        {renderVistaActual()}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

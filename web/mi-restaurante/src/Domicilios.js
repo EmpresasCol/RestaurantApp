@@ -226,10 +226,10 @@ function Domicilios({ onNuevoDomicilio }) {
           </div>
         )}
 
-        {/* Filtros - ✅ SIN "EnPreparacion" */}
+        {/* Filtros */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
           <div className="flex flex-wrap gap-2">
-            {['activos', 'todos', 'EnPreparacion', 'EnCamino', 'Entregado', 'Cancelado'].map(estado => (
+            {['activos', 'todos', 'EnPreparacion', 'EnCamino', 'Listo', 'Entregado', 'Cancelado'].map(estado => (
               <button
                 key={estado}
                 onClick={() => setFiltroEstado(estado)}

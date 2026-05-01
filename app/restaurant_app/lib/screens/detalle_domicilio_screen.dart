@@ -390,7 +390,7 @@ class _AccionesState extends State<_Acciones> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(exito), backgroundColor: Colors.green.shade700),
       );
-      Navigator.of(context).pop();
+
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

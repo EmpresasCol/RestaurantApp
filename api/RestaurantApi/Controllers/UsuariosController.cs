@@ -49,22 +49,12 @@ namespace RestaurantApi.Controllers
                         message = "Los meseros deben usar la aplicación móvil. Por favor, descarga la app en tu dispositivo móvil."
                     });
                 }
-
-                // 🍳 BLOQUEAR LOGIN DE COCINA - DEBEN USAR URL DIRECTA
-                if (usuario.Rol == RolUsuario.Cocina)
-                {
-                    Console.WriteLine($"🍳 Usuario de cocina intentó login normal: {request.Usuario}");
-                    return Unauthorized(new
-                    {
-                        message = "COCINA_URL_DIRECTA"
-                    });
-                }
-
-                // ✅ Permitir solo: Administrador, Caja
+                // ✅ Permitir solo roles de la web: Administrador, Caja, Cocina
                 if (usuario.Rol != RolUsuario.Administrador &&
-                    usuario.Rol != RolUsuario.Caja)
+                    usuario.Rol != RolUsuario.Caja &&
+                    usuario.Rol != RolUsuario.Cocina)
                 {
-                    Console.WriteLine($"⛔ Rol no permitido: {usuario.Rol}");
+                    Console.WriteLine($"⛔ Rol no permitido en web: {usuario.Rol}");
                     return Unauthorized(new { message = "No tienes permisos para acceder al sistema web" });
                 }
 

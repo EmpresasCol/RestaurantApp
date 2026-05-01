@@ -1,6 +1,6 @@
 // src/components/Login.js
 import React, { useState } from 'react';
-import { LogIn, Lock, User, AlertCircle, Smartphone, ChefHat, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Lock, User, AlertCircle, Smartphone, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logo from './logo.jpg';
 
@@ -11,7 +11,6 @@ function Login() {
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
   const [mostrarModalMesero, setMostrarModalMesero] = useState(false);
-  const [mostrarModalCocina, setMostrarModalCocina] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false); // ✅ NUEVO ESTADO
   const { login } = useAuth();
 
@@ -23,10 +22,7 @@ function Login() {
     try {
       await login({ username, password });
     } catch (err) {
-      if (err.message === 'COCINA_URL_DIRECTA') {
-        setMostrarModalCocina(true);
-      }
-      else if (err.message.includes('mesero') || err.message.includes('móvil')) {
+      if (err.message.includes('mesero') || err.message.includes('móvil')) {
         setMostrarModalMesero(true);
       } else {
         setError(err.message);
@@ -182,64 +178,6 @@ function Login() {
                 setPassword('');
               }}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold transition-colors"
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal para Cocina */}
-      {mostrarModalCocina && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ChefHat className="text-orange-600" size={32} />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                Pantalla de Cocina
-              </h3>
-              <p className="text-gray-600">
-                El personal de <strong>Cocina</strong> debe acceder a través del enlace directo
-              </p>
-            </div>
-
-            <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-orange-800 text-center font-medium mb-2">
-                🔗 Usa este enlace en la tablet/pantalla de cocina:
-              </p>
-              <div className="bg-white border border-orange-300 rounded-lg p-3 mb-2">
-              <code className="text-xs text-gray-700 break-all">
-                {`${window.location.origin}/RestaurantApp/?cocina=true`}
-              </code>
-
-              </div>
-              <button
-                onClick={() => {
-                  const enlace = `${window.location.origin}/RestaurantApp/?cocina=true`;
-                  navigator.clipboard.writeText(enlace);
-                  alert('✅ Enlace copiado al portapapeles');
-                }}
-                className="w-full text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 py-2 rounded-lg font-medium transition-colors"
-              >
-                📋 Copiar enlace
-              </button>
-            </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-6">
-              <p className="text-xs text-green-800 text-center">
-                💡 <strong>Tip:</strong> Guarda el enlace como favorito o inicio automático en el dispositivo de cocina
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                setMostrarModalCocina(false);
-                setUsername('');
-                setPassword('');
-              }}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-semibold transition-colors"
             >
               Entendido
             </button>
