@@ -1,0 +1,22 @@
+# === Secretos ===
+.env
+
+# === Python ===
+__pycache__/
+*.pyc
+*.pyo
+
+# === Editor ===
+.vscode/
+.idea/
+
+# === Sistema operativo ===
+Thumbs.db
+.DS_Store
+
+# === Datos locales (si algún día montas volúmenes en carpetas locales) ===
+postgres-data/
+odoo-data/
+
+# === Logs ===
+*.log

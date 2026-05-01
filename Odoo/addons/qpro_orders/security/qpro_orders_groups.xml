@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        Categoría QPro: agrupa todos los grupos del proyecto en
+        Ajustes → Usuarios y Compañías → Usuarios, en una sección propia.
+
+        Esto es solo cosmético: hace que los permisos QPro aparezcan
+        agrupados al editar un usuario.
+    -->
+    <record id="module_category_qpro" model="ir.module.category">
+        <field name="name">QPro</field>
+        <field name="description">Permisos del sistema QPro de gestión de restaurantes.</field>
+        <field name="sequence">10</field>
+    </record>
+
+    <!--
+        Grupo Mesero.
+        - implied_ids: hereda de base.group_user (empleado interno),
+          es decir, un mesero TAMBIÉN es empleado interno automáticamente.
+        - category_id: lo agrupa bajo la categoría QPro en la UI.
+    -->
+    <record id="group_qpro_waiter" model="res.groups">
+        <field name="name">Mesero</field>
+        <field name="category_id" ref="module_category_qpro"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Grupo Cocinero -->
+    <record id="group_qpro_chef" model="res.groups">
+        <field name="name">Cocinero</field>
+        <field name="category_id" ref="module_category_qpro"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Grupo Cajero -->
+    <record id="group_qpro_cashier" model="res.groups">
+        <field name="name">Cajero</field>
+        <field name="category_id" ref="module_category_qpro"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!--
+        Grupo Administrador del restaurante.
+        - implied_ids: incluye los tres grupos anteriores.
+          Es decir, un Admin tiene TODOS los permisos de mesero, cocinero
+          y cajero, más los suyos propios.
+    -->
+    <record id="group_qpro_manager" model="res.groups">
+        <field name="name">Administrador QPro</field>
+        <field name="category_id" ref="module_category_qpro"/>
+        <field name="implied_ids" eval="[
+            (4, ref('group_qpro_waiter')),
+            (4, ref('group_qpro_chef')),
+            (4, ref('group_qpro_cashier')),
+        ]"/>
+    </record>
+
+</odoo>

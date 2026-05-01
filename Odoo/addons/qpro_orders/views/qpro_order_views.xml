@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         VISTA TREE: lista de pedidos
+         ============================================================ -->
+    <record id="view_qpro_order_tree" model="ir.ui.view">
+        <field name="name">qpro.order.tree</field>
+        <field name="model">qpro.order</field>
+        <field name="arch" type="xml">
+            <tree string="Pedidos"
+                  decoration-info="state == 'draft'"
+                  decoration-warning="state in ('sent','preparing')"
+                  decoration-success="state in ('ready','served','paid')"
+                  decoration-muted="state == 'cancelled'">
+                <field name="name"/>
+                <field name="date_order"/>
+                <field name="table_id"/>
+                <field name="restaurant_id"/>
+                <field name="waiter_id"/>
+                <field name="amount_total" sum="Total" widget="monetary"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-warning="state in ('sent','preparing')"
+                       decoration-success="state in ('ready','served','paid')"
+                       decoration-danger="state == 'cancelled'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         VISTA FORM: formulario completo del pedido
+         ============================================================ -->
+    <record id="view_qpro_order_form" model="ir.ui.view">
+        <field name="name">qpro.order.form</field>
+        <field name="model">qpro.order</field>
+        <field name="arch" type="xml">
+            <form string="Pedido">
+                <!-- Header con statusbar y botones de acción -->
+                <header>
+                    <button name="action_send_to_kitchen" type="object"
+                            string="Enviar a cocina" class="oe_highlight"
+                            invisible="state != 'draft'"/>
+                    <button name="action_start_preparing" type="object"
+                            string="Empezar preparación" class="oe_highlight"
+                            invisible="state != 'sent'"
+                            groups="qpro_orders.group_qpro_chef,qpro_orders.group_qpro_manager"/>
+                    <button name="action_mark_ready" type="object"
+                            string="Marcar listo" class="oe_highlight"
+                            invisible="state != 'preparing'"
+                            groups="qpro_orders.group_qpro_chef,qpro_orders.group_qpro_manager"/>
+                    <button name="action_mark_served" type="object"
+                            string="Marcar entregado" class="oe_highlight"
+                            invisible="state != 'ready'"/>
+                    <button name="action_mark_paid" type="object"
+                            string="Marcar pagado" class="oe_highlight"
+                            invisible="state != 'served'"
+                            groups="qpro_orders.group_qpro_cashier,qpro_orders.group_qpro_manager"/>
+                    <button name="action_cancel" type="object"
+                            string="Cancelar"
+                            invisible="state in ('paid', 'cancelled')"
+                            confirm="¿Estás seguro de cancelar este pedido?"/>
+                    <button name="action_reset_to_draft" type="object"
+                            string="Reabrir a borrador"
+                            invisible="state != 'cancelled'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,sent,preparing,ready,served,paid"/>
+                </header>
+
+                <sheet>
+                    <!-- Título con folio -->
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" readonly="1"/>
+                        </h1>
+                    </div>
+
+                    <!-- Datos generales -->
+                    <group>
+                        <group string="Información">
+                            <field name="table_id"
+                                   readonly="state not in ('draft',)"/>
+                            <field name="restaurant_id" readonly="1"/>
+                            <field name="waiter_id"
+                                   readonly="state not in ('draft',)"/>
+                            <field name="partner_id"
+                                   readonly="state in ('paid', 'cancelled')"/>
+                        </group>
+                        <group string="Fecha y moneda">
+                            <field name="date_order"
+                                   readonly="state not in ('draft',)"/>
+                            <field name="currency_id"
+                                   groups="base.group_multi_currency"/>
+                        </group>
+                    </group>
+
+                    <!-- Líneas del pedido -->
+                    <notebook>
+                        <page string="Platillos" name="lines">
+                            <field name="order_line_ids"
+                                   readonly="state in ('paid', 'cancelled')"
+                                   context="{'default_state': 'pending'}">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="product_id"/>
+                                    <field name="quantity"/>
+                                    <field name="price_unit"/>
+                                    <field name="price_subtotal" sum="Total"/>
+                                    <field name="note"/>
+                                    <field name="state" widget="badge"
+                                           decoration-info="state == 'pending'"
+                                           decoration-warning="state == 'preparing'"
+                                           decoration-success="state == 'ready'"
+                                           decoration-danger="state == 'cancelled'"
+                                           readonly="parent.state in ('paid', 'cancelled')"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                </tree>
+                            </field>
+                            <!-- Total visible debajo de las líneas -->
+                            <group class="oe_subtotal_footer">
+                                <field name="amount_total"
+                                       widget="monetary"
+                                       class="oe_subtotal_footer_separator"/>
+                            </group>
+                        </page>
+                        <page string="Notas" name="notes">
+                            <field name="note" placeholder="Notas generales del pedido..."
+                                   readonly="state in ('paid', 'cancelled')"/>
+                        </page>
+                    </notebook>
+                </sheet>
+
+                <!-- Chatter -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         VISTA KANBAN: pipeline de pedidos por estado (estilo Trello)
+         Crítica para cocina y meseros: ven el flujo completo de un vistazo.
+         ============================================================ -->
+    <record id="view_qpro_order_kanban" model="ir.ui.view">
+        <field name="name">qpro.order.kanban</field>
+        <field name="model">qpro.order</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state" class="o_kanban_small_column"
+                    records_draggable="false">
+                <field name="name"/>
+                <field name="table_id"/>
+                <field name="waiter_id"/>
+                <field name="amount_total"/>
+                <field name="currency_id"/>
+                <field name="state"/>
+                <field name="date_order"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_card oe_kanban_global_click">
+                            <div class="o_kanban_record_top">
+                                <div class="o_kanban_record_headings">
+                                    <strong>
+                                        <field name="name"/>
+                                    </strong>
+                                </div>
+                            </div>
+                            <div class="o_kanban_record_body">
+                                <div>
+                                    <i class="fa fa-cutlery"/>
+                                    <field name="table_id"/>
+                                </div>
+                                <div>
+                                    <i class="fa fa-user"/>
+                                    <field name="waiter_id"/>
+                                </div>
+                                <div>
+                                    <i class="fa fa-clock-o"/>
+                                    <field name="date_order"/>
+                                </div>
+                            </div>
+                            <div class="o_kanban_record_bottom">
+                                <div class="oe_kanban_bottom_left">
+                                    <field name="amount_total" widget="monetary"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         VISTA SEARCH
+         ============================================================ -->
+    <record id="view_qpro_order_search" model="ir.ui.view">
+        <field name="name">qpro.order.search</field>
+        <field name="model">qpro.order</field>
+        <field name="arch" type="xml">
+            <search string="Buscar pedidos">
+                <field name="name"/>
+                <field name="table_id"/>
+                <field name="waiter_id"/>
+                <field name="restaurant_id"/>
+                <field name="partner_id"/>
+                <separator/>
+                <filter string="Mis pedidos" name="filter_my_orders"
+                        domain="[('waiter_id', '=', uid)]"/>
+                <separator/>
+                <filter string="Borrador" name="filter_draft"
+                        domain="[('state', '=', 'draft')]"/>
+                <filter string="En cocina" name="filter_in_kitchen"
+                        domain="[('state', 'in', ('sent', 'preparing'))]"/>
+                <filter string="Listos" name="filter_ready"
+                        domain="[('state', '=', 'ready')]"/>
+                <filter string="Por pagar" name="filter_to_pay"
+                        domain="[('state', '=', 'served')]"/>
+                <filter string="Pagados" name="filter_paid"
+                        domain="[('state', '=', 'paid')]"/>
+                <separator/>
+                <filter string="Hoy" name="filter_today"
+                        domain="[('date_order', '&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter string="Estado" name="group_state"
+                            context="{'group_by': 'state'}"/>
+                    <filter string="Mesa" name="group_table"
+                            context="{'group_by': 'table_id'}"/>
+                    <filter string="Mesero" name="group_waiter"
+                            context="{'group_by': 'waiter_id'}"/>
+                    <filter string="Restaurante" name="group_restaurant"
+                            context="{'group_by': 'restaurant_id'}"/>
+                    <filter string="Fecha" name="group_date"
+                            context="{'group_by': 'date_order:day'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         ACCIÓN
+         ============================================================ -->
+    <record id="action_qpro_order" model="ir.actions.act_window">
+        <field name="name">Pedidos</field>
+        <field name="res_model">qpro.order</field>
+        <field name="view_mode">kanban,tree,form</field>
+        <field name="search_view_id" ref="view_qpro_order_search"/>
+        <field name="context">{'search_default_filter_today': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Crea tu primer pedido
+            </p>
+            <p>
+                Selecciona una mesa, añade platillos y envía el pedido a cocina.
+            </p>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <menuitem
+        id="menu_qpro_operation"
+        name="Operación"
+        parent="qpro_core.menu_qpro_root"
+        sequence="10"/>
+
+    <menuitem
+        id="menu_qpro_orders"
+        name="Pedidos"
+        parent="menu_qpro_operation"
+        action="action_qpro_order"
+        sequence="10"/>
+
+    <menuitem
+        id="menu_qpro_tables"
+        name="Mesas"
+        parent="menu_qpro_operation"
+        action="action_qpro_table"
+        sequence="20"/>
+
+</odoo>

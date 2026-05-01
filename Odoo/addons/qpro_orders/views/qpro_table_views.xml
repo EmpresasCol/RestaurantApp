@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================
+         VISTA TREE (LISTA): cómo se ven las mesas en una tabla
+         ============================================================ -->
+    <record id="view_qpro_table_tree" model="ir.ui.view">
+        <field name="name">qpro.table.tree</field>
+        <field name="model">qpro.table</field>
+        <field name="arch" type="xml">
+            <tree string="Mesas" decoration-success="state == 'free'"
+                  decoration-warning="state == 'occupied'"
+                  decoration-danger="state == 'awaiting_payment'">
+                <field name="number"/>
+                <field name="name"/>
+                <field name="restaurant_id"/>
+                <field name="capacity"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'free'"
+                       decoration-warning="state == 'occupied'"
+                       decoration-danger="state == 'awaiting_payment'"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         VISTA FORM (FORMULARIO): vista detallada de una mesa
+         ============================================================ -->
+    <record id="view_qpro_table_form" model="ir.ui.view">
+        <field name="name">qpro.table.form</field>
+        <field name="model">qpro.table</field>
+        <field name="arch" type="xml">
+            <form string="Mesa">
+                <header>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="free,occupied,awaiting_payment"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="number" string="Mesa N°"/>
+                        <h1>
+                            <field name="number" placeholder="1"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Identificación">
+                            <field name="restaurant_id"/>
+                            <field name="name" readonly="1"/>
+                            <field name="active"/>
+                        </group>
+                        <group string="Configuración">
+                            <field name="capacity"/>
+                            <field name="qr_code" widget="image" class="oe_avatar"/>
+                        </group>
+                    </group>
+                </sheet>
+                <!-- Chatter automático (mail.thread) -->
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         VISTA KANBAN: tarjetas visuales por estado de mesa
+         ============================================================ -->
+    <record id="view_qpro_table_kanban" model="ir.ui.view">
+        <field name="name">qpro.table.kanban</field>
+        <field name="model">qpro.table</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state" class="o_kanban_small_column">
+                <field name="number"/>
+                <field name="name"/>
+                <field name="state"/>
+                <field name="capacity"/>
+                <field name="restaurant_id"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_card oe_kanban_global_click">
+                            <div class="o_kanban_record_top">
+                                <div class="o_kanban_record_headings">
+                                    <strong class="o_kanban_record_title">
+                                        <field name="name"/>
+                                    </strong>
+                                </div>
+                            </div>
+                            <div class="o_kanban_record_body">
+                                <div>
+                                    <i class="fa fa-users"/>
+                                    <span> Capacidad: <field name="capacity"/></span>
+                                </div>
+                                <div>
+                                    <i class="fa fa-building"/>
+                                    <field name="restaurant_id"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         VISTA SEARCH: filtros y agrupaciones disponibles
+         ============================================================ -->
+    <record id="view_qpro_table_search" model="ir.ui.view">
+        <field name="name">qpro.table.search</field>
+        <field name="model">qpro.table</field>
+        <field name="arch" type="xml">
+            <search string="Buscar mesas">
+                <field name="number"/>
+                <field name="restaurant_id"/>
+                <separator/>
+                <filter string="Disponibles" name="filter_free"
+                        domain="[('state', '=', 'free')]"/>
+                <filter string="Ocupadas" name="filter_occupied"
+                        domain="[('state', '=', 'occupied')]"/>
+                <filter string="Esperando pago" name="filter_awaiting"
+                        domain="[('state', '=', 'awaiting_payment')]"/>
+                <separator/>
+                <filter string="Archivadas" name="filter_archived"
+                        domain="[('active', '=', False)]"/>
+                <group expand="0" string="Agrupar por">
+                    <filter string="Estado" name="group_state"
+                            context="{'group_by': 'state'}"/>
+                    <filter string="Restaurante" name="group_restaurant"
+                            context="{'group_by': 'restaurant_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ============================================================
+         ACCIÓN: vincula el modelo con sus vistas
+         ============================================================ -->
+    <record id="action_qpro_table" model="ir.actions.act_window">
+        <field name="name">Mesas</field>
+        <field name="res_model">qpro.table</field>
+        <field name="view_mode">kanban,tree,form</field>
+        <field name="search_view_id" ref="view_qpro_table_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Crea tu primera mesa
+            </p>
+            <p>
+                Cada mesa pertenece a un restaurante y tiene un estado
+                operativo (Disponible, Ocupada, Esperando pago).
+            </p>
+        </field>
+    </record>
+
+</odoo>

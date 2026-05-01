@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Vista lista (tree): cómo se ven los restaurantes en una tabla -->
+    <record id="view_qpro_restaurant_tree" model="ir.ui.view">
+        <field name="name">qpro.restaurant.tree</field>
+        <field name="model">qpro.restaurant</field>
+        <field name="arch" type="xml">
+            <tree string="Restaurantes">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="phone"/>
+                <field name="email"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Vista formulario: cómo se ve un restaurante individual al editarlo -->
+    <record id="view_qpro_restaurant_form" model="ir.ui.view">
+        <field name="name">qpro.restaurant.form</field>
+        <field name="model">qpro.restaurant</field>
+        <field name="arch" type="xml">
+            <form string="Restaurante">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="Nombre del restaurante"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Identificación">
+                            <field name="code"/>
+                            <field name="active"/>
+                        </group>
+                        <group string="Contacto">
+                            <field name="phone"/>
+                            <field name="email"/>
+                            <field name="address"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Acción: vincula el modelo con las vistas anteriores -->
+    <record id="action_qpro_restaurant" model="ir.actions.act_window">
+        <field name="name">Restaurantes</field>
+        <field name="res_model">qpro.restaurant</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Crea tu primer restaurante
+            </p>
+            <p>
+                Cada restaurante agrupa sus pedidos, mesas y personal.
+            </p>
+        </field>
+    </record>
+
+    <!-- Menú principal de QPro -->
+    <menuitem
+        id="menu_qpro_root"
+        name="QPro"
+        sequence="10"/>
+
+    <!-- Submenú de configuración -->
+    <menuitem
+        id="menu_qpro_config"
+        name="Configuración"
+        parent="menu_qpro_root"
+        sequence="100"/>
+
+    <!-- Entrada de menú que abre la lista de restaurantes -->
+    <menuitem
+        id="menu_qpro_restaurants"
+        name="Restaurantes"
+        parent="menu_qpro_config"
+        action="action_qpro_restaurant"
+        sequence="10"/>
+
+</odoo>

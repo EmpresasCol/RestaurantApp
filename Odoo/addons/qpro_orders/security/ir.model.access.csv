@@ -1,0 +1,13 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_qpro_table_waiter,qpro.table.waiter,model_qpro_table,qpro_orders.group_qpro_waiter,1,0,0,0
+access_qpro_table_chef,qpro.table.chef,model_qpro_table,qpro_orders.group_qpro_chef,1,0,0,0
+access_qpro_table_cashier,qpro.table.cashier,model_qpro_table,qpro_orders.group_qpro_cashier,1,0,0,0
+access_qpro_table_manager,qpro.table.manager,model_qpro_table,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_order_waiter,qpro.order.waiter,model_qpro_order,qpro_orders.group_qpro_waiter,1,1,1,0
+access_qpro_order_chef,qpro.order.chef,model_qpro_order,qpro_orders.group_qpro_chef,1,1,0,0
+access_qpro_order_cashier,qpro.order.cashier,model_qpro_order,qpro_orders.group_qpro_cashier,1,1,0,0
+access_qpro_order_manager,qpro.order.manager,model_qpro_order,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_order_line_waiter,qpro.order.line.waiter,model_qpro_order_line,qpro_orders.group_qpro_waiter,1,1,1,1
+access_qpro_order_line_chef,qpro.order.line.chef,model_qpro_order_line,qpro_orders.group_qpro_chef,1,1,0,0
+access_qpro_order_line_cashier,qpro.order.line.cashier,model_qpro_order_line,qpro_orders.group_qpro_cashier,1,0,0,0
+access_qpro_order_line_manager,qpro.order.line.manager,model_qpro_order_line,qpro_orders.group_qpro_manager,1,1,1,1
