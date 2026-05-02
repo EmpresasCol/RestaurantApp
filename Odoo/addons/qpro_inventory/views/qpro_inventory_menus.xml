@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_qpro_inventory_root"
+              name="Inventario"
+              parent="qpro_core.menu_qpro_root"
+              sequence="50"/>
+
+    <menuitem id="menu_qpro_dishes"
+              name="Platillos"
+              parent="menu_qpro_inventory_root"
+              action="action_qpro_dishes"
+              sequence="10"/>
+
+    <menuitem id="menu_qpro_ingredients"
+              name="Ingredientes e insumos"
+              parent="menu_qpro_inventory_root"
+              action="action_qpro_ingredients"
+              sequence="20"/>
+</odoo>

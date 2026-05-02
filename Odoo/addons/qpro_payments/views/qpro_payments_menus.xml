@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Se engancha bajo el menú raíz de QPro Orders -->
+    <menuitem id="menu_qpro_payments_root"
+              name="Caja"
+              parent="qpro_core.menu_qpro_root"
+              sequence="30"/>
+
+    <menuitem id="menu_qpro_payments"
+              name="Pagos"
+              parent="menu_qpro_payments_root"
+              action="action_qpro_payment"
+              sequence="10"/>
+
+    <menuitem id="menu_qpro_invoices"
+              name="Facturas"
+              parent="menu_qpro_payments_root"
+              action="action_qpro_invoice"
+              sequence="20"/>
+</odoo>

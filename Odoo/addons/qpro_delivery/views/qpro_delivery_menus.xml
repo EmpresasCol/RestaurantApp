@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_qpro_delivery_root"
+              name="Domicilios"
+              parent="qpro_core.menu_qpro_root"
+              sequence="40"/>
+
+    <menuitem id="menu_qpro_delivery_list"
+              name="Pedidos a domicilio"
+              parent="menu_qpro_delivery_root"
+              action="action_qpro_delivery"
+              sequence="10"/>
+
+    <menuitem id="menu_qpro_delivery_addresses"
+              name="Direcciones"
+              parent="menu_qpro_delivery_root"
+              action="action_qpro_delivery_address"
+              sequence="20"/>
+</odoo>

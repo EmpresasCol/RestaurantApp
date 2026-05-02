@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="seq_qpro_payment" model="ir.sequence">
+        <field name="name">QPro Payment</field>
+        <field name="code">qpro.payment</field>
+        <field name="prefix">PAY-%(year)s%(month)s-</field>
+        <field name="padding">4</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+        <field name="use_date_range">False</field>
+    </record>
+
+    <record id="seq_qpro_invoice" model="ir.sequence">
+        <field name="name">QPro Invoice</field>
+        <field name="code">qpro.invoice</field>
+        <field name="prefix">FAC-%(year)s%(month)s-</field>
+        <field name="padding">4</field>
+        <field name="number_next">1</field>
+        <field name="number_increment">1</field>
+        <field name="use_date_range">False</field>
+    </record>
+</odoo>

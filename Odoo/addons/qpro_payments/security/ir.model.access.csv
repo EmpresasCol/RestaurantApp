@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_qpro_payment_manager,qpro.payment manager,model_qpro_payment,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_payment_cashier,qpro.payment cashier,model_qpro_payment,qpro_orders.group_qpro_cashier,1,1,1,0
+access_qpro_payment_waiter,qpro.payment waiter,model_qpro_payment,qpro_orders.group_qpro_waiter,1,0,0,0
+access_qpro_invoice_manager,qpro.invoice manager,model_qpro_invoice,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_invoice_cashier,qpro.invoice cashier,model_qpro_invoice,qpro_orders.group_qpro_cashier,1,1,1,0
+access_qpro_invoice_waiter,qpro.invoice waiter,model_qpro_invoice,qpro_orders.group_qpro_waiter,1,0,0,0

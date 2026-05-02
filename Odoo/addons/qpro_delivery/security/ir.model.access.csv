@@ -1,0 +1,9 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_qpro_delivery_address_manager,qpro.delivery.address manager,model_qpro_delivery_address,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_delivery_address_cashier,qpro.delivery.address cashier,model_qpro_delivery_address,qpro_orders.group_qpro_cashier,1,1,1,0
+access_qpro_delivery_manager,qpro.delivery manager,model_qpro_delivery,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_delivery_cashier,qpro.delivery cashier,model_qpro_delivery,qpro_orders.group_qpro_cashier,1,1,1,0
+access_qpro_delivery_waiter,qpro.delivery waiter,model_qpro_delivery,qpro_orders.group_qpro_waiter,1,1,0,0
+access_qpro_delivery_line_manager,qpro.delivery.line manager,model_qpro_delivery_line,qpro_orders.group_qpro_manager,1,1,1,1
+access_qpro_delivery_line_cashier,qpro.delivery.line cashier,model_qpro_delivery_line,qpro_orders.group_qpro_cashier,1,1,1,0
+access_qpro_delivery_line_waiter,qpro.delivery.line waiter,model_qpro_delivery_line,qpro_orders.group_qpro_waiter,1,1,0,0

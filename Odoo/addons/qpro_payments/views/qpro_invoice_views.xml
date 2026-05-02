@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_qpro_invoice_list" model="ir.ui.view">
+        <field name="name">qpro.invoice.list</field>
+        <field name="model">qpro.invoice</field>
+        <field name="arch" type="xml">
+            <tree string="Facturas">
+                <field name="number"/>
+                <field name="order_id"/>
+                <field name="customer_name"/>
+                <field name="customer_nit"/>
+                <field name="subtotal"/>
+                <field name="tip"/>
+                <field name="total" sum="Total facturado"/>
+                <field name="issue_date"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_qpro_invoice_form" model="ir.ui.view">
+        <field name="name">qpro.invoice.form</field>
+        <field name="model">qpro.invoice</field>
+        <field name="arch" type="xml">
+            <form string="Factura">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="number" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Referencia">
+                            <field name="payment_id"/>
+                            <field name="order_id"/>
+                            <field name="issue_date"/>
+                        </group>
+                        <group string="Cliente">
+                            <field name="customer_name"/>
+                            <field name="customer_nit"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Totales">
+                            <field name="currency_id" invisible="1"/>
+                            <field name="subtotal"/>
+                            <field name="tip"/>
+                            <field name="total"/>
+                        </group>
+                        <group string="Archivo">
+                            <field name="file_url" widget="url"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_qpro_invoice" model="ir.actions.act_window">
+        <field name="name">Facturas</field>
+        <field name="res_model">qpro.invoice</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

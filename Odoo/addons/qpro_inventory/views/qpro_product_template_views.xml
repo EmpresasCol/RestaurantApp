@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Añadir pestaña QPro en el formulario de producto -->
+    <record id="view_product_template_qpro_form" model="ir.ui.view">
+        <field name="name">product.template.qpro.form</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_only_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="QPro" name="qpro_info">
+                    <group string="Identificación">
+                        <field name="qpro_code"/>
+                        <field name="qpro_is_dish"/>
+                    </group>
+                    <group string="Control de stock" invisible="qpro_is_dish">
+                        <field name="qpro_requires_expiry"/>
+                        <field name="qpro_expiry_days" invisible="not qpro_requires_expiry"/>
+                        <field name="qpro_cost_price"/>
+                        <field name="qpro_min_stock"/>
+                        <field name="qpro_max_stock"/>
+                        <field name="qpro_reorder_point"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Acción: ver solo platillos del menú -->
+    <record id="action_qpro_dishes" model="ir.actions.act_window">
+        <field name="name">Platillos del menú</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">tree,form,kanban</field>
+        <field name="domain">[('qpro_is_dish', '=', True)]</field>
+        <field name="context">{'default_qpro_is_dish': True}</field>
+    </record>
+
+    <!-- Acción: ver solo ingredientes/insumos -->
+    <record id="action_qpro_ingredients" model="ir.actions.act_window">
+        <field name="name">Ingredientes e insumos</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('qpro_is_dish', '=', False)]</field>
+        <field name="context">{'default_qpro_is_dish': False}</field>
+    </record>
+</odoo>

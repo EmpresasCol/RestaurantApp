@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_product_category_qpro_manager,product.category qpro manager,product.model_product_category,qpro_orders.group_qpro_manager,1,1,1,1
+access_product_template_qpro_manager,product.template qpro manager,product.model_product_template,qpro_orders.group_qpro_manager,1,1,1,1
+access_product_template_qpro_waiter,product.template qpro waiter,product.model_product_template,qpro_orders.group_qpro_waiter,1,0,0,0

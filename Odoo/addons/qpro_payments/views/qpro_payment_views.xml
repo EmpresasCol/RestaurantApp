@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ── LIST ─────────────────────────────────────────────────────────────── -->
+    <record id="view_qpro_payment_list" model="ir.ui.view">
+        <field name="name">qpro.payment.list</field>
+        <field name="model">qpro.payment</field>
+        <field name="arch" type="xml">
+            <tree string="Pagos" decoration-success="payment_method == 'cash'"
+                  decoration-info="payment_method == 'card'"
+                  decoration-warning="payment_method == 'qr'">
+                <field name="name"/>
+                <field name="order_id"/>
+                <field name="payment_method"/>
+                <field name="amount"/>
+                <field name="tip_amount"/>
+                <field name="total_amount" sum="Total cobrado"/>
+                <field name="date"/>
+                <field name="invoice_count" string="Facturas"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- ── FORM ─────────────────────────────────────────────────────────────── -->
+    <record id="view_qpro_payment_form" model="ir.ui.view">
+        <field name="name">qpro.payment.form</field>
+        <field name="model">qpro.payment</field>
+        <field name="arch" type="xml">
+            <form string="Pago">
+                <header>
+                    <button name="action_create_invoice" type="object"
+                            string="Generar Factura"
+                            invisible="invoice_count > 0"
+                            class="btn-primary"/>
+                    <button name="action_view_invoices" type="object"
+                            string="Ver Facturas"
+                            invisible="invoice_count == 0"
+                            class="btn-secondary"/>
+                </header>
+                <sheet>
+                    <field name="invoice_count" invisible="1"/>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Pedido">
+                            <field name="order_id"/>
+                            <field name="restaurant_id"/>
+                            <field name="date"/>
+                        </group>
+                        <group string="Cobro">
+                            <field name="payment_method"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="amount"/>
+                            <field name="tip_amount"/>
+                            <field name="total_amount"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Facturas" name="invoices">
+                            <field name="invoice_ids" readonly="1">
+                                <tree>
+                                    <field name="number"/>
+                                    <field name="customer_name"/>
+                                    <field name="customer_nit"/>
+                                    <field name="total"/>
+                                    <field name="issue_date"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ── ACTION ───────────────────────────────────────────────────────────── -->
+    <record id="action_qpro_payment" model="ir.actions.act_window">
+        <field name="name">Pagos</field>
+        <field name="res_model">qpro.payment</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{}</field>
+    </record>
+</odoo>
