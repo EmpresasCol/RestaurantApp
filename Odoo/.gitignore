@@ -20,3 +20,8 @@ odoo-data/
 
 # === Logs ===
 *.log
+
+# === Permitir backups de BD (gestionados por Git LFS) ===
+!db_backups/
+!db_backups/*.sql
+!db_backups/*.tar.gz
