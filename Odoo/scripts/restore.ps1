@@ -50,7 +50,25 @@ docker compose exec -T db psql -U odoo -d postgres -c "DROP DATABASE IF EXISTS q
 docker compose exec -T db psql -U odoo -d postgres -c "CREATE DATABASE qpro_dev OWNER odoo;"
 
 Write-Host "==> Restaurando el dump SQL..." -ForegroundColor Cyan
-Get-Content "db_backups/qpro_dev_latest.sql" | docker compose exec -T db psql -U odoo -d qpro_dev | Out-Null
+$sqlSrc = (Resolve-Path "db_backups/qpro_dev_latest.sql").Path
+$fs = [System.IO.File]::OpenRead($sqlSrc)
+try {
+    $b0 = $fs.ReadByte()
+    $b1 = $fs.ReadByte()
+} finally {
+    $fs.Close()
+}
+$sqlForContainer = $sqlSrc
+$utf8Tmp = $null
+if ($b0 -eq 0xFF -and $b1 -eq 0xFE) {
+    $utf8Tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("qpro_restore_{0}.sql" -f [Guid]::NewGuid().ToString("N"))
+    $text = [System.IO.File]::ReadAllText($sqlSrc, [System.Text.Encoding]::Unicode)
+    [System.IO.File]::WriteAllText($utf8Tmp, $text, [System.Text.UTF8Encoding]::new($false))
+    $sqlForContainer = $utf8Tmp
+}
+docker compose cp -- "$sqlForContainer" db:/tmp/qpro_restore.sql
+docker compose exec -T db psql -U odoo -d qpro_dev -v ON_ERROR_STOP=1 -f /tmp/qpro_restore.sql | Out-Null
+if ($null -ne $utf8Tmp) { Remove-Item -LiteralPath $utf8Tmp -Force -ErrorAction SilentlyContinue }
 
 Write-Host "==> Restaurando el filestore..." -ForegroundColor Cyan
 docker compose cp "db_backups/filestore_latest.tar.gz" odoo:/tmp/filestore.tar.gz
