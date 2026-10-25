@@ -7,11 +7,14 @@ const getApiBaseUrl = () => {
       if (window.location.port === '3001') return '/api';
       return 'http://localhost:5000/api';
     }
+    // En producción (Render, Vercel, etc.): la variable REACT_APP_API_URL
+    // siempre debe estar configurada. Si falta, usar mismo origen.
+    return `${window.location.protocol}//${window.location.host}/api`;
   }
-  return 'https://pulingly-unpromising-gracie.ngrok-free.dev/api';
+  return '/api';
 };
 
-const API_URL = getApiBaseUrl(); 
+const API_URL = getApiBaseUrl();
 console.log('🌐 API URL configurada:', API_URL);
 
 // ✅ Función auxiliar para hacer fetch con headers de ngrok

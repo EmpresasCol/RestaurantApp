@@ -15,7 +15,7 @@ const getApiBaseUrl = () => {
       return 'http://localhost:5000/api';
     }
   }
-  return 'https://pulingly-unpromising-gracie.ngrok-free.dev/api';
+  return '/api';
 };
 
 const API_URL = getApiBaseUrl();

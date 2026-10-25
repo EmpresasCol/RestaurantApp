@@ -1,5 +1,6 @@
 # ==========================================
 # Multi-stage Dockerfile: RestaurantApi (.NET 8)
+# Compatible con Render.com (usa variable $PORT)
 # ==========================================
 
 # Stage 1: Build & Publish
@@ -27,18 +28,16 @@ RUN apt-get update \
 COPY --from=builder /app/publish .
 
 # Variables de entorno por defecto
-ENV ASPNETCORE_URLS=http://+:5000 \
-    ASPNETCORE_ENVIRONMENT=Production \
+# NOTA: Render.com inyecta $PORT automáticamente. ASPNETCORE_URLS la usa.
+ENV ASPNETCORE_ENVIRONMENT=Production \
     DOTNET_RUNNING_IN_CONTAINER=true
-
-# Exponer el puerto de la API
-EXPOSE 5000
 
 # Healthcheck usando el endpoint /health
 HEALTHCHECK --interval=20s --timeout=5s --start-period=15s --retries=3 \
-  CMD curl -f http://localhost:5000/health || exit 1
+  CMD curl -f http://localhost:${PORT:-5000}/health || exit 1
 
 # Buenas prácticas de seguridad: ejecutar como usuario no-root
 USER app
 
-ENTRYPOINT ["dotnet", "RestaurantApi.dll"]
+# Script de inicio que respeta la variable PORT de Render
+CMD ASPNETCORE_URLS=http://+:${PORT:-5000} dotnet RestaurantApi.dll
