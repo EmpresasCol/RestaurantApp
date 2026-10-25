@@ -313,6 +313,38 @@ namespace RestaurantApi
                     .HasForeignKey(e => e.ProductoId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
+
+            // ==========================================
+            // CONFIGURACIÓN DE STOCK
+            // ==========================================
+            modelBuilder.Entity<Stock>(entity =>
+            {
+                entity.ToTable("Stock");
+                entity.HasKey(e => e.Id);
+                // CostoTotal es columna GENERADA en MySQL: CostoPromedio * Cantidad
+                // EF Core NO debe incluirla en INSERT ni UPDATE
+                entity.Property(e => e.CostoTotal)
+                    .ValueGeneratedOnAddOrUpdate()
+                    .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+                entity.Property(e => e.CostoTotal)
+                    .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+            });
+
+            // ==========================================
+            // CONFIGURACIÓN DE MOVIMIENTOS DE INVENTARIO
+            // ==========================================
+            modelBuilder.Entity<MovimientoInventario>(entity =>
+            {
+                entity.ToTable("MovimientosInventario");
+                entity.HasKey(e => e.Id);
+                // CostoTotal es columna GENERADA en MySQL: CostoUnitario * Cantidad
+                // EF Core NO debe incluirla en INSERT ni UPDATE
+                entity.Property(e => e.CostoTotal)
+                    .ValueGeneratedOnAddOrUpdate()
+                    .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+                entity.Property(e => e.CostoTotal)
+                    .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+            });
         }
     }
 }

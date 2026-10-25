@@ -332,7 +332,7 @@ namespace RestaurantApi.Controllers
                     _logger.LogError(exRev, $"⚠️ Error al revertir inventario para pedido {pedido.Id}");
                 }
             }
-            else if (estadoEnum == EstadoPedido.Entregado || estadoEnum == EstadoPedido.Pagado)
+            else if (estadoEnum == EstadoPedido.Listo || estadoEnum == EstadoPedido.Entregado || estadoEnum == EstadoPedido.Pagado)
             {
                 // Asegurar que el inventario esté descontado (idempotente)
                 try

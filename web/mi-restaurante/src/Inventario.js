@@ -65,7 +65,7 @@ function Inventario() {
                 <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
                   <Package size={24} />
                 </div>
-                <span>Módulo de Inventario 100% Funcional</span>
+                <span>Módulo de Inventario</span>
               </h1>
               <p className="text-xs text-gray-500 mt-0.5">
                 Sincronización en tiempo real con pedidos, domicilios y control de stock por recetas

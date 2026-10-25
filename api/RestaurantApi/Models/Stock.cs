@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -29,6 +29,7 @@ namespace RestaurantApi.Models
         [Column(TypeName = "decimal(10,2)")]
         public decimal CostoPromedio { get; set; }
 
+        [DatabaseGenerated(DatabaseGeneratedOption.Computed)]
         [Column(TypeName = "decimal(12,2)")]
         public decimal CostoTotal { get; set; }
 

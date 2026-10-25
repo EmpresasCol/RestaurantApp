@@ -191,7 +191,7 @@ namespace RestaurantApi.Services
                     if (stock != null)
                     {
                         stock.Cantidad += mov.Cantidad;
-                        stock.CostoTotal = stock.Cantidad * stock.CostoPromedio;
+                        // CostoTotal es columna GENERADA en MySQL, no se asigna
                         stock.FechaActualizacion = DateTime.UtcNow;
                     }
 
@@ -206,6 +206,7 @@ namespace RestaurantApi.Services
                     }
 
                     // Registrar movimiento de Entrada por cancelación
+                    // CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
                     var reverso = new MovimientoInventario
                     {
                         ProductoId = mov.ProductoId,
@@ -214,10 +215,9 @@ namespace RestaurantApi.Services
                         TipoMovimiento = "Entrada",
                         Cantidad = mov.Cantidad,
                         CostoUnitario = mov.CostoUnitario,
-                        CostoTotal = mov.CostoTotal,
                         Motivo = $"Reverso por Pedido #{pedidoId} Cancelado ({mov.Motivo})",
                         Referencia = $"{referenciaReverso} - Mov #{mov.Id}",
-                        UsuarioId = mov.UsuarioId,
+                        UsuarioId = (mov.UsuarioId.HasValue && mov.UsuarioId.Value > 0) ? mov.UsuarioId.Value : 1,
                         Fecha = DateTime.UtcNow
                     };
 
@@ -384,7 +384,7 @@ namespace RestaurantApi.Services
                     if (stock != null)
                     {
                         stock.Cantidad += mov.Cantidad;
-                        stock.CostoTotal = stock.Cantidad * stock.CostoPromedio;
+                        // CostoTotal es columna GENERADA en MySQL, no se asigna
                         stock.FechaActualizacion = DateTime.UtcNow;
                     }
 
@@ -397,6 +397,7 @@ namespace RestaurantApi.Services
                         }
                     }
 
+                    // CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
                     _context.MovimientosInventario.Add(new MovimientoInventario
                     {
                         ProductoId = mov.ProductoId,
@@ -405,10 +406,9 @@ namespace RestaurantApi.Services
                         TipoMovimiento = "Entrada",
                         Cantidad = mov.Cantidad,
                         CostoUnitario = mov.CostoUnitario,
-                        CostoTotal = mov.CostoTotal,
                         Motivo = $"Reverso por Domicilio #{domicilioId} Cancelado",
                         Referencia = $"{referenciaReverso} - Mov #{mov.Id}",
-                        UsuarioId = mov.UsuarioId,
+                        UsuarioId = (mov.UsuarioId.HasValue && mov.UsuarioId.Value > 0) ? mov.UsuarioId.Value : 1,
                         Fecha = DateTime.UtcNow
                     });
 
@@ -450,13 +450,13 @@ namespace RestaurantApi.Services
             if (stock == null)
             {
                 // Si no hay registro de stock previo, se crea
+                // NOTA: CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
                 stock = new Stock
                 {
                     ProductoId = productoId,
                     AlmacenId = almacenEfectivoId,
                     Cantidad = -cantidad,
                     CostoPromedio = costoUnitario,
-                    CostoTotal = -cantidad * costoUnitario,
                     FechaActualizacion = DateTime.UtcNow
                 };
                 _context.Stock.Add(stock);
@@ -464,7 +464,7 @@ namespace RestaurantApi.Services
             else
             {
                 stock.Cantidad -= cantidad;
-                stock.CostoTotal = stock.Cantidad * stock.CostoPromedio;
+                // NOTA: CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
                 stock.FechaActualizacion = DateTime.UtcNow;
             }
 
@@ -483,6 +483,8 @@ namespace RestaurantApi.Services
             }
 
             // 3. Registrar el movimiento de auditoría
+            // NOTA: CostoTotal es columna GENERADA en MySQL (CostoUnitario * Cantidad), no se asigna manualmente
+            // UsuarioId es NOT NULL en BD, se usa 1 (Admin) como fallback
             var movimiento = new MovimientoInventario
             {
                 ProductoId = productoId,
@@ -491,10 +493,9 @@ namespace RestaurantApi.Services
                 TipoMovimiento = "Salida",
                 Cantidad = cantidad,
                 CostoUnitario = costoUnitario,
-                CostoTotal = cantidad * costoUnitario,
                 Motivo = motivo,
                 Referencia = referencia,
-                UsuarioId = usuarioId,
+                UsuarioId = (usuarioId.HasValue && usuarioId.Value > 0) ? usuarioId.Value : 1,
                 Fecha = DateTime.UtcNow
             };
 

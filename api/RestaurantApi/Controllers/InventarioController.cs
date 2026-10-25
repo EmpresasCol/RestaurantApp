@@ -986,7 +986,6 @@ namespace RestaurantApi.Controllers
                         AlmacenId = dto.AlmacenId,
                         Cantidad = 0,
                         CostoPromedio = dto.CostoUnitario ?? 0,
-                        CostoTotal = 0,
                         FechaActualizacion = DateTime.Now
                     };
                     _context.Stock.Add(stock);
@@ -1028,10 +1027,9 @@ namespace RestaurantApi.Controllers
 
                 // Actualizar stock
                 stock.Cantidad = nuevaCantidad;
-                stock.CostoTotal = stock.Cantidad * stock.CostoPromedio;
                 stock.FechaActualizacion = DateTime.Now;
 
-                // Crear el movimiento
+                // Crear el movimiento (CostoTotal es generado automáticamente por MySQL)
                 var movimiento = new MovimientoInventario
                 {
                     ProductoId = dto.ProductoId,
@@ -1039,11 +1037,10 @@ namespace RestaurantApi.Controllers
                     TipoMovimiento = dto.TipoMovimiento,
                     Cantidad = dto.Cantidad,
                     CostoUnitario = costoUnitario,
-                    CostoTotal = dto.Cantidad * costoUnitario,
                     Motivo = dto.Motivo,
                     Referencia = dto.Referencia,
                     LoteId = dto.LoteId,
-                    UsuarioId = dto.UsuarioId,
+                    UsuarioId = (dto.UsuarioId.HasValue && dto.UsuarioId.Value > 0) ? dto.UsuarioId.Value : 1,
                     Fecha = DateTime.Now
                 };
 
