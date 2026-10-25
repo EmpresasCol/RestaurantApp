@@ -1,0 +1,13 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/build
+**/.dart_tool
+**/windows
+**/android
+**/ios
+**/macos
+**/linux

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using RestaurantApi;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
+using RestaurantApi.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -16,10 +17,12 @@ namespace RestaurantApi.Controllers
     public class InventarioController : ControllerBase
     {
         private readonly RestauranteContext _context;
+        private readonly IInventarioService _inventarioService;
 
-        public InventarioController(RestauranteContext context)
+        public InventarioController(RestauranteContext context, IInventarioService inventarioService)
         {
             _context = context;
+            _inventarioService = inventarioService;
         }
 
         // ==================== CATEGORÍAS ====================
@@ -1290,6 +1293,222 @@ namespace RestaurantApi.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, $"Error al obtener alertas de stock: {ex.Message}");
+            }
+        }
+
+        // ==================== RECETAS / FICHAS TÉCNICAS ====================
+
+        /// <summary>
+        /// Obtiene todas las recetas registradas
+        /// </summary>
+        [HttpGet("recetas")]
+        public async Task<ActionResult<IEnumerable<RecetaDto>>> GetRecetas()
+        {
+            try
+            {
+                await _inventarioService.InicializarRecetasPredeterminadasAsync();
+
+                var recetas = await _context.Recetas
+                    .Include(r => r.Platillo)
+                    .Include(r => r.Producto)
+                    .OrderBy(r => r.Platillo.Nombre)
+                    .Select(r => new RecetaDto
+                    {
+                        Id = r.Id,
+                        PlatilloId = r.PlatilloId,
+                        PlatilloNombre = r.Platillo.Nombre,
+                        ProductoId = r.ProductoId,
+                        ProductoNombre = r.Producto.Nombre,
+                        ProductoCodigo = r.Producto.Codigo,
+                        CantidadRequerida = r.CantidadRequerida,
+                        UnidadMedida = r.UnidadMedida.ToString(),
+                        CostoUnitario = r.CostoUnitario ?? r.Producto.PrecioCosto,
+                        Opcional = r.Opcional,
+                        Notas = r.Notas
+                    })
+                    .ToListAsync();
+
+                return Ok(recetas);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al obtener recetas: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Obtiene la receta (insumos) de un platillo específico
+        /// </summary>
+        [HttpGet("recetas/platillo/{platilloId}")]
+        public async Task<ActionResult<IEnumerable<RecetaDto>>> GetRecetasPorPlatillo(int platilloId)
+        {
+            try
+            {
+                await _inventarioService.InicializarRecetasPredeterminadasAsync();
+
+                var recetas = await _context.Recetas
+                    .Include(r => r.Platillo)
+                    .Include(r => r.Producto)
+                    .Where(r => r.PlatilloId == platilloId)
+                    .Select(r => new RecetaDto
+                    {
+                        Id = r.Id,
+                        PlatilloId = r.PlatilloId,
+                        PlatilloNombre = r.Platillo.Nombre,
+                        ProductoId = r.ProductoId,
+                        ProductoNombre = r.Producto.Nombre,
+                        ProductoCodigo = r.Producto.Codigo,
+                        CantidadRequerida = r.CantidadRequerida,
+                        UnidadMedida = r.UnidadMedida.ToString(),
+                        CostoUnitario = r.CostoUnitario ?? r.Producto.PrecioCosto,
+                        Opcional = r.Opcional,
+                        Notas = r.Notas
+                    })
+                    .ToListAsync();
+
+                return Ok(recetas);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al obtener receta del platillo: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Agrega un nuevo ingrediente a la receta de un platillo
+        /// </summary>
+        [HttpPost("recetas")]
+        public async Task<ActionResult<RecetaDto>> CreateReceta([FromBody] CrearRecetaDto dto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(ModelState);
+
+                var platillo = await _context.Platillos.FindAsync(dto.PlatilloId);
+                if (platillo == null)
+                    return BadRequest("El platillo especificado no existe.");
+
+                var producto = await _context.ProductosInventario.FindAsync(dto.ProductoId);
+                if (producto == null)
+                    return BadRequest("El producto/insumo especificado no existe.");
+
+                if (!Enum.TryParse<UnidadMedida>(dto.UnidadMedida, true, out var unidadEnum))
+                {
+                    unidadEnum = UnidadMedida.Unidad;
+                }
+
+                var receta = new Receta
+                {
+                    PlatilloId = dto.PlatilloId,
+                    ProductoId = dto.ProductoId,
+                    CantidadRequerida = dto.CantidadRequerida,
+                    UnidadMedida = unidadEnum,
+                    CostoUnitario = dto.CostoUnitario ?? producto.PrecioCosto,
+                    Opcional = dto.Opcional,
+                    Notas = dto.Notas,
+                    FechaCreacion = DateTime.UtcNow
+                };
+
+                _context.Recetas.Add(receta);
+                await _context.SaveChangesAsync();
+
+                var creado = new RecetaDto
+                {
+                    Id = receta.Id,
+                    PlatilloId = platillo.Id,
+                    PlatilloNombre = platillo.Nombre,
+                    ProductoId = producto.Id,
+                    ProductoNombre = producto.Nombre,
+                    ProductoCodigo = producto.Codigo,
+                    CantidadRequerida = receta.CantidadRequerida,
+                    UnidadMedida = receta.UnidadMedida.ToString(),
+                    CostoUnitario = receta.CostoUnitario,
+                    Opcional = receta.Opcional,
+                    Notas = receta.Notas
+                };
+
+                return CreatedAtAction(nameof(GetRecetasPorPlatillo), new { platilloId = receta.PlatilloId }, creado);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al registrar ingrediente en receta: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Actualiza un ingrediente de una receta
+        /// </summary>
+        [HttpPut("recetas/{id}")]
+        public async Task<IActionResult> UpdateReceta(int id, [FromBody] ActualizarRecetaDto dto)
+        {
+            try
+            {
+                var receta = await _context.Recetas.FindAsync(id);
+                if (receta == null)
+                    return NotFound($"Ingrediente de receta con ID {id} no encontrado.");
+
+                receta.CantidadRequerida = dto.CantidadRequerida;
+
+                if (!string.IsNullOrEmpty(dto.UnidadMedida) && Enum.TryParse<UnidadMedida>(dto.UnidadMedida, true, out var unidadEnum))
+                {
+                    receta.UnidadMedida = unidadEnum;
+                }
+
+                if (dto.CostoUnitario.HasValue)
+                    receta.CostoUnitario = dto.CostoUnitario.Value;
+
+                if (dto.Opcional.HasValue)
+                    receta.Opcional = dto.Opcional.Value;
+
+                if (dto.Notas != null)
+                    receta.Notas = dto.Notas;
+
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al actualizar receta: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Elimina un ingrediente de la receta de un platillo
+        /// </summary>
+        [HttpDelete("recetas/{id}")]
+        public async Task<IActionResult> DeleteReceta(int id)
+        {
+            try
+            {
+                var receta = await _context.Recetas.FindAsync(id);
+                if (receta == null)
+                    return NotFound($"Ingrediente de receta con ID {id} no encontrado.");
+
+                _context.Recetas.Remove(receta);
+                await _context.SaveChangesAsync();
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al eliminar ingrediente de receta: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Fuerza la inicialización de recetas predeterminadas
+        /// </summary>
+        [HttpPost("recetas/inicializar")]
+        public async Task<IActionResult> InicializarRecetas()
+        {
+            try
+            {
+                await _inventarioService.InicializarRecetasPredeterminadasAsync();
+                return Ok(new { mensaje = "Recetas verificadas e inicializadas correctamente." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error al inicializar recetas: {ex.Message}");
             }
         }
     }

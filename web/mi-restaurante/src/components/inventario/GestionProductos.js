@@ -122,8 +122,8 @@ function GestionProductos() {
   };
 
   const productosFiltrados = productos.filter(p =>
-    p.nombre.toLowerCase().includes(filtro.toLowerCase()) ||
-    p.codigo.toLowerCase().includes(filtro.toLowerCase())
+    (p.nombre && p.nombre.toLowerCase().includes(filtro.toLowerCase())) ||
+    (p.codigo && p.codigo.toLowerCase().includes(filtro.toLowerCase()))
   );
 
   return (

@@ -31,6 +31,7 @@ namespace RestaurantApi
         public DbSet<Stock> Stock { get; set; }
         public DbSet<Lote> Lotes { get; set; }
         public DbSet<MovimientoInventario> MovimientosInventario { get; set; }
+        public DbSet<Receta> Recetas { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -291,6 +292,26 @@ namespace RestaurantApi
 
                 entity.HasIndex(e => e.PlatilloId)
                     .HasDatabaseName("idx_platillo");
+            });
+
+            // ==========================================
+            // CONFIGURACIÓN DE RECETAS
+            // ==========================================
+            modelBuilder.Entity<Receta>(entity =>
+            {
+                entity.ToTable("Recetas");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.UnidadMedida).HasConversion<string>();
+                entity.Property(e => e.CantidadRequerida).HasColumnType("decimal(10,2)").IsRequired();
+                entity.Property(e => e.CostoUnitario).HasColumnType("decimal(10,2)");
+                entity.HasOne(e => e.Platillo)
+                    .WithMany()
+                    .HasForeignKey(e => e.PlatilloId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Producto)
+                    .WithMany()
+                    .HasForeignKey(e => e.ProductoId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

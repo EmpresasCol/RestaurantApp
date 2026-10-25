@@ -4,9 +4,9 @@
 -- Motor: MySQL 8+
 -- =====================================================
 
-DROP DATABASE IF EXISTS RestauranteBD;
-CREATE DATABASE RestauranteBD CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE RestauranteBD;
+DROP DATABASE IF EXISTS restaurantebd;
+CREATE DATABASE IF NOT EXISTS restaurantebd CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE restaurantebd;
 
 -- =====================================================
 -- SECCIÓN 1: TABLAS PRINCIPALES (CORE)
@@ -604,7 +604,10 @@ INSERT INTO ProductosInventario (Codigo, Nombre, Descripcion, CategoriaId, Prove
 ('PROD-017', 'Aceite Vegetal', 'Aceite vegetal para cocina', 9, 3, 'Litro', 8000.00, 10, 50, 15, FALSE, NULL),
 ('PROD-018', 'Sal de Mar', 'Sal marina refinada', 8, 6, 'Kg', 2000.00, 5, 30, 10, FALSE, NULL),
 ('PROD-019', 'Pimienta Negra Molida', 'Pimienta negra recién molida', 8, 6, 'Kg', 18000.00, 2, 10, 4, FALSE, NULL),
-('PROD-020', 'Ajo en Pasta', 'Ajo procesado y envasado', 8, 2, 'Kg', 12000.00, 3, 15, 5, TRUE, 90);
+('PROD-020', 'Ajo en Pasta', 'Ajo procesado y envasado', 8, 2, 'Kg', 12000.00, 3, 15, 5, TRUE, 90),
+('PROD-021', 'Limones Frescos', 'Limón tahití para bebidas', 4, 2, 'Kg', 4000.00, 10, 50, 15, TRUE, 10),
+('PROD-022', 'Café en Grano Especial', 'Café especial tostado en grano', 5, 6, 'Kg', 32000.00, 5, 25, 8, FALSE, NULL),
+('PROD-023', 'Cerveza Artesanal Botella', 'Botella de cerveza artesanal 330ml', 5, 6, 'Botella', 6000.00, 24, 120, 36, FALSE, NULL);
 
 -- Stock inicial
 INSERT INTO Stock (ProductoId, AlmacenId, Cantidad, CostoPromedio) VALUES
@@ -613,7 +616,72 @@ INSERT INTO Stock (ProductoId, AlmacenId, Cantidad, CostoPromedio) VALUES
 (2, 2, 25, 12000), (6, 2, 30, 3500), (7, 2, 20, 2800),
 (9, 2, 40, 4200), (4, 3, 8, 35000), (5, 3, 5, 42000),
 (8, 3, 25, 2500), (10, 3, 12, 18000), (11, 3, 30, 3200),
-(3, 4, 20, 15000);
+(3, 4, 20, 15000),
+(21, 2, 30, 4000), (22, 5, 15, 32000), (23, 5, 60, 6000);
+
+-- Recetas (Fichas Técnicas para deducción automática en pedidos)
+INSERT INTO Recetas (PlatilloId, ProductoId, CantidadRequerida, UnidadMedida, CostoUnitario, Opcional, Notas) VALUES
+-- Hamburguesa Clásica (Platillo 1)
+(1, 1, 0.20, 'Kg', 28000.00, FALSE, 'Carne de res seleccionada'),
+(1, 7, 0.05, 'Kg', 2800.00, FALSE, 'Cebolla picada'),
+(1, 10, 0.05, 'Kg', 18000.00, FALSE, 'Queso mozzarella'),
+(1, 6, 0.05, 'Kg', 3500.00, FALSE, 'Tomate fresco en rodajas'),
+(1, 8, 0.05, 'Unidad', 2500.00, FALSE, 'Hojas de lechuga'),
+(1, 9, 0.15, 'Kg', 4200.00, FALSE, 'Papas fritas acompañantes'),
+
+-- Pizza Margarita (Platillo 2)
+(2, 15, 0.25, 'Kg', 2800.00, FALSE, 'Masa de pizza'),
+(2, 10, 0.15, 'Kg', 18000.00, FALSE, 'Queso mozzarella'),
+(2, 6, 0.10, 'Kg', 3500.00, FALSE, 'Salsa y rodajas de tomate'),
+(2, 16, 0.02, 'Litro', 35000.00, FALSE, 'Aceite de oliva'),
+
+-- Ensalada César (Platillo 3)
+(3, 8, 1.00, 'Unidad', 2500.00, FALSE, 'Lechuga romana'),
+(3, 2, 0.15, 'Kg', 12000.00, FALSE, 'Pechuga de pollo a la plancha'),
+(3, 10, 0.03, 'Kg', 18000.00, FALSE, 'Queso rallado'),
+(3, 16, 0.02, 'Litro', 35000.00, FALSE, 'Aderezo con aceite de oliva'),
+
+-- Pasta Carbonara (Platillo 4)
+(4, 14, 0.20, 'Paquete', 5000.00, FALSE, 'Pasta spaghetti'),
+(4, 10, 0.08, 'Kg', 18000.00, FALSE, 'Queso'),
+(4, 12, 0.03, 'Kg', 14000.00, FALSE, 'Mantequilla'),
+(4, 11, 0.05, 'Litro', 3200.00, FALSE, 'Leche entera cremosa'),
+
+-- Tacos al Pastor (Platillo 5)
+(5, 3, 0.20, 'Kg', 15000.00, FALSE, 'Chuleta de cerdo marinada'),
+(5, 7, 0.05, 'Kg', 2800.00, FALSE, 'Cebolla picada'),
+(5, 6, 0.05, 'Kg', 3500.00, FALSE, 'Tomate en cubos'),
+
+-- Salmón a la Parrilla (Platillo 6)
+(6, 4, 0.25, 'Kg', 35000.00, FALSE, 'Filete de salmón fresco'),
+(6, 16, 0.02, 'Litro', 35000.00, FALSE, 'Aceite de oliva'),
+(6, 18, 0.01, 'Kg', 2000.00, FALSE, 'Sal marina'),
+(6, 13, 0.10, 'Kg', 3000.00, FALSE, 'Guarnición de arroz'),
+
+-- Sopa de Tomate (Platillo 7)
+(7, 6, 0.25, 'Kg', 3500.00, FALSE, 'Tomate chonto fresco'),
+(7, 7, 0.05, 'Kg', 2800.00, FALSE, 'Cebolla cabezona'),
+(7, 20, 0.01, 'Kg', 12000.00, FALSE, 'Ajo en pasta'),
+
+-- Pollo Teriyaki (Platillo 8)
+(8, 2, 0.25, 'Kg', 12000.00, FALSE, 'Pechuga de pollo'),
+(8, 13, 0.15, 'Kg', 3000.00, FALSE, 'Arroz blanco'),
+(8, 7, 0.05, 'Kg', 2800.00, FALSE, 'Cebolla salteada'),
+
+-- Brownie con Helado (Platillo 9)
+(9, 15, 0.10, 'Kg', 2800.00, FALSE, 'Harina de trigo'),
+(9, 11, 0.10, 'Litro', 3200.00, FALSE, 'Leche entera'),
+(9, 12, 0.05, 'Kg', 14000.00, FALSE, 'Mantequilla'),
+
+-- Limonada Natural (Platillo 10)
+(10, 21, 0.15, 'Kg', 4000.00, FALSE, 'Limón tahití fresco'),
+
+-- Café Americano (Platillo 11)
+(11, 22, 0.02, 'Kg', 32000.00, FALSE, 'Café recién molido'),
+
+-- Cerveza Artesanal (Platillo 12)
+(12, 23, 1.00, 'Botella', 6000.00, FALSE, 'Botella artesanal fría');
+
 
 -- Lotes de ejemplo
 INSERT INTO Lotes (ProductoId, AlmacenId, NumeroLote, FechaIngreso, FechaVencimiento, 
@@ -986,7 +1054,7 @@ DELIMITER ;
 --    mysql -u root -p RestauranteBD < 01_migration_domiciliarios.sql
 -- ============================================================================
 
-USE RestauranteBD;
+USE restaurantebd;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Añadir rol 'Domiciliario' al ENUM (conservando los existentes)

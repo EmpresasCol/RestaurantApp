@@ -28,6 +28,7 @@ namespace RestaurantApi.Controllers
     {
         private readonly RestauranteContext _context;
         private readonly DomicilioRealtimeService _realtime;
+        private readonly IInventarioService _inventarioService;
         private readonly ILogger<DomiciliosPublicoController> _logger;
 
         // Ventana de edición: el cliente puede modificar/agregar platillos
@@ -41,10 +42,12 @@ namespace RestaurantApi.Controllers
         public DomiciliosPublicoController(
             RestauranteContext context,
             DomicilioRealtimeService realtime,
+            IInventarioService inventarioService,
             ILogger<DomiciliosPublicoController> logger)
         {
             _context  = context;
             _realtime = realtime;
+            _inventarioService = inventarioService;
             _logger   = logger;
         }
 
@@ -166,6 +169,16 @@ namespace RestaurantApi.Controllers
                 await _context.SaveChangesAsync();
 
                 await tx.CommitAsync();
+
+                // 📦 Descontar automáticamente del inventario para el domicilio público
+                try
+                {
+                    await _inventarioService.DescontarStockPorDomicilioAsync(domicilio.Id);
+                }
+                catch (Exception exInv)
+                {
+                    _logger.LogError(exInv, "⚠️ Error al descontar inventario para domicilio público #{Id}", domicilio.Id);
+                }
 
                 // 7. Notificar a cocina/admin por FCM.
                 await _realtime.NotificarNuevoDomicilioAsync(domicilio);

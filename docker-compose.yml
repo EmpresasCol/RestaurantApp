@@ -1,0 +1,96 @@
+name: restaurant-app
+
+services:
+  # ====================================================
+  # 1. Capa de Base de Datos (MySQL 8.0)
+  # ====================================================
+  restaurant-db:
+    image: mysql:8.0
+    container_name: restaurant-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-restaurantebd}
+      MYSQL_USER: ${DB_USER:-restaurant_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-restaurant_password}
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - ./restaurantebd.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - restaurant-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  # ====================================================
+  # 2. Capa de Backend API (.NET 8 Web API)
+  # ====================================================
+  restaurant-api:
+    build:
+      context: ./api/RestaurantApi
+      dockerfile: Dockerfile
+    container_name: restaurant-api
+    restart: unless-stopped
+    depends_on:
+      restaurant-db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ENVIRONMENT:-Production}
+      EnableSwagger: ${ENABLE_SWAGGER:-true}
+      ConnectionStrings__DefaultConnection: "server=restaurant-db;port=3306;database=${DB_NAME:-restaurantebd};user=root;password=${DB_ROOT_PASSWORD:-root};"
+    ports:
+      - "${API_PORT:-5000}:5000"
+    networks:
+      - restaurant-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ====================================================
+  # 3. Capa de Frontend Web (React + Nginx Reverse Proxy)
+  # ====================================================
+  restaurant-web:
+    build:
+      context: ./web/mi-restaurante
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-/api}
+    container_name: restaurant-web
+    restart: unless-stopped
+    depends_on:
+      restaurant-api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3001}:80"
+    networks:
+      - restaurant-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+# ====================================================
+# Redes aisladas (Separación por capas)
+# ====================================================
+networks:
+  restaurant-network:
+    driver: bridge
+    name: restaurant-network
+
+# ====================================================
+# Volúmenes persistentes
+# ====================================================
+volumes:
+  mysql_data:
+    name: restaurant_mysql_data

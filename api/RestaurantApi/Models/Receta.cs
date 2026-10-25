@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -33,13 +33,13 @@ namespace RestaurantApi.Models
         public int PlatilloId { get; set; }
 
         [ForeignKey("PlatilloId")]
-        public Platillo Platillo { get; set; }
+        public Platillo? Platillo { get; set; }
 
         [Required]
         public int ProductoId { get; set; }
 
         [ForeignKey("ProductoId")]
-        public ProductoInventario Producto { get; set; }
+        public ProductoInventario? Producto { get; set; }
 
         [Required]
         [Column(TypeName = "decimal(10,2)")]
@@ -54,7 +54,7 @@ namespace RestaurantApi.Models
         public bool Opcional { get; set; } = false;
 
         [StringLength(500)]
-        public string Notas { get; set; }
+        public string? Notas { get; set; }
 
         public DateTime FechaCreacion { get; set; } = DateTime.Now;
     }

@@ -1,8 +1,9 @@
-﻿// api/RestaurantApi/Controllers/DomiciliosController.cs
+// api/RestaurantApi/Controllers/DomiciliosController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 using RestaurantApi.Dtos;
+using RestaurantApi.Services;
 
 namespace RestaurantApi.Controllers
 {
@@ -11,10 +12,12 @@ namespace RestaurantApi.Controllers
     public class DomiciliosController : ControllerBase
     {
         private readonly RestauranteContext _context;
+        private readonly IInventarioService _inventarioService;
 
-        public DomiciliosController(RestauranteContext context)
+        public DomiciliosController(RestauranteContext context, IInventarioService inventarioService)
         {
             _context = context;
+            _inventarioService = inventarioService;
         }
 
         // GET: api/domicilios
@@ -284,6 +287,16 @@ namespace RestaurantApi.Controllers
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
+                // 📦 Descontar automáticamente del inventario para el domicilio
+                try
+                {
+                    await _inventarioService.DescontarStockPorDomicilioAsync(domicilio.Id);
+                }
+                catch (Exception exInv)
+                {
+                    Console.WriteLine($"⚠️ Error al descontar inventario para domicilio {domicilio.Id}: {exInv.Message}");
+                }
+
                 // Retornar domicilio creado
                 var domicilioCreado = await _context.Domicilios
                     .Include(d => d.Cliente)
@@ -371,6 +384,23 @@ namespace RestaurantApi.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            // Sincronizar inventario según estado del domicilio
+            try
+            {
+                if (dto.Estado == "Cancelado")
+                {
+                    await _inventarioService.RevertirStockPorDomicilioAsync(id);
+                }
+                else if (dto.Estado == "Entregado" || dto.Estado == "Listo")
+                {
+                    await _inventarioService.DescontarStockPorDomicilioAsync(id);
+                }
+            }
+            catch (Exception exInv)
+            {
+                Console.WriteLine($"⚠️ Error al actualizar inventario para domicilio {id}: {exInv.Message}");
+            }
 
             return NoContent();
         }

@@ -9,7 +9,6 @@
 *.user
 *.userosscache
 *.sln.docstates
-*.env
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -417,11 +416,89 @@ FodyWeavers.xsd
 *.msm
 *.msp
 
-# Firebase credentials
+# ==========================================
+# Archivos Sensibles y Credenciales
+# ==========================================
 api/RestaurantApi/firebase-service-account.json
 api/RestaurantApi/qpro-7d23e-firebase-adminsdk-fbsvc-*.json
-
-# Otros archivos sensibles
-**/appsettings.json
 **/*.pfx
 **/*.p12
+**/*.key
+**/*.pem
+**/*.cert
+**/*.crt
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
+# ==========================================
+# Entornos (.env)
+# ==========================================
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+!.env.production
+
+# ==========================================
+# Docker & Volúmenes de BD
+# ==========================================
+docker-data/
+mysql_data/
+*.sql.gz
+*.sql.tar.gz
+
+# ==========================================
+# Node.js & React (Frontend Web)
+# ==========================================
+**/node_modules/
+**/build/
+**/dist/
+**/.pnp
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+.eslintcache
+
+# ==========================================
+# Flutter & Dart (Mobile App)
+# ==========================================
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+
+# ==========================================
+# Logs y Archivos Temporales de SO
+# ==========================================
+*.log
+*.tmp
+*.temp
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# ==========================================
+# IDEs & Herramientas
+# ==========================================
+.idea/
+*.sublime-project
+*.sublime-workspace
+.agents/
+.gemini/

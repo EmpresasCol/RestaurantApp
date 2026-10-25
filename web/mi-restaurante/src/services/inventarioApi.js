@@ -1,6 +1,24 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'https://pulingly-unpromising-gracie.ngrok-free.dev/api';
+// Detectar URL base óptima (Docker reverse-proxy /api, localhost:5000, o túnel ngrok configurado)
+const getApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      // Si el puerto web es 3001 (Nginx en Docker), la API se proxia en /api
+      if (window.location.port === '3001') {
+        return '/api';
+      }
+      return 'http://localhost:5000/api';
+    }
+  }
+  return 'https://pulingly-unpromising-gracie.ngrok-free.dev/api';
+};
+
+const API_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_URL,
@@ -10,26 +28,36 @@ const api = axios.create({
   }
 });
 
+// ==================== PLATILLOS (Para vinculación con recetas) ====================
+export const getPlatillos = async () => {
+  const response = await api.get('/platillos');
+  return response.data;
+};
+
 // ==================== CATEGORÍAS ====================
 export const getCategorias = async () => {
   const response = await api.get('/inventario/categorias');
   return response.data;
 };
+export const getCategoriasInventario = getCategorias;
 
 export const createCategoria = async (categoria) => {
   const response = await api.post('/inventario/categorias', categoria);
   return response.data;
 };
+export const createCategoriaInventario = createCategoria;
 
 export const updateCategoria = async (id, categoria) => {
   const response = await api.put(`/inventario/categorias/${id}`, categoria);
   return response.data;
 };
+export const updateCategoriaInventario = updateCategoria;
 
 export const deleteCategoria = async (id) => {
   const response = await api.delete(`/inventario/categorias/${id}`);
   return response.data;
 };
+export const deleteCategoriaInventario = deleteCategoria;
 
 // ==================== PROVEEDORES ====================
 export const getProveedores = async () => {
@@ -110,6 +138,11 @@ export const getStockPorAlmacen = async (almacenId) => {
   return response.data;
 };
 
+export const getStockPorProducto = async (productoId) => {
+  const response = await api.get(`/inventario/stock/producto/${productoId}`);
+  return response.data;
+};
+
 export const getMovimientos = async () => {
   const response = await api.get('/inventario/movimientos');
   return response.data;
@@ -117,6 +150,37 @@ export const getMovimientos = async () => {
 
 export const createMovimiento = async (movimiento) => {
   const response = await api.post('/inventario/movimientos', movimiento);
+  return response.data;
+};
+
+// ==================== RECETAS / FICHAS TÉCNICAS ====================
+export const getRecetas = async () => {
+  const response = await api.get('/inventario/recetas');
+  return response.data;
+};
+
+export const getRecetasPorPlatillo = async (platilloId) => {
+  const response = await api.get(`/inventario/recetas/platillo/${platilloId}`);
+  return response.data;
+};
+
+export const createReceta = async (receta) => {
+  const response = await api.post('/inventario/recetas', receta);
+  return response.data;
+};
+
+export const updateReceta = async (id, receta) => {
+  const response = await api.put(`/inventario/recetas/${id}`, receta);
+  return response.data;
+};
+
+export const deleteReceta = async (id) => {
+  const response = await api.delete(`/inventario/recetas/${id}`);
+  return response.data;
+};
+
+export const inicializarRecetas = async () => {
+  const response = await api.post('/inventario/recetas/inicializar');
   return response.data;
 };
 
@@ -140,3 +204,5 @@ export const getAlertasStock = async () => {
   const response = await api.get('/inventario/reportes/alertas-stock');
   return response.data;
 };
+
+export default api;

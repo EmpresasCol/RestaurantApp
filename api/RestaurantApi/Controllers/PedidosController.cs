@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
@@ -12,11 +12,13 @@ namespace RestaurantApi.Controllers
     {
         private readonly RestauranteContext _context;
         private readonly ILogger<PedidosController> _logger;
+        private readonly IInventarioService _inventarioService;
 
-        public PedidosController(RestauranteContext context, ILogger<PedidosController> logger)
+        public PedidosController(RestauranteContext context, ILogger<PedidosController> logger, IInventarioService inventarioService)
         {
             _context = context;
             _logger = logger;
+            _inventarioService = inventarioService;
         }
 
         // GET: api/Pedidos
@@ -171,6 +173,17 @@ namespace RestaurantApi.Controllers
 
                 _logger.LogInformation($"✅ Detalles del pedido {pedido.Id} guardados");
 
+                // 📦 Descontar automáticamente del inventario al registrar el pedido
+                try
+                {
+                    var resInv = await _inventarioService.DescontarStockPorPedidoAsync(pedido.Id);
+                    _logger.LogInformation($"📦 Descuento de inventario para pedido {pedido.Id}: {resInv.Mensaje}");
+                }
+                catch (Exception exInv)
+                {
+                    _logger.LogError(exInv, $"⚠️ Error no bloqueante al descontar inventario para pedido {pedido.Id}");
+                }
+
                 // Retornar el pedido completo
                 var pedidoCreado = await _context.Pedidos
                     .Include(p => p.Mesa)
@@ -303,132 +316,34 @@ namespace RestaurantApi.Controllers
                     System.Diagnostics.Debug.WriteLine($"   Stack: {ex.StackTrace}");
                 }
             }
-            if (estadoEnum == EstadoPedido.Listo)
+            // ==========================================
+            // GESTIÓN DE INVENTARIO SEGÚN ESTADO
+            // ==========================================
+            if (estadoEnum == EstadoPedido.Cancelado)
             {
-                System.Diagnostics.Debug.WriteLine($"🔔 El estado es LISTO, enviando notificación...");
+                // Si el pedido se cancela, revertir y devolver los insumos al stock
                 try
                 {
-                    var notificationService = new FirebaseNotificationService(_context);
-                    await notificationService.EnviarNotificacionPedidoListo(
-                        pedido.Id,
-                        pedido.Mesa?.Numero ?? pedido.MesaId
-                    );
-                    System.Diagnostics.Debug.WriteLine($"✅ Notificación enviada correctamente");
+                    var resRev = await _inventarioService.RevertirStockPorPedidoAsync(pedido.Id);
+                    _logger.LogInformation($"🔄 Inventario revertido para pedido {pedido.Id}: {resRev.Mensaje}");
                 }
-                catch (Exception ex)
+                catch (Exception exRev)
                 {
-                    System.Diagnostics.Debug.WriteLine($"❌ ERROR enviando notificación: {ex.Message}");
-                    System.Diagnostics.Debug.WriteLine($"   Stack: {ex.StackTrace}");
+                    _logger.LogError(exRev, $"⚠️ Error al revertir inventario para pedido {pedido.Id}");
                 }
             }
-            // ==========================================
-            // LOGICA DE DESCUENTO DE INVENTARIO
-            // ==========================================
-            else if (estadoEnum == EstadoPedido.Pagado || estadoEnum == EstadoPedido.Entregado)
+            else if (estadoEnum == EstadoPedido.Entregado || estadoEnum == EstadoPedido.Pagado)
             {
-                // Verificar si ya se descontó el inventario para evitar duplicados
-                // Podríamos usar una bandera en el pedido, pero por ahora asumimos que el cambio de estado es único
-                // Ojo: Si pasa de Entregado a Pagado, podría descontar doble. 
-                // Mejor validar si el estado ANTERIOR no era ni Pagado ni Entregado.
-                
-                // Sin embargo, como no tenemos el estado anterior aquí (ya se guardó en BD arriba),
-                // una estrategia simple es solo descontar cuando pasa a "Entregado" (consumo real)
-                // O cuando pasa a "Pagado" si no pasó por Entregado. 
-                
-                // Para simplificar en este prototipo, descontaremos en "Entregado" y "Pagado",
-                // pero necesitamos evitar dobles descuentos.
-                // Una forma es verificar si YA existen movimientos de salida para este pedido.
-                
-                var yaDescontado = await _context.MovimientosInventario
-                    .AnyAsync(m => m.Referencia == $"Pedido #{pedido.Id}");
-
-                if (!yaDescontado)
+                // Asegurar que el inventario esté descontado (idempotente)
+                try
                 {
-                    System.Diagnostics.Debug.WriteLine($"📦 Descontando inventario para pedido {pedido.Id}...");
-                    
-                    try 
-                    {
-                        // Cargar detalles compltos con recetas
-                        var detalles = await _context.PedidoDetalles
-                            .Where(d => d.PedidoId == pedido.Id)
-                            .ToListAsync();
-
-                        // Buscar almacén por defecto (ej: Cocina Principal)
-                        var almacen = await _context.Almacenes.FirstOrDefaultAsync(a => a.Nombre.Contains("Cocina") || a.Nombre.Contains("Principal"));
-                        int almacenId = almacen?.Id ?? 1; // Fallback ID 1
-
-                        foreach (var detalle in detalles)
-                        {
-                            // Obtener recetas del platillo
-                            // Ojo: PlatilloId en Receta referencia al Platillo
-                            // Necesitamos traer las recetas donde PlatilloId == detalle.PlatilloId
-                            var recetas = await _context.Set<Receta>() // Usando Set<Receta> si no está en Context directamente o DBSet
-                                .Where(r => r.PlatilloId == detalle.PlatilloId)
-                                .ToListAsync();
-
-                            foreach (var receta in recetas)
-                            {
-                                decimal cantidadADescontar = receta.CantidadRequerida * detalle.Cantidad;
-                                
-                                // Registrar Movimiento (Salida)
-                                var movimiento = new MovimientoInventario
-                                {
-                                    ProductoId = receta.ProductoId,
-                                    AlmacenId = almacenId,
-                                    TipoMovimiento = "Salida",
-                                    Cantidad = cantidadADescontar,
-                                    Fecha = DateTime.Now,
-                                    Motivo = "Venta",
-                                    Referencia = $"Pedido #{pedido.Id}",
-                                    UsuarioId = pedido.UsuarioId,
-                                    CostoUnitario = receta.CostoUnitario ?? 0, // Idealmente costo promedio del stock
-                                    CostoTotal = (receta.CostoUnitario ?? 0) * cantidadADescontar
-                                };
-                                
-                                _context.MovimientosInventario.Add(movimiento);
-
-                                // Actualizar Stock
-                                var stock = await _context.Stock
-                                    .FirstOrDefaultAsync(s => s.ProductoId == receta.ProductoId && s.AlmacenId == almacenId);
-                                
-                                if (stock != null)
-                                {
-                                    stock.Cantidad -= cantidadADescontar;
-                                    stock.FechaActualizacion = DateTime.Now;
-                                    
-                                    // Actualizar costo en movimiento con el real del stock
-                                    movimiento.CostoUnitario = stock.CostoPromedio;
-                                    movimiento.CostoTotal = cantidadADescontar * stock.CostoPromedio;
-                                }
-                                else 
-                                {
-                                    // Si no hay stock creado, crearlo en negativo (técnicamente posible si permitimos)
-                                    stock = new Stock
-                                    {
-                                        ProductoId = receta.ProductoId,
-                                        AlmacenId = almacenId,
-                                        Cantidad = -cantidadADescontar,
-                                        CostoPromedio = 0,
-                                        CostoTotal = 0,
-                                        FechaActualizacion = DateTime.Now
-                                    };
-                                    _context.Stock.Add(stock);
-                                }
-                            }
-                        }
-                        
-                        await _context.SaveChangesAsync();
-                        System.Diagnostics.Debug.WriteLine($"✅ Inventario descontado correctamente");
-                    }
-                    catch (Exception ex)
-                    {
-                         System.Diagnostics.Debug.WriteLine($"❌ Error al descontar inventario: {ex.Message}");
-                    }
+                    var resInv = await _inventarioService.DescontarStockPorPedidoAsync(pedido.Id);
+                    _logger.LogInformation($"📦 Verificación de inventario para pedido {pedido.Id}: {resInv.Mensaje}");
                 }
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine($"ℹ️ Estado no es LISTO ni PAGADO/ENTREGADO, no se envía notificación ni descuenta stock");
+                catch (Exception exInv)
+                {
+                    _logger.LogError(exInv, $"⚠️ Error al descontar inventario para pedido {pedido.Id}");
+                }
             }
 
             System.Diagnostics.Debug.WriteLine("========================================");
@@ -471,6 +386,16 @@ namespace RestaurantApi.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            // Sincronizar inventario con los detalles actualizados
+            try
+            {
+                await _inventarioService.DescontarStockPorPedidoAsync(id);
+            }
+            catch (Exception exInv)
+            {
+                _logger.LogError(exInv, $"⚠️ Error al sincronizar inventario para pedido {id}");
+            }
 
             // Retornar pedido actualizado
             var pedidoActualizado = await _context.Pedidos
@@ -592,6 +517,23 @@ namespace RestaurantApi.Controllers
 
                 await _context.SaveChangesAsync();
                 Console.WriteLine($"✅ Pedido {id} actualizado exitosamente");
+
+                // Sincronizar inventario
+                try
+                {
+                    if (pedido.Estado == EstadoPedido.Cancelado)
+                    {
+                        await _inventarioService.RevertirStockPorPedidoAsync(id);
+                    }
+                    else
+                    {
+                        await _inventarioService.DescontarStockPorPedidoAsync(id);
+                    }
+                }
+                catch (Exception exInv)
+                {
+                    _logger.LogError(exInv, $"⚠️ Error sincronizando inventario en PutPedido {id}");
+                }
 
                 var pedidoActualizado = await _context.Pedidos
                     .Include(p => p.Mesa)

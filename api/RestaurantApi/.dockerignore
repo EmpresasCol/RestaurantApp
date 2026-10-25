@@ -1,0 +1,11 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/*.user
+**/*.userosscache
+**/*.suo
+**/publish-test
+**/Dockerfile*
+**/*.md
