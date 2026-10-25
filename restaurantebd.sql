@@ -1,7 +1,7 @@
 -- =====================================================
 -- SCRIPT COMPLETO Y CORREGIDO: RestauranteBD
 -- Sistema de Gestión de Restaurante + Inventario + Domicilios
--- Motor: MySQL 8+
+-- Motor: TiDB Cloud (compatibilidad MySQL 8)
 -- =====================================================
 
 DROP DATABASE IF EXISTS restaurantebd;
@@ -17,7 +17,7 @@ CREATE TABLE Usuarios (
     Nombre VARCHAR(100) NOT NULL,
     Usuario VARCHAR(50) UNIQUE NOT NULL,
     ClaveHash CHAR(60) NOT NULL,
-    Rol ENUM('Administrador','Mesero','Cocina','Caja') NOT NULL,
+    Rol ENUM('Administrador','Mesero','Cocina','Caja','Domiciliario') NOT NULL,
     INDEX idx_usuario (Usuario),
     INDEX idx_rol (Rol)
 ) ENGINE=InnoDB;
@@ -37,7 +37,6 @@ CREATE TABLE Platillos (
     ImagenUrl LONGTEXT,
     Categoria VARCHAR(50) NOT NULL DEFAULT 'Platos Principales',
     INDEX idx_categoria (Categoria),
-    FULLTEXT INDEX ft_platillo_descripcion (Nombre, Descripcion),
     CONSTRAINT chk_platillos_precio_nonneg CHECK (Precio >= 0)
 ) ENGINE=InnoDB;
 
@@ -308,7 +307,7 @@ CREATE TABLE Domicilios (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     ClienteId INT NOT NULL,
     DireccionId INT NOT NULL,
-    Estado ENUM('EnPreparacion','Listo','EnCamino','Entregado','Cancelado') DEFAULT 'EnPreparacion',
+    Estado ENUM('EnPreparacion','Listo','Recogido','EnCamino','Entregado','Cancelado') DEFAULT 'EnPreparacion',
     FechaPedido DATETIME DEFAULT CURRENT_TIMESTAMP,
     FechaEstimadaEntrega DATETIME,
     FechaEntrega DATETIME,
@@ -321,12 +320,19 @@ CREATE TABLE Domicilios (
     NotasCliente TEXT,
     NotasInternas TEXT,
     UsuarioCreadorId INT NOT NULL,
+    TokenSeguimiento CHAR(32) NULL,
+    PuedeEditarHasta DATETIME NULL,
+    FechaRecogida DATETIME NULL,
+    ObservacionCliente TEXT NULL,
+    FechaObservacion DATETIME NULL,
+    OrigenPedido ENUM('Admin','Publico') NOT NULL DEFAULT 'Admin',
     FechaCreacion DATETIME DEFAULT CURRENT_TIMESTAMP,
     FechaActualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (ClienteId) REFERENCES Clientes(Id) ON DELETE RESTRICT,
     FOREIGN KEY (DireccionId) REFERENCES Direcciones(Id) ON DELETE RESTRICT,
     FOREIGN KEY (DomiciliarioId) REFERENCES Usuarios(Id) ON DELETE SET NULL,
-    FOREIGN KEY (UsuarioCreadorId) REFERENCES Usuarios(Id) ON DELETE RESTRICT
+    FOREIGN KEY (UsuarioCreadorId) REFERENCES Usuarios(Id) ON DELETE RESTRICT,
+    UNIQUE KEY idx_token_seguimiento (TokenSeguimiento)
 ) ENGINE=InnoDB;
 
 CREATE TABLE DomicilioDetalles (
@@ -716,470 +722,13 @@ INSERT INTO Direcciones (ClienteId, Direccion, Barrio, Ciudad, EsPrincipal) VALU
 (1, 'Calle 25 #15-30', 'Centro', 'Sincelejo', TRUE);
 
 -- =====================================================
--- SECCIÓN 6: PROCEDIMIENTOS ALMACENADOS
+-- TiDB Cloud no admite procedimientos almacenados ni triggers.
+-- La API implementa la lógica de inventario y domicilios.
 -- =====================================================
-
-DELIMITER $$
-
-CREATE PROCEDURE sp_procesar_pago(
-    IN p_pedidoId INT,
-    IN p_monto DECIMAL(10,2),
-    IN p_montoPropina DECIMAL(10,2),
-    IN p_metodo VARCHAR(20),
-    IN p_numeroFactura VARCHAR(50),
-    IN p_nitCliente VARCHAR(50),
-    IN p_nombreCliente VARCHAR(150),
-    IN p_archivoUrl VARCHAR(255)
-)
-BEGIN
-    DECLARE v_subtotal DECIMAL(10,2);
-    DECLARE v_total_esperado DECIMAL(10,2);
-    DECLARE v_pagoId INT;
-    
-    -- Calcular subtotal real del pedido
-    SELECT COALESCE(SUM(pd.Cantidad * pl.Precio), 0) INTO v_subtotal
-    FROM PedidoDetalles pd
-    JOIN Platillos pl ON pd.PlatilloId = pl.Id
-    WHERE pd.PedidoId = p_pedidoId AND pd.Estado <> 'Cancelado';
-    
-    SET v_total_esperado = v_subtotal + p_montoPropina;
-    
-    -- Validar monto
-    IF p_monto < v_subtotal THEN
-        SIGNAL SQLSTATE '45000' 
-        SET MESSAGE_TEXT = 'Monto pagado es menor que el subtotal del pedido';
-    END IF;
-    
-    START TRANSACTION;
-    
-    -- Insertar pago
-    INSERT INTO Pagos (PedidoId, Monto, MontoPropina, MetodoPago)
-    VALUES (p_pedidoId, p_monto, p_montoPropina, p_metodo);
-    
-    SET v_pagoId = LAST_INSERT_ID();
-    
-    -- Insertar factura
-    INSERT INTO Facturas (PagoId, NumeroFactura, NitCliente, NombreCliente, 
-                          Subtotal, Propina, Total, ArchivoUrl)
-    VALUES (v_pagoId, p_numeroFactura, p_nitCliente, p_nombreCliente,
-            v_subtotal, p_montoPropina, p_monto + p_montoPropina, p_archivoUrl);
-    
-    -- Actualizar estado del pedido
-    UPDATE Pedidos SET Estado = 'Pagado' WHERE Id = p_pedidoId;
-    
-    -- Liberar mesa
-    UPDATE Mesas m
-    JOIN Pedidos ped ON ped.MesaId = m.Id
-    SET m.Estado = 'Disponible'
-    WHERE ped.Id = p_pedidoId;
-    
-    COMMIT;
-END$$
-
-CREATE PROCEDURE sp_consumir_ingredientes_fifo(
-    IN p_platilloId INT,
-    IN p_cantidadPlatillo INT,
-    IN p_usuarioId INT,
-    IN p_referencia VARCHAR(100)
-)
-BEGIN
-    DECLARE done INT DEFAULT 0;
-    DECLARE v_productoId INT;
-    DECLARE v_cantRequerida DECIMAL(10,2);
-    DECLARE v_totalNecesaria DECIMAL(10,2);
-    DECLARE v_loteId INT;
-    DECLARE v_loteCant DECIMAL(10,2);
-    DECLARE v_almacenId INT;
-    DECLARE v_consumir DECIMAL(10,2);
-    DECLARE v_costoUnit DECIMAL(10,2);
-    
-    DECLARE cur_recetas CURSOR FOR
-        SELECT ProductoId, CantidadRequerida
-        FROM Recetas
-        WHERE PlatilloId = p_platilloId;
-        
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
-    
-    START TRANSACTION;
-    
-    OPEN cur_recetas;
-    
-    recetas_loop: LOOP
-        FETCH cur_recetas INTO v_productoId, v_cantRequerida;
-        
-        IF done THEN
-            LEAVE recetas_loop;
-        END IF;
-        
-        SET v_totalNecesaria = v_cantRequerida * p_cantidadPlatillo;
-        
-        IF v_totalNecesaria <= 0 THEN
-            ITERATE recetas_loop;
-        END IF;
-        
-        -- Consumir usando FIFO
-        WHILE v_totalNecesaria > 0 DO
-            SELECT Id, CantidadActual, AlmacenId, CostoUnitario
-            INTO v_loteId, v_loteCant, v_almacenId, v_costoUnit
-            FROM Lotes
-            WHERE ProductoId = v_productoId 
-              AND CantidadActual > 0 
-              AND Estado = 'Activo'
-            ORDER BY COALESCE(FechaVencimiento, '9999-12-31') ASC, FechaIngreso ASC
-            LIMIT 1;
-            
-            IF v_loteId IS NULL OR v_loteCant IS NULL THEN
-                -- Stock insuficiente
-                INSERT INTO AlertasInventario (TipoAlerta, ProductoId, Mensaje, Nivel)
-                VALUES ('StockCritico', v_productoId, 
-                        CONCAT('Stock insuficiente para platillo ID:', p_platilloId), 
-                        'Critico');
-                LEAVE recetas_loop;
-            END IF;
-            
-            SET v_consumir = LEAST(v_totalNecesaria, v_loteCant);
-            
-            -- Actualizar lote
-            UPDATE Lotes
-            SET CantidadActual = CantidadActual - v_consumir,
-                Estado = CASE WHEN CantidadActual - v_consumir <= 0 THEN 'Agotado' ELSE Estado END
-            WHERE Id = v_loteId;
-            
-            -- Actualizar stock
-            UPDATE Stock
-            SET Cantidad = Cantidad - v_consumir
-            WHERE ProductoId = v_productoId AND AlmacenId = v_almacenId;
-            
-            -- Registrar movimiento
-            INSERT INTO MovimientosInventario 
-                (TipoMovimiento, ProductoId, AlmacenId, Cantidad, CostoUnitario, 
-                 LoteId, UsuarioId, Motivo, Referencia)
-            VALUES 
-                ('ConsumoProduccion', v_productoId, v_almacenId, v_consumir, v_costoUnit,
-                 v_loteId, p_usuarioId, CONCAT('Consumo platillo ID:', p_platilloId), p_referencia);
-            
-            SET v_totalNecesaria = v_totalNecesaria - v_consumir;
-        END WHILE;
-        
-        SET done = 0;
-    END LOOP;
-    
-    CLOSE cur_recetas;
-    COMMIT;
-END$$
-
-CREATE PROCEDURE sp_restaurar_stock_por_pedidodetalle(
-    IN p_pedidodetalleId INT,
-    IN p_usuarioId INT,
-    IN p_referencia VARCHAR(100)
-)
-BEGIN
-    DECLARE done INT DEFAULT 0;
-    DECLARE v_movId INT;
-    DECLARE v_productoId INT;
-    DECLARE v_almacenId INT;
-    DECLARE v_cantidad DECIMAL(10,2);
-    
-    DECLARE cur_mov CURSOR FOR
-        SELECT Id, ProductoId, AlmacenId, Cantidad
-        FROM MovimientosInventario
-        WHERE Referencia = p_referencia;
-        
-    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
-    
-    START TRANSACTION;
-    
-    OPEN cur_mov;
-    
-    mov_loop: LOOP
-        FETCH cur_mov INTO v_movId, v_productoId, v_almacenId, v_cantidad;
-        
-        IF done THEN
-            LEAVE mov_loop;
-        END IF;
-        
-        -- Registrar devolución
-        INSERT INTO MovimientosInventario 
-            (TipoMovimiento, ProductoId, AlmacenId, Cantidad, UsuarioId, Motivo, Referencia)
-        VALUES 
-            ('Devolucion', v_productoId, v_almacenId, v_cantidad, p_usuarioId,
-             CONCAT('Restauración por cancelación PedidoDetalle:', p_pedidodetalleId), 
-             p_referencia);
-        
-        -- Actualizar stock
-        UPDATE Stock
-        SET Cantidad = Cantidad + v_cantidad
-        WHERE ProductoId = v_productoId AND AlmacenId = v_almacenId;
-        
-        -- Reactivar lote (simplificado)
-        UPDATE Lotes
-        SET CantidadActual = CantidadActual + v_cantidad,
-            Estado = 'Activo'
-        WHERE ProductoId = v_productoId 
-          AND AlmacenId = v_almacenId
-        ORDER BY FechaIngreso DESC
-        LIMIT 1;
-    END LOOP;
-    
-    CLOSE cur_mov;
-    COMMIT;
-END$$
-
 -- =====================================================
--- SECCIÓN 7: TRIGGERS
+-- Las columnas de domiciliarios ya se crean en la tabla Domicilios.
+-- No se usa una migración basada en procedimientos porque TiDB no la soporta.
 -- =====================================================
-
-CREATE TRIGGER trg_pedido_after_insert 
-AFTER INSERT ON Pedidos
-FOR EACH ROW
-BEGIN
-    UPDATE Mesas SET Estado = 'Ocupada' WHERE Id = NEW.MesaId;
-END$$
-
-CREATE TRIGGER trg_pedidodetalle_after_update 
-AFTER UPDATE ON PedidoDetalles
-FOR EACH ROW
-BEGIN
-    IF NEW.Estado = 'EnPreparacion' AND OLD.Estado <> 'EnPreparacion' THEN
-        CALL sp_consumir_ingredientes_fifo(
-            NEW.PlatilloId, 
-            NEW.Cantidad, 
-            (SELECT UsuarioId FROM Pedidos WHERE Id = NEW.PedidoId), 
-            CONCAT('PedidoDetalle-', NEW.Id)
-        );
-    END IF;
-END$$
-
-CREATE TRIGGER trg_pedidodetalle_cancelado 
-AFTER UPDATE ON PedidoDetalles
-FOR EACH ROW
-BEGIN
-    IF NEW.Estado = 'Cancelado' AND OLD.Estado <> 'Cancelado' THEN
-        CALL sp_restaurar_stock_por_pedidodetalle(
-            NEW.Id,
-            (SELECT UsuarioId FROM Pedidos WHERE Id = NEW.PedidoId),
-            CONCAT('PedidoDetalle-', NEW.Id)
-        );
-    END IF;
-END$$
-
-CREATE TRIGGER trg_pedido_after_update 
-AFTER UPDATE ON Pedidos
-FOR EACH ROW
-BEGIN
-    IF NEW.Estado = 'Pagado' AND OLD.Estado <> 'Pagado' THEN
-        UPDATE Mesas SET Estado = 'Disponible' WHERE Id = NEW.MesaId;
-    END IF;
-END$$
-
-CREATE TRIGGER trg_domicilio_cambio_estado 
-AFTER UPDATE ON Domicilios
-FOR EACH ROW
-BEGIN
-    IF NEW.Estado != OLD.Estado THEN
-        INSERT INTO HistorialEstadosDomicilio (
-            DomicilioId, 
-            EstadoAnterior, 
-            EstadoNuevo,
-            UsuarioId
-        ) VALUES (
-            NEW.Id,
-            OLD.Estado,
-            NEW.Estado,
-            NEW.UsuarioCreadorId
-        );
-    END IF;
-END$$
-
-CREATE TRIGGER trg_domicilio_actualizar_subtotal_insert
-AFTER INSERT ON DomicilioDetalles
-FOR EACH ROW
-BEGIN
-    UPDATE Domicilios 
-    SET Subtotal = (
-        SELECT COALESCE(SUM(Subtotal), 0) 
-        FROM DomicilioDetalles 
-        WHERE DomicilioId = NEW.DomicilioId
-    )
-    WHERE Id = NEW.DomicilioId;
-END$$
-
-CREATE TRIGGER trg_domicilio_actualizar_subtotal_update
-AFTER UPDATE ON DomicilioDetalles
-FOR EACH ROW
-BEGIN
-    UPDATE Domicilios 
-    SET Subtotal = (
-        SELECT COALESCE(SUM(Subtotal), 0) 
-        FROM DomicilioDetalles 
-        WHERE DomicilioId = NEW.DomicilioId
-    )
-    WHERE Id = NEW.DomicilioId;
-END$$
-
-CREATE TRIGGER trg_domicilio_actualizar_subtotal_delete
-AFTER DELETE ON DomicilioDetalles
-FOR EACH ROW
-BEGIN
-    UPDATE Domicilios 
-    SET Subtotal = (
-        SELECT COALESCE(SUM(Subtotal), 0) 
-        FROM DomicilioDetalles 
-        WHERE DomicilioId = OLD.DomicilioId
-    )
-    WHERE Id = OLD.DomicilioId;
-END$$
-
-DELIMITER ;
-
--- =====================================================
-
--- Domicilios 
--- ============================================================================
---  QPro · Migración: Módulo Domiciliarios + Seguimiento Público
---  Motor: MySQL 8+
---  Naturaleza: NO destructiva · Idempotente · Segura para prod
---  Aplica sobre: RestauranteBD (ya existente)
---
---  CÓMO EJECUTAR (elige una opción):
---
---  Opción A — MySQL Workbench:
---    1. Abre una pestaña de Query conectada a tu servidor.
---    2. Pega TODO el contenido de este archivo.
---    3. Ejecuta con el botón "Execute Script" (rayo con hoja) o Ctrl+Shift+Enter.
---       NO uses el botón "Execute Statement" (rayo simple): ese ejecuta solo
---       la instrucción donde está el cursor y falla con el DELIMITER.
---
---  Opción B — Línea de comandos (más confiable para scripts con DELIMITER):
---    mysql -u root -p RestauranteBD < 01_migration_domiciliarios.sql
--- ============================================================================
-
-USE restaurantebd;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 1. Añadir rol 'Domiciliario' al ENUM (conservando los existentes)
--- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE Usuarios
-    MODIFY COLUMN Rol ENUM(
-        'Administrador',
-        'Mesero',
-        'Cocina',
-        'Caja',
-        'Domiciliario'
-    ) NOT NULL;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 2. Añadir estado 'Recogido' al ENUM de Domicilios
---    Flujo: EnPreparacion → Listo → Recogido → EnCamino → Entregado
--- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE Domicilios
-    MODIFY COLUMN Estado ENUM(
-        'EnPreparacion',
-        'Listo',
-        'Recogido',
-        'EnCamino',
-        'Entregado',
-        'Cancelado'
-    ) NOT NULL DEFAULT 'EnPreparacion';
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 3. Procedimiento auxiliar para añadir columnas de forma idempotente
---    (solo añade si la columna no existe; re-ejecutable sin error)
--- ─────────────────────────────────────────────────────────────────────────────
-DROP PROCEDURE IF EXISTS sp_add_column_if_not_exists;
-
-DELIMITER $$
-CREATE PROCEDURE sp_add_column_if_not_exists(
-    IN p_table   VARCHAR(64),
-    IN p_column  VARCHAR(64),
-    IN p_ddl     VARCHAR(1024)
-)
-BEGIN
-    DECLARE v_count INT DEFAULT 0;
-    SELECT COUNT(*) INTO v_count
-      FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME   = p_table
-       AND COLUMN_NAME  = p_column;
-    IF v_count = 0 THEN
-        SET @sql = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN ', p_ddl);
-        PREPARE stmt FROM @sql;
-        EXECUTE stmt;
-        DEALLOCATE PREPARE stmt;
-    END IF;
-END$$
-DELIMITER ;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 4. Añadir las columnas nuevas a la tabla Domicilios
---    NOTA: los COMMENT usan comillas simples duplicadas ('') para escapar
---    dentro de un string delimitado por comillas simples. Compatible con
---    MySQL Workbench y línea de comandos.
--- ─────────────────────────────────────────────────────────────────────────────
-
-CALL sp_add_column_if_not_exists(
-    'Domicilios',
-    'TokenSeguimiento',
-    '`TokenSeguimiento` CHAR(32) NULL UNIQUE COMMENT ''Token publico para seguimiento del cliente'''
-);
-
-CALL sp_add_column_if_not_exists(
-    'Domicilios',
-    'PuedeEditarHasta',
-    '`PuedeEditarHasta` DATETIME NULL COMMENT ''Ventana de edicion de 5 min tras crear el pedido publico'''
-);
-
-CALL sp_add_column_if_not_exists(
-    'Domicilios',
-    'FechaRecogida',
-    '`FechaRecogida` DATETIME NULL COMMENT ''Momento en que el domiciliario recoge del restaurante'''
-);
-
-CALL sp_add_column_if_not_exists(
-    'Domicilios',
-    'ObservacionCliente',
-    '`ObservacionCliente` TEXT NULL COMMENT ''Observacion opcional del cliente sobre el domiciliario'''
-);
-
-CALL sp_add_column_if_not_exists(
-    'Domicilios',
-    'FechaObservacion',
-    '`FechaObservacion` DATETIME NULL COMMENT ''Fecha en que se envio la observacion del cliente'''
-);
-
-CALL sp_add_column_if_not_exists(
-    'Domicilios',
-    'OrigenPedido',
-    '`OrigenPedido` ENUM(''Admin'',''Publico'') NOT NULL DEFAULT ''Admin'' COMMENT ''Admin=sistema interno, Publico=link abierto'''
-);
-
--- Limpiar el procedimiento auxiliar
-DROP PROCEDURE IF EXISTS sp_add_column_if_not_exists;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 5. Índice sobre TokenSeguimiento (solo si no existe ya)
--- ─────────────────────────────────────────────────────────────────────────────
-SET @idx_exists := (
-    SELECT COUNT(*)
-      FROM INFORMATION_SCHEMA.STATISTICS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME   = 'Domicilios'
-       AND INDEX_NAME   = 'idx_token_seguimiento'
-);
-
-SET @sql_idx := IF(
-    @idx_exists = 0,
-    'CREATE INDEX idx_token_seguimiento ON Domicilios(TokenSeguimiento)',
-    'SELECT 1'
-);
-
-PREPARE stmt FROM @sql_idx;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 6. Vista: rendimiento por domiciliario (panel admin)
--- ─────────────────────────────────────────────────────────────────────────────
 DROP VIEW IF EXISTS vw_rendimiento_domiciliarios;
 
 CREATE VIEW vw_rendimiento_domiciliarios AS

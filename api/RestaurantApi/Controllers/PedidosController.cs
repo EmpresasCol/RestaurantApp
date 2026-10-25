@@ -142,6 +142,9 @@ namespace RestaurantApi.Controllers
                     Fecha = DateTime.Now
                 };
 
+                // TiDB Cloud no admite triggers: marcar la mesa aquí conserva
+                // la misma regla que antes aplicaba la base de datos.
+                mesa.Estado = EstadoMesa.Ocupada;
                 _context.Pedidos.Add(pedido);
                 await _context.SaveChangesAsync();
 
@@ -294,6 +297,14 @@ namespace RestaurantApi.Controllers
             System.Diagnostics.Debug.WriteLine($"✅ Estado nuevo: {estadoEnum}");
 
             pedido.Estado = estadoEnum;
+
+            // TiDB Cloud no admite triggers: liberar la mesa cuando el pedido
+            // queda pagado, igual que lo hacía trg_pedido_after_update.
+            if (estadoEnum == EstadoPedido.Pagado && pedido.Mesa != null)
+            {
+                pedido.Mesa.Estado = EstadoMesa.Disponible;
+            }
+
             await _context.SaveChangesAsync();
 
             System.Diagnostics.Debug.WriteLine($"💾 Estado guardado en BD");
