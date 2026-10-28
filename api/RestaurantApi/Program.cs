@@ -79,7 +79,7 @@ builder.Services.AddScoped<IInventarioService, InventarioService>();
 
 // ── CORS: solo los frontends conocidos (Cors:Origenes separados por coma) ──
 var origenes = (builder.Configuration["Cors:Origenes"]
-                ?? "http://localhost:3000,http://localhost:3001,https://empresascol.github.io")
+                ?? "http://localhost:3000,http://localhost:3001,https://empresascol.github.io,https://qpro-web.onrender.com")
     .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 builder.Services.AddCors(options =>
