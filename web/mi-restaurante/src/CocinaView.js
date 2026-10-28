@@ -1,25 +1,149 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { AnimatePresence, motion } from "motion/react"
 import { POLLING_DOMICILIOS_MS, ordenarPorPrioridad, transformarDomicilios } from "./utils/kds"
-import {
-  ChefHat,
-  Clock,
-  CheckCircle,
-  Truck,
-  AlertCircle,
-  LogOut,
-} from "lucide-react"
+import { AlertCircle, Check, ChefHat, Clock, LogOut, MapPin, MessageSquareText, Phone, Truck, User } from "lucide-react"
 import { useAuth } from "./context/AuthContext"
 import * as api from "./services/api"
-import {
-  getDomiciliosActivos,
-  actualizarEstadoDomicilio,
-} from "./services/domiciliosApi"
+import { getDomiciliosActivos, actualizarEstadoDomicilio } from "./services/domiciliosApi"
+import logo from "./components/logo.jpg"
 
-function CocinaView({ pedidos = [], onActualizarPedidos }) {
+const ease = [0.16, 1, 0.3, 1]
+const MINUTOS_ALERTA = 10
+const MINUTOS_URGENTE = 15
+
+// Color de la espera: a tiempo, en alerta y urgente.
+const tonoEspera = (minutos) =>
+  minutos >= MINUTOS_URGENTE
+    ? { borde: "ring-red-500/70", chip: "bg-red-600 text-white", texto: "Urgente" }
+    : minutos >= MINUTOS_ALERTA
+      ? { borde: "ring-amber-400/60", chip: "bg-amber-400 text-espresso", texto: "Demorado" }
+      : { borde: "ring-white/10", chip: "bg-white/10 text-orange-100", texto: "A tiempo" }
+
+function Ticket({ pedido, minutos, enCarga, onListo }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const temporizador = useRef(null)
+  const esDomicilio = pedido.tipo === "domicilio"
+  const idVisible = esDomicilio ? pedido.domicilioId : pedido.id
+  // Un pedido ya listo (vista del administrador) pasa a Entregado.
+  const siguiente = pedido.estado === "Listo" ? "Entregado" : "Listo"
+  const tono = pedido.estado === "Listo"
+    ? { borde: "ring-green-500/60", chip: "bg-green-700 text-white", texto: "Listo" }
+    : tonoEspera(minutos)
+
+  useEffect(() => () => clearTimeout(temporizador.current), [])
+
+  // Dos toques para marcar listo: evita errores sin bloquear la pantalla con un modal.
+  const alTocar = () => {
+    if (!confirmando) {
+      setConfirmando(true)
+      clearTimeout(temporizador.current)
+      temporizador.current = setTimeout(() => setConfirmando(false), 3000)
+      return
+    }
+    clearTimeout(temporizador.current)
+    setConfirmando(false)
+    onListo(pedido, siguiente)
+  }
+
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 24, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.94, filter: "blur(4px)" }}
+      transition={{ duration: 0.45, ease }}
+      className={`flex flex-col overflow-hidden rounded-[22px] bg-[#3a2a20] ring-2 ${tono.borde}`}
+    >
+      <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-[26px] font-extrabold leading-tight tracking-[-0.02em] text-white">
+            {esDomicilio && <Truck size={20} className="text-purple-300" aria-hidden="true" />}
+            {esDomicilio ? "Domicilio" : `Mesa ${pedido.mesa}`}
+          </p>
+          <p className="tabular mt-0.5 text-[15px] font-semibold text-orange-200">Orden #{idVisible}</p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <span className={`rounded-full px-3 py-1 text-[13px] font-bold uppercase tracking-[0.06em] ${tono.chip}`}>{tono.texto}</span>
+          <span className="tabular flex items-center gap-1.5 text-[22px] font-extrabold text-white">
+            <Clock size={20} aria-hidden="true" />
+            {minutos} min
+          </span>
+        </div>
+      </header>
+
+      {esDomicilio && (
+        <dl className="mx-5 mb-3 space-y-1 rounded-xl bg-purple-950/50 p-3 text-[13px] text-purple-100">
+          <div className="flex items-center gap-2"><User size={13} aria-hidden="true" /><dd className="truncate">{pedido.cliente}</dd></div>
+          <div className="flex items-center gap-2"><Phone size={13} aria-hidden="true" /><dd className="tabular">{pedido.telefono}</dd></div>
+          <div className="flex items-center gap-2"><MapPin size={13} aria-hidden="true" /><dd className="truncate">{pedido.direccion}</dd></div>
+        </dl>
+      )}
+
+      <ul className="flex-1 space-y-2 px-5 pb-4">
+        {pedido.items.map((item, idx) => (
+          <li key={idx} className="rounded-xl bg-black/20 px-3 py-2.5">
+            <div className="flex items-baseline gap-3">
+              <span className="tabular grid h-10 min-w-[2.5rem] place-items-center rounded-lg bg-orange-500 px-2 text-[20px] font-extrabold text-espresso">
+                {item.cantidad}
+              </span>
+              <span className="flex-1 text-[22px] font-bold leading-snug text-white">{item.nombre}</span>
+            </div>
+            {item.notas && (
+              <p className="mt-2 flex items-start gap-2 pl-[3.25rem] text-[17px] font-semibold text-amber-200">
+                <MessageSquareText size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+                {item.notas}
+              </p>
+            )}
+          </li>
+        ))}
+        {pedido.notasCliente && (
+          <li className="rounded-xl bg-amber-400/10 px-3 py-2.5 text-[14px] text-amber-100">
+            <span className="font-bold">Nota del cliente:</span> {pedido.notasCliente}
+          </li>
+        )}
+      </ul>
+
+      <div className="px-5 pb-5">
+        <button
+          type="button"
+          onClick={alTocar}
+          disabled={enCarga}
+          aria-label={confirmando ? `Confirmar orden ${idVisible} como ${siguiente.toLowerCase()}` : `Marcar orden ${idVisible} como ${siguiente.toLowerCase()}`}
+          className={`flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl text-[17px] font-extrabold transition-[background-color,transform] active:scale-[0.98] disabled:cursor-wait disabled:bg-white/10 disabled:text-white/60 ${
+            confirmando
+              ? "bg-white text-espresso"
+              : siguiente === "Entregado"
+                ? "bg-white/[0.08] text-orange-200 ring-1 ring-orange-300/40 hover:bg-orange-500 hover:text-espresso"
+                : "bg-white/[0.08] text-green-300 ring-1 ring-green-400/40 hover:bg-green-700 hover:text-white"
+          }`}
+        >
+          {enCarga ? (
+            <>
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden="true" />
+              Actualizando…
+            </>
+          ) : confirmando ? (
+            "Toca otra vez para confirmar"
+          ) : (
+            <>
+              <Check size={22} strokeWidth={3} />
+              {siguiente}
+            </>
+          )}
+        </button>
+      </div>
+    </motion.article>
+  )
+}
+
+// `incrustada`: vista del administrador dentro de su barra (filtro por mesa y
+// pedidos listos por entregar); sin ella es la pantalla completa del rol Cocina.
+function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
   const { usuario, logout } = useAuth()
 
+  const [filtroMesa, setFiltroMesa] = useState("todas")
   const [cargandoEstado, setCargandoEstado] = useState(null)
-  const [modalConfirmacion, setModalConfirmacion] = useState(null)
+  const [aviso, setAviso] = useState(null)
   const [domicilios, setDomicilios] = useState([])
   const [horaActual, setHoraActual] = useState(new Date())
 
@@ -45,117 +169,115 @@ function CocinaView({ pedidos = [], onActualizarPedidos }) {
     return () => clearInterval(interval)
   }, [cargarTodosLosDatos])
 
+  useEffect(() => {
+    if (!aviso) return undefined
+    const t = setTimeout(() => setAviso(null), aviso.tipo === "error" ? 3500 : 2000)
+    return () => clearTimeout(t)
+  }, [aviso])
+
   const todosLosPedidos = [...(pedidos || []).map((p) => ({ ...p, tipo: "mesa" })), ...domicilios]
 
-  const calcularTiempoTranscurrido = (horaInicio) =>
-    Math.floor((new Date() - horaInicio) / 60000)
+  const calcularTiempoTranscurrido = (horaInicio) => Math.max(0, Math.floor((horaActual - horaInicio) / 60000))
 
-  // Marca un pedido/domicilio como Listo. El cocinero NO puede marcar Entregado.
-  const marcarComoListo = async (pedido) => {
-    const pedidoId =
-      pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
+  // Listo para cocina; Entregado solo aparece en la vista del administrador.
+  const marcarComoListo = async (pedido, nuevoEstado = "Listo") => {
+    const pedidoId = pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
     setCargandoEstado(pedidoId)
     try {
       if (pedido.tipo === "domicilio") {
         await actualizarEstadoDomicilio(pedido.domicilioId, "Listo")
       } else {
-        await api.actualizarEstadoPedido(pedidoId, "Listo")
+        await api.actualizarEstadoPedido(pedidoId, nuevoEstado)
       }
 
       if (onActualizarPedidos) await onActualizarPedidos()
       await cargarTodosLosDatos()
 
-      setModalConfirmacion({
+      setAviso({
         tipo: "exito",
-        mensaje:
-          pedido.tipo === "domicilio"
-            ? "Domicilio listo para envío"
-            : "Pedido marcado como listo",
+        texto: pedido.tipo === "domicilio"
+          ? `Domicilio #${pedidoId} listo para envío`
+          : nuevoEstado === "Entregado"
+            ? `Mesa ${pedido.mesa} entregada`
+            : `Mesa ${pedido.mesa} lista para servir`,
       })
-      setTimeout(() => setModalConfirmacion(null), 1600)
     } catch (error) {
       console.error("Error al marcar como listo:", error)
-      setModalConfirmacion({
-        tipo: "error",
-        mensaje: "No se pudo actualizar el estado. Inténtalo de nuevo.",
-      })
-      setTimeout(() => setModalConfirmacion(null), 2500)
+      setAviso({ tipo: "error", texto: "No se pudo marcar como listo. Revisa la conexión e inténtalo de nuevo." })
     } finally {
       setCargandoEstado(null)
     }
   }
 
-  const confirmarMarcarListo = (pedido) => {
-    const ref =
-      pedido.tipo === "domicilio"
-        ? `Domicilio #${pedido.domicilioId}`
-        : `Mesa ${pedido.mesa} · Orden #${pedido.id}`
-    setModalConfirmacion({
-      tipo: "confirmar",
-      titulo: "¿Marcar como listo?",
-      mensaje: ref,
-      onConfirmar: () => {
-        marcarComoListo(pedido)
-        setModalConfirmacion(null)
-      },
-      onCancelar: () => setModalConfirmacion(null),
-    })
-  }
-
   // Solo se muestran pedidos en preparación, por prioridad (espera + volumen).
+  const estadosVisibles = incrustada ? ["EnProceso", "EnPreparacion", "Listo"] : ["EnProceso", "EnPreparacion"]
+  const visibles = todosLosPedidos.filter((p) => estadosVisibles.includes(p.estado))
+  const mesas = [...new Set(visibles.filter((p) => p.tipo === "mesa").map((p) => p.mesa))].sort((a, b) => a - b)
   const pedidosEnPreparacion = ordenarPorPrioridad(
-    todosLosPedidos.filter((p) => p.estado === "EnProceso" || p.estado === "EnPreparacion"),
+    visibles.filter((p) => filtroMesa === "todas" || (p.tipo === "mesa" && String(p.mesa) === filtroMesa)),
     horaActual
   )
 
   const cantidadActivas = pedidosEnPreparacion.length
+  const urgentes = pedidosEnPreparacion.filter((p) => p.estado !== "Listo" && calcularTiempoTranscurrido(p.hora) >= MINUTOS_URGENTE).length
+
+  const chipFiltro = (valor, texto) => (
+    <button
+      key={valor}
+      type="button"
+      onClick={() => setFiltroMesa(valor)}
+      aria-pressed={filtroMesa === valor}
+      className={`h-9 shrink-0 rounded-full px-4 text-[14px] font-bold transition-colors ${
+        filtroMesa === valor ? "bg-orange-500 text-espresso" : "bg-white/10 text-orange-100 hover:bg-white/15"
+      }`}
+    >
+      {texto}
+    </button>
+  )
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* HEADER COMPACTO Y ALINEADO */}
-      <header className="bg-gray-800 border-b border-gray-700 sticky top-0 z-30">
-        <div className="px-6 py-3 flex items-center justify-between">
-          {/* Izquierda: identidad de la pantalla */}
+    <div className={`${incrustada ? "min-h-[calc(100vh-4rem)]" : "min-h-screen"} bg-espresso text-white`}>
+      {incrustada && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-6 py-4">
+          <div className="qp-rail flex gap-2 overflow-x-auto">
+            {chipFiltro("todas", "Todas")}
+            {mesas.map((m) => chipFiltro(String(m), `Mesa ${m}`))}
+          </div>
+          <span className="tabular text-[15px] font-bold text-orange-100">
+            {cantidadActivas} {cantidadActivas === 1 ? "orden" : "órdenes"}
+            {urgentes > 0 && <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-[13px] text-white">{urgentes} urgentes</span>}
+          </span>
+        </div>
+      )}
+      {!incrustada && (
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-espresso">
+        <div className="flex h-[72px] items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <ChefHat size={22} className="text-white" />
-            </div>
+            <img src={logo} alt="Qpro" className="h-11 w-11 rounded-xl bg-white object-contain p-0.5" />
             <div>
-              <h1 className="text-lg font-bold leading-tight">Cocina</h1>
-              <p className="text-xs text-gray-400">Restaurante Délice</p>
+              <h1 className="text-[20px] font-extrabold leading-tight tracking-[-0.01em]">Cocina</h1>
+              <p className="text-[13px] font-medium text-orange-200">{usuario?.nombre || "Cocinero"}</p>
             </div>
           </div>
 
-          {/* Derecha: estado + usuario + salir */}
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-2 bg-gray-700 px-3 py-1.5 rounded-lg">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  cantidadActivas > 0 ? "bg-green-500 animate-pulse" : "bg-gray-500"
-                }`}
-              />
-              <span className="text-sm text-gray-200 font-medium">
-                {cantidadActivas}{" "}
-                {cantidadActivas === 1 ? "orden activa" : "órdenes activas"}
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-2 rounded-full bg-white/10 px-4 py-2 sm:flex">
+              <span className={`h-2.5 w-2.5 rounded-full ${cantidadActivas > 0 ? "bg-green-400" : "bg-white/40"}`} aria-hidden="true" />
+              <span className="tabular text-[15px] font-bold">
+                {cantidadActivas} {cantidadActivas === 1 ? "orden" : "órdenes"}
               </span>
+              {urgentes > 0 && (
+                <span className="tabular ml-1 rounded-full bg-red-600 px-2 py-0.5 text-[13px] font-bold">{urgentes} urgentes</span>
+              )}
             </div>
-
-            <div className="text-right hidden md:block">
-              <p className="text-sm font-semibold leading-tight">
-                {usuario?.nombre || "Cocinero"}
-              </p>
-              <p className="text-xs text-gray-400">
-                {horaActual.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </p>
-            </div>
-
+            <time className="tabular hidden text-[22px] font-extrabold md:block">
+              {horaActual.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+            </time>
             <button
+              type="button"
               onClick={logout}
               aria-label="Cerrar sesión"
-              className="bg-red-600 hover:bg-red-700 active:scale-95 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-semibold transition-all"
+              className="flex h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-[14px] font-semibold transition-colors hover:bg-white/15"
             >
               <LogOut size={16} />
               <span className="hidden sm:inline">Salir</span>
@@ -163,215 +285,59 @@ function CocinaView({ pedidos = [], onActualizarPedidos }) {
           </div>
         </div>
       </header>
+      )}
 
-      {/* CUERPO */}
       <main className="px-6 py-6">
-        {pedidosEnPreparacion.length === 0 ? (
-          <div className="bg-gray-800 rounded-xl p-16 text-center max-w-2xl mx-auto mt-12 border border-gray-700">
-            <ChefHat className="mx-auto text-gray-500 mb-4" size={72} />
-            <h2 className="text-2xl font-semibold text-gray-300 mb-2">
-              No hay órdenes pendientes
-            </h2>
-            <p className="text-gray-500">
-              Las nuevas órdenes aparecerán aquí automáticamente.
-            </p>
-          </div>
+        {cantidadActivas === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease }}
+            className="mx-auto mt-24 max-w-md text-center"
+          >
+            <ChefHat className="mx-auto text-orange-300" size={56} strokeWidth={1.5} />
+            <h2 className="mt-5 text-[26px] font-extrabold tracking-[-0.02em]">Sin órdenes pendientes</h2>
+            <p className="mt-2 text-[16px] text-orange-100">Las nuevas comandas aparecen aquí solas, ordenadas por prioridad.</p>
+          </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {pedidosEnPreparacion.map((pedido) => {
-              const idVisible =
-                pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
-              const enCarga = cargandoEstado === idVisible
-              const minutos = calcularTiempoTranscurrido(pedido.hora)
-              const esUrgente = minutos >= 15
-              const esDomicilio = pedido.tipo === "domicilio"
-
-              return (
-                <article
-                  key={pedido.id}
-                  className={`bg-gray-800 rounded-xl border-2 overflow-hidden flex flex-col transition-all ${
-                    esUrgente
-                      ? "border-red-500 shadow-lg shadow-red-500/20"
-                      : "border-yellow-500"
-                  }`}
-                >
-                  {/* Cabecera de la tarjeta */}
-                  <header
-                    className={`px-4 py-3 ${
-                      esDomicilio
-                        ? "bg-gradient-to-r from-purple-700 to-purple-600"
-                        : "bg-gray-700"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-lg font-bold flex items-center gap-2">
-                          {esDomicilio ? (
-                            <>
-                              <Truck size={18} /> Domicilio
-                            </>
-                          ) : (
-                            `Mesa ${pedido.mesa}`
-                          )}
-                        </h3>
-                        <p
-                          className={`text-xs mt-0.5 ${
-                            esDomicilio ? "text-purple-100" : "text-gray-400"
-                          }`}
-                        >
-                          Orden #{idVisible}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span
-                          className={`inline-block text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${
-                            esUrgente
-                              ? "bg-red-900 text-red-200"
-                              : "bg-yellow-900 text-yellow-200"
-                          }`}
-                        >
-                          {esUrgente ? "Urgente" : "En proceso"}
-                        </span>
-                        <p
-                          className={`text-xs mt-1.5 flex items-center gap-1 justify-end ${
-                            esUrgente ? "text-red-300 font-semibold" : "text-gray-400"
-                          }`}
-                        >
-                          <Clock size={12} />
-                          {minutos} min
-                        </p>
-                      </div>
-                    </div>
-
-                    {esDomicilio && (
-                      <div className="mt-3 text-xs space-y-0.5 bg-black/20 rounded p-2 text-purple-50">
-                        <p className="truncate">👤 {pedido.cliente}</p>
-                        <p>📱 {pedido.telefono}</p>
-                        <p className="truncate">📍 {pedido.direccion}</p>
-                      </div>
-                    )}
-                  </header>
-
-                  {/* Lista de platos */}
-                  <div className="px-4 py-3 flex-1">
-                    <div className="space-y-1.5">
-                      {pedido.items.map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-gray-700/60 rounded-lg p-2"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="bg-orange-500 text-white px-2 py-0.5 rounded-full text-xs font-bold min-w-[1.75rem] text-center">
-                              {item.cantidad}
-                            </span>
-                            <span className="font-medium text-white text-sm flex-1 leading-snug">
-                              {item.nombre}
-                            </span>
-                          </div>
-                          {item.notas && (
-                            <div className="mt-1.5 ml-9 px-2 py-1 bg-yellow-900/40 border-l-2 border-yellow-500 rounded text-xs text-yellow-200">
-                              📝 {item.notas}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {pedido.notasCliente && (
-                      <div className="mt-3 bg-yellow-900/30 border border-yellow-500/40 rounded p-2">
-                        <p className="text-yellow-200 text-xs">
-                          <strong>Notas del cliente:</strong>{" "}
-                          {pedido.notasCliente}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Botón único: Marcar Listo */}
-                  <div className="px-4 pb-4">
-                    <button
-                      onClick={() => confirmarMarcarListo(pedido)}
-                      disabled={enCarga}
-                      aria-label={`Marcar orden ${idVisible} como lista`}
-                      className="w-full min-h-[60px] bg-green-600 hover:bg-green-700 active:scale-95 disabled:bg-gray-600 disabled:scale-100 disabled:cursor-not-allowed text-white rounded-lg text-base font-bold transition-all flex items-center justify-center gap-2 shadow-md"
-                    >
-                      {enCarga ? (
-                        "Procesando..."
-                      ) : (
-                        <>
-                          <CheckCircle size={22} />
-                          Marcar Listo
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </article>
-              )
-            })}
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            <AnimatePresence mode="popLayout">
+              {pedidosEnPreparacion.map((pedido) => {
+                const idVisible = pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
+                return (
+                  <Ticket
+                    key={pedido.id}
+                    pedido={pedido}
+                    minutos={calcularTiempoTranscurrido(pedido.hora)}
+                    enCarga={cargandoEstado === idVisible}
+                    onListo={marcarComoListo}
+                  />
+                )
+              })}
+            </AnimatePresence>
           </div>
         )}
       </main>
 
-      {/* MODAL DE CONFIRMACIÓN / FEEDBACK */}
-      {modalConfirmacion && (
-        <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full border-2 border-gray-700 shadow-2xl">
-            {modalConfirmacion.tipo === "confirmar" && (
-              <>
-                <div className="flex items-center gap-3 mb-3">
-                  <AlertCircle
-                    className="text-orange-400 flex-shrink-0"
-                    size={32}
-                  />
-                  <h3 className="text-xl font-bold text-white">
-                    {modalConfirmacion.titulo}
-                  </h3>
-                </div>
-                <p className="text-gray-300 text-base mb-8 ml-1">
-                  {modalConfirmacion.mensaje}
-                </p>
-                <div className="flex gap-4">
-                  <button
-                    onClick={modalConfirmacion.onCancelar}
-                    aria-label="Cancelar"
-                    className="flex-1 min-h-[64px] bg-gray-600 hover:bg-gray-500 active:scale-95 text-white rounded-lg text-lg font-bold transition-all shadow"
-                  >
-                    ✕ Cancelar
-                  </button>
-                  <button
-                    onClick={modalConfirmacion.onConfirmar}
-                    aria-label="Confirmar"
-                    autoFocus
-                    className="flex-1 min-h-[64px] bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-lg text-lg font-bold transition-all shadow"
-                  >
-                    ✓ Confirmar
-                  </button>
-                </div>
-              </>
-            )}
-            {modalConfirmacion.tipo === "exito" && (
-              <div className="flex flex-col items-center text-center py-2">
-                <CheckCircle className="text-green-400 mb-3" size={56} />
-                <p className="text-white font-semibold text-lg">
-                  {modalConfirmacion.mensaje}
-                </p>
-              </div>
-            )}
-            {modalConfirmacion.tipo === "error" && (
-              <div className="flex flex-col items-center text-center py-2">
-                <AlertCircle className="text-red-400 mb-3" size={56} />
-                <p className="text-red-400 font-semibold text-lg">
-                  {modalConfirmacion.mensaje}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+        <AnimatePresence>
+          {aviso && (
+            <motion.div
+              role={aviso.tipo === "error" ? "alert" : "status"}
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 24 }}
+              transition={{ duration: 0.35, ease }}
+              className={`flex items-center gap-3 rounded-full px-5 py-3.5 text-[15px] font-bold shadow-lift ${
+                aviso.tipo === "error" ? "bg-red-700 text-white" : "bg-white text-espresso"
+              }`}
+            >
+              {aviso.tipo === "error" ? <AlertCircle size={20} /> : <Check size={20} className="text-green-600" strokeWidth={3} />}
+              {aviso.texto}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

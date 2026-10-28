@@ -1,6 +1,7 @@
 // src/Facturacion.js - CON SOPORTE PARA DOMICILIOS
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle, Users, Truck } from 'lucide-react';
+import { Search, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle, Users, Truck, Banknote, CreditCard, QrCode, Calendar } from 'lucide-react';
+import CountUp from './components/reactbits/CountUp/CountUp';
 import * as api from './services/api';
 import { getDomicilios, actualizarEstadoDomicilio } from './services/domiciliosApi';
 import { etiquetaImpuesto, impuestoIncluido } from './utils/impuestos';
@@ -16,10 +17,10 @@ function Toast({ mensaje, tipo, onClose }) {
 
   return (
     <div className="fixed top-4 right-4 z-50 animate-slide-in">
-      <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg ${
-        tipo === 'success' ? 'bg-green-500 text-white' :
-        tipo === 'error' ? 'bg-red-500 text-white' :
-        'bg-blue-500 text-white'
+      <div className={`flex items-center gap-3 rounded-2xl px-5 py-3.5 shadow-lift ${
+        tipo === 'success' ? 'bg-green-700 text-white' :
+        tipo === 'error' ? 'bg-red-700 text-white' :
+        'bg-espresso text-white'
       }`}>
         {tipo === 'success' ? (
           <CheckCircle size={24} />
@@ -646,119 +647,88 @@ function Facturacion() {
         />
       )}
 
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Receipt className="text-blue-600" size={32} />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">Sistema de Facturación</h1>
-                <p className="text-gray-600">QPro - Mesas y Domicilios</p>
-              </div>
-            </div>
-            <div className="flex gap-2 items-center">
-              <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-xs text-green-700 font-medium">Actualización automática</span>
-              </div>
-              
+      <header className="border-b border-gray-200 bg-white">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-end justify-between gap-4 px-4 py-6 lg:px-6">
+          <div>
+            <h1 className="text-[28px] font-extrabold tracking-[-0.02em] text-espresso">Caja</h1>
+            <p className="mt-1 text-[14px] text-gray-500">Cobros de mesas y domicilios · se actualiza cada 15 s</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => cargarDatos(true)}
+              disabled={cargando}
+              className="h-10 rounded-xl border border-gray-300 bg-white px-4 text-[14px] font-semibold text-espresso transition-colors hover:bg-gray-50 disabled:text-gray-400"
+            >
+              {cargando ? 'Actualizando…' : 'Actualizar'}
+            </button>
+            {facturas.length > 0 && (
               <button
-                onClick={() => cargarDatos(true)}
-                disabled={cargando}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400"
+                onClick={exportarExcel}
+                className="flex h-10 items-center gap-2 rounded-xl bg-espresso px-4 text-[14px] font-semibold text-white transition-colors hover:bg-gray-900"
               >
-                {cargando ? 'Actualizando...' : 'Actualizar'}
+                <Download size={16} />
+                Exportar CSV
               </button>
-              {facturas.length > 0 && (
-                <button
-                  onClick={exportarExcel}
-                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  <Download size={20} />
-                  Exportar CSV
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="bg-white p-6 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Ventas del Día</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {formatearPrecio(totalesDelDia.ventasTotal)}
-                </p>
-              </div>
-              <DollarSign className="text-green-600" size={32} />
-            </div>
+      <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6">
+        <dl className="mb-6 grid grid-cols-1 divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="p-5">
+            <dt className="text-[13px] font-semibold text-gray-500">Ventas cobradas</dt>
+            <dd className="tabular mt-1 text-[26px] font-extrabold tracking-[-0.02em] text-espresso">
+              $<CountUp to={totalesDelDia.ventasTotal} separator="." duration={0.8} trigger="load" />
+            </dd>
           </div>
-          
-          <div className="bg-white p-6 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Transacciones</p>
-                <p className="text-2xl font-bold text-blue-600">{totalesDelDia.transacciones}</p>
-              </div>
-              <FileText className="text-blue-600" size={32} />
-            </div>
+          <div className="p-5">
+            <dt className="text-[13px] font-semibold text-gray-500">Transacciones</dt>
+            <dd className="tabular mt-1 text-[26px] font-extrabold tracking-[-0.02em] text-espresso">
+              <CountUp to={totalesDelDia.transacciones} duration={0.8} trigger="load" />
+            </dd>
           </div>
-          
-          <div className="bg-white p-6 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 text-sm">Impuestos</p>
-                <p className="text-2xl font-bold text-orange-600">
-                  {formatearPrecio(totalesDelDia.impuestosTotal)}
-                </p>
-              </div>
-              <Calendar className="text-orange-600" size={32} />
-            </div>
+          <div className="p-5">
+            <dt className="text-[13px] font-semibold text-gray-500">{etiquetaImpuesto()}</dt>
+            <dd className="tabular mt-1 text-[26px] font-extrabold tracking-[-0.02em] text-espresso">
+              $<CountUp to={totalesDelDia.impuestosTotal} separator="." duration={0.8} trigger="load" />
+            </dd>
           </div>
-        </div>
+        </dl>
 
         {facturas.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <Receipt className="mx-auto text-gray-400 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay pedidos listos para facturar</h3>
-            <p className="text-gray-500 mb-4">
-              Los pedidos aparecerán aquí cuando estén listos
+          <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center">
+            <Receipt className="mx-auto text-gray-300" size={44} strokeWidth={1.5} />
+            <h3 className="mt-4 text-[18px] font-bold text-espresso">No hay cuentas por cobrar</h3>
+            <p className="mx-auto mt-2 max-w-sm text-[14px] leading-relaxed text-gray-500">
+              Las mesas aparecen aquí cuando el mesero las marca como entregadas, y los domicilios cuando salen en camino.
             </p>
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 max-w-md mx-auto">
-              <p className="text-sm text-blue-800">
-                <strong>Mesas:</strong> Cuando se marcan como "Entregado"<br/>
-                <strong>Domicilios:</strong> Cuando están "En Camino"
-              </p>
-            </div>
             <button
               onClick={() => cargarDatos(true)}
-              className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              className="mt-6 h-10 rounded-xl bg-espresso px-5 text-[14px] font-semibold text-white hover:bg-gray-900"
             >
               Recargar
             </button>
           </div>
         ) : (
           <>
-            <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="mb-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input
                     type="text"
-                    placeholder="Buscar..."
+                    placeholder="Buscar mesa, cliente o factura"
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="h-10 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-[14px] placeholder:text-gray-500 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
                   />
                 </div>
-                
+
                 <select
                   value={filtroEstado}
                   onChange={(e) => setFiltroEstado(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="h-10 rounded-xl border border-gray-300 bg-white px-3 text-[14px] focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
                 >
                   <option value="todas">Todos los estados</option>
                   <option value="pagada">Pagadas</option>
@@ -766,12 +736,23 @@ function Facturacion() {
                   <option value="cancelada">Canceladas</option>
                 </select>
                 
-                <input
-                  type="date"
-                  value={filtroFecha}
-                  onChange={(e) => setFiltroFecha(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
+                {/* El selector nativo queda invisible encima: abre el calendario del sistema,
+                    pero la fecha se muestra en español sin depender del idioma del navegador. */}
+                <label className="relative flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 text-[14px] focus-within:border-orange-500 focus-within:ring-4 focus-within:ring-orange-100">
+                  <Calendar size={16} className="shrink-0 text-gray-500" aria-hidden="true" />
+                  <span className={filtroFecha ? 'text-espresso' : 'text-gray-500'}>
+                    {filtroFecha
+                      ? new Date(`${filtroFecha}T12:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : 'Todas las fechas'}
+                  </span>
+                  <input
+                    type="date"
+                    value={filtroFecha}
+                    onChange={(e) => setFiltroFecha(e.target.value)}
+                    aria-label="Filtrar por fecha"
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                  />
+                </label>
                 
                 <button
                   onClick={() => {
@@ -782,84 +763,62 @@ function Facturacion() {
                     localStorage.setItem('filtroEstadoFacturacion', 'todas');
                     localStorage.removeItem('filtroFechaFacturacion');
                   }}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  className="h-10 rounded-xl px-4 text-[14px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 hover:text-espresso"
                 >
-                  Limpiar Filtros
+                  Limpiar filtros
                 </button>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {facturasFiltradas.map((factura) => (
-                <div 
-                  key={factura.id} 
-                  className={`bg-white rounded-lg shadow-sm overflow-hidden transition-all ${
-                    factura.estado === 'pagada' 
-                      ? 'border-2 border-green-500 shadow-green-100' 
-                      : factura.estado === 'cancelada'
-                      ? 'border-2 border-red-500 shadow-red-100'
-                      : factura.estado === 'pendiente'
-                      ? 'border-2 border-yellow-500 shadow-yellow-100'
-                      : 'border border-gray-200'
+                <div
+                  key={factura.id}
+                  className={`overflow-hidden rounded-2xl border bg-white transition-shadow hover:shadow-card ${
+                    factura.estado === 'pendiente' ? 'border-amber-300' : 'border-gray-200'
                   }`}
                 >
-                  <div className={`p-4 ${
-                    factura.estado === 'pagada' ? 'bg-green-50' : 
-                    factura.estado === 'cancelada' ? 'bg-red-50' :
-                    factura.estado === 'pendiente' ? 'bg-yellow-50' :
-                    'bg-gray-50'
-                  }`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            {/* ✅ Badge de tipo */}
-                            {factura.tipo === 'domicilio' ? (
-                              <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                                <Truck size={14} />
-                                DOMICILIO
-                              </span>
-                            ) : (
-                              <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                                <Users size={14} />
-                                MESA
-                              </span>
-                            )}
-                            
-                            <h3 className="text-xl font-bold text-gray-900">{factura.mesa}</h3>
-                            <p className="text-sm text-gray-600">
-                              {factura.numeroFactura}
-                            </p>
-
-                            <span className={`px-3 py-1 text-xs font-semibold rounded-full flex items-center gap-1 ${
-                              factura.estado === 'pagada' ? 'bg-green-100 text-green-800' :
-                              factura.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
+                  <div className="p-4 lg:px-5">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex min-w-0 flex-1 items-center gap-4">
+                        <span
+                          className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${
+                            factura.tipo === 'domicilio' ? 'bg-purple-50 text-purple-700' : 'bg-orange-50 text-orange-700'
+                          }`}
+                          aria-label={factura.tipo === 'domicilio' ? 'Domicilio' : 'Mesa'}
+                        >
+                          {factura.tipo === 'domicilio' ? <Truck size={20} /> : <Users size={20} />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <h3 className="text-[17px] font-extrabold text-espresso">
+                              {factura.tipo === 'domicilio' ? factura.mesa : `Mesa ${factura.mesa}`}
+                            </h3>
+                            <span className="tabular text-[13px] font-semibold text-gray-500">{factura.numeroFactura}</span>
+                            <span className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-bold ${
+                              factura.estado === 'pagada' ? 'bg-green-50 text-green-800' :
+                              factura.estado === 'pendiente' ? 'bg-amber-50 text-amber-800' :
+                              'bg-red-50 text-red-800'
                             }`}>
-                              {factura.estado === 'pagada' && <Check size={14} />}
+                              {factura.estado === 'pagada' && <Check size={12} strokeWidth={3} />}
                               {factura.estado.charAt(0).toUpperCase() + factura.estado.slice(1)}
                             </span>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="font-medium">{factura.cliente.nombre}</span>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-gray-500">
+                            <span className="font-semibold text-gray-700">{factura.cliente.nombre}</span>
                             {factura.tipo === 'domicilio' && factura.cliente.telefono && (
-                              <>
-                                <span>•</span>
-                                <span>📱 {factura.cliente.telefono}</span>
-                              </>
+                              <span className="tabular">{factura.cliente.telefono}</span>
                             )}
-                            <span>•</span>
-                            <span>{formatearFecha(factura.fecha)}</span>
-                            <span>•</span>
-                            <span className="font-bold text-green-600 text-base">{formatearPrecio(factura.total)}</span>
+                            <span className="tabular">{formatearFecha(factura.fecha)}</span>
                           </div>
                         </div>
+                        <span className="tabular shrink-0 text-[18px] font-extrabold text-espresso">{formatearPrecio(factura.total)}</span>
                       </div>
 
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => toggleExpandir(factura.id)}
-                          className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                          className="flex h-10 items-center gap-1.5 rounded-xl px-3 text-[14px] font-semibold text-gray-600 transition-colors hover:bg-gray-100 hover:text-espresso"
                         >
                           {facturaExpandida === factura.id ? (
                             <>
@@ -869,14 +828,14 @@ function Facturacion() {
                           ) : (
                             <>
                               <ChevronDown size={18} />
-                              <span className="text-sm font-medium">Ver Detalles</span>
+                              <span className="text-sm font-medium">Detalles</span>
                             </>
                           )}
                         </button>
                         
                         <button
                           onClick={() => imprimirFactura(factura)}
-                          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                          className="flex h-10 items-center gap-2 rounded-xl border border-gray-300 bg-white px-3.5 text-espresso transition-colors hover:bg-gray-50"
                         >
                           <Printer size={16} />
                           <span className="text-sm font-medium">Imprimir</span>
@@ -887,14 +846,14 @@ function Facturacion() {
                             <button
                               onClick={() => marcarComoPagada(factura)}
                               disabled={factura.estado === 'pagada' || cargando}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-l-lg font-medium text-sm transition-colors ${
+                              className={`flex h-10 items-center gap-2 rounded-l-xl px-4 text-sm font-semibold transition-colors ${
                                 factura.estado === 'pagada'
-                                  ? 'bg-green-600 text-white cursor-not-allowed'
-                                  : 'bg-green-500 text-white hover:bg-green-600'
+                                  ? 'cursor-not-allowed bg-green-50 text-green-800'
+                                  : 'bg-espresso text-white hover:bg-gray-900'
                               }`}
                             >
                               <Check size={16} />
-                              {factura.estado === 'pagada' ? 'Pagada' : 'Marcar Pagada'}
+                              {factura.estado === 'pagada' ? 'Pagada' : 'Cobrar'}
                             </button>
                             <button
                               onClick={(e) => {
@@ -902,10 +861,11 @@ function Facturacion() {
                                 toggleMenu(factura.id, e);
                               }}
                               disabled={cargando}
-                              className={`px-2 py-2 rounded-r-lg border-l border-white/30 transition-colors ${
+                              aria-label="Más acciones"
+                              className={`h-10 rounded-r-xl border-l px-2 transition-colors ${
                                 factura.estado === 'pagada'
-                                  ? 'bg-green-600 text-white hover:bg-green-700'
-                                  : 'bg-green-500 text-white hover:bg-green-600'
+                                  ? 'border-green-200 bg-green-50 text-green-800 hover:bg-green-100'
+                                  : 'border-white/20 bg-espresso text-white hover:bg-gray-900'
                               }`}
                             >
                               <ChevronDown size={16} />
@@ -958,12 +918,11 @@ function Facturacion() {
                   </div>
 
                   {facturaExpandida === factura.id && (
-                    <div className="p-6 bg-white border-t-2 border-gray-200">
+                    <div className="border-t border-gray-200 bg-white p-5 lg:p-6">
                       <div className="grid grid-cols-1 gap-6 mb-6">
-                        <div className="bg-gradient-to-br from-green-50 to-white p-5 rounded-lg border border-green-100">
-                          <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase flex items-center gap-2">
-                            <span className="w-2 h-2 bg-green-600 rounded-full"></span>
-                            Información de la Venta
+                        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                          <h4 className="mb-4 text-[15px] font-bold text-espresso">
+                            Información de la venta
                           </h4>
                           <div className="grid grid-cols-2 gap-4 text-sm">
                             <div className="flex justify-between items-center">
@@ -987,8 +946,8 @@ function Facturacion() {
                             <div className="flex justify-between items-center">
                               <span className="text-gray-600">Estado:</span>
                               <span className={`font-semibold capitalize ${
-                                factura.estado === 'pagada' ? 'text-green-600' :
-                                factura.estado === 'pendiente' ? 'text-yellow-600' :
+                                factura.estado === 'pagada' ? 'text-green-700' :
+                                factura.estado === 'pendiente' ? 'text-amber-700' :
                                 'text-red-600'
                               }`}>
                                 {factura.estado}
@@ -999,38 +958,37 @@ function Facturacion() {
                       </div>
 
                       {factura.notasCliente && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                          <h4 className="font-bold text-gray-800 mb-2 text-sm">Notas del Cliente</h4>
+                        <div className="mb-4 rounded-2xl bg-amber-50 p-4">
+                          <h4 className="mb-1 text-[14px] font-bold text-espresso">Notas del cliente</h4>
                           <p className="text-sm text-gray-700">{factura.notasCliente}</p>
                         </div>
                       )}
 
-                      <div className="bg-gradient-to-br from-orange-50 to-white p-5 rounded-lg border border-orange-100 mb-4">
-                        <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase flex items-center gap-2">
-                          <span className="w-2 h-2 bg-orange-600 rounded-full"></span>
-                          Detalle de Productos
+                      <div className="mb-4 rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                        <h4 className="mb-4 text-[15px] font-bold text-espresso">
+                          Detalle de productos
                         </h4>
                         <div className="overflow-x-auto">
                           <table className="w-full">
                             <thead>
-                              <tr className="bg-orange-100 border-b-2 border-orange-200">
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Producto</th>
-                                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase">Cantidad</th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Precio Unit.</th>
-                                <th className="px-4 py-3 text-right text-xs font-bold text-gray-700 uppercase">Total</th>
+                              <tr className="border-b border-gray-200">
+                                <th className="px-4 py-3 text-left text-[13px] font-semibold text-gray-500">Producto</th>
+                                <th className="px-4 py-3 text-center text-[13px] font-semibold text-gray-500">Cantidad</th>
+                                <th className="px-4 py-3 text-right text-[13px] font-semibold text-gray-500">Precio unit.</th>
+                                <th className="px-4 py-3 text-right text-[13px] font-semibold text-gray-500">Total</th>
                               </tr>
                             </thead>
                             <tbody>
                               {factura.items.map((item, index) => (
-                                <tr key={index} className="border-b border-gray-200 hover:bg-orange-50 transition-colors">
+                                <tr key={index} className="border-b border-gray-200 last:border-0">
                                   <td className="px-4 py-3 text-sm font-medium text-gray-800">{item.nombre}</td>
                                   <td className="px-4 py-3 text-sm text-center">
-                                    <span className="inline-flex items-center justify-center w-8 h-8 bg-orange-600 text-white font-bold rounded-full">
+                                    <span className="tabular inline-grid h-8 min-w-[2rem] place-items-center rounded-lg bg-orange-500 px-1.5 font-bold text-espresso">
                                       {item.cantidad}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-right text-gray-700">{formatearPrecio(item.precio)}</td>
-                                  <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{formatearPrecio(item.total)}</td>
+                                  <td className="tabular px-4 py-3 text-right text-sm text-gray-700">{formatearPrecio(item.precio)}</td>
+                                  <td className="tabular px-4 py-3 text-right text-sm font-bold text-espresso">{formatearPrecio(item.total)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1038,28 +996,28 @@ function Facturacion() {
                         </div>
                       </div>
 
-                      <div className="bg-gradient-to-br from-gray-50 to-white p-5 rounded-lg border-2 border-gray-300">
+                      <div className="rounded-2xl border border-gray-200 bg-white p-5">
                         <div className="flex justify-end">
                           <div className="w-full md:w-96">
-                            <h4 className="font-bold text-gray-800 mb-4 text-sm uppercase">Resumen</h4>
+                            <h4 className="mb-4 text-[15px] font-bold text-espresso">Resumen</h4>
                             <div className="space-y-3">
                               <div className="flex justify-between text-sm py-2 border-b border-gray-200">
                                 <span className="text-gray-600 font-medium">Subtotal:</span>
-                                <span className="font-semibold text-gray-900">{formatearPrecio(factura.subtotal)}</span>
+                                <span className="tabular font-semibold text-espresso">{formatearPrecio(factura.subtotal)}</span>
                               </div>
                               {factura.tipo === 'domicilio' && factura.costoEnvio > 0 && (
                                 <div className="flex justify-between text-sm py-2 border-b border-gray-200">
                                   <span className="text-gray-600 font-medium">Envío:</span>
-                                  <span className="font-semibold text-purple-600">{formatearPrecio(factura.costoEnvio)}</span>
+                                  <span className="tabular font-semibold text-espresso">{formatearPrecio(factura.costoEnvio)}</span>
                                 </div>
                               )}
                               <div className="flex justify-between text-sm py-2 border-b border-gray-200">
                                 <span className="text-gray-600 font-medium">{etiquetaImpuesto()}:</span>
-                                <span className="font-semibold text-orange-600">{formatearPrecio(factura.impuestos)}</span>
+                                <span className="tabular font-semibold text-gray-600">{formatearPrecio(factura.impuestos)}</span>
                               </div>
-                              <div className="flex justify-between pt-3 border-t-2 border-gray-900">
-                                <span className="text-lg font-bold text-gray-900">TOTAL:</span>
-                                <span className="text-xl font-bold text-green-600">{formatearPrecio(factura.total)}</span>
+                              <div className="flex items-baseline justify-between pt-3">
+                                <span className="text-[16px] font-bold text-espresso">Total</span>
+                                <span className="tabular text-[22px] font-extrabold text-espresso">{formatearPrecio(factura.total)}</span>
                               </div>
                             </div>
                           </div>
@@ -1076,104 +1034,65 @@ function Facturacion() {
 
       {/* Modal de Método de Pago */}
       {modalPago && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-scale-in">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <DollarSign className="text-green-600" size={32} />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Confirmar Pago</h3>
-              <p className="text-gray-600">
-                {modalPago.tipo === 'domicilio' ? '¿El domicilio fue entregado y pagado?' : 'Selecciona cómo paga el cliente'}
-              </p>
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-700">
-                  <span className="font-semibold">{modalPago.tipo === 'domicilio' ? 'Domicilio:' : 'Pedido:'}</span> {modalPago.tipo === 'domicilio' ? modalPago.domicilioId : `#${modalPago.pedidoId}`}
-                </p>
-                <p className="text-sm text-gray-700">
-                  <span className="font-semibold">{modalPago.tipo === 'domicilio' ? 'Cliente:' : 'Mesa:'}</span> {modalPago.tipo === 'domicilio' ? modalPago.cliente.nombre : modalPago.mesa}
-                </p>
-                <p className="text-lg font-bold text-green-600 mt-2">
-                  {formatearPrecio(modalPago.total)}
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-espresso/55 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="titulo-cobro">
+          <div className="animate-scale-in w-full max-w-md rounded-3xl bg-white p-6 shadow-lift">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 id="titulo-cobro" className="text-[22px] font-extrabold tracking-[-0.02em] text-espresso">
+                  {modalPago.tipo === 'domicilio' ? 'Confirmar entrega y pago' : 'Cobrar'}
+                </h3>
+                <p className="mt-1 text-[14px] text-gray-500">
+                  {modalPago.tipo === 'domicilio'
+                    ? `Domicilio #${modalPago.domicilioId} · ${modalPago.cliente.nombre}`
+                    : `Mesa ${modalPago.mesa} · Pedido #${modalPago.pedidoId}`}
                 </p>
               </div>
+              <button
+                onClick={() => setModalPago(null)}
+                disabled={cargando}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
+                aria-label="Cancelar"
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="space-y-3 mb-6">
+            <p className="tabular mt-5 text-[40px] font-extrabold leading-none tracking-[-0.03em] text-espresso">
+              {formatearPrecio(modalPago.total)}
+            </p>
+            <p className="mt-1 text-[13px] text-gray-500">{etiquetaImpuesto()}</p>
+
+            <div className="mt-6 space-y-2">
               {modalPago.tipo === 'domicilio' ? (
-                // Para domicilios, solo confirmar entrega
                 <button
                   onClick={() => confirmarPago(modalPago.metodoPago)}
                   disabled={cargando}
-                  className="w-full flex items-center justify-center gap-2 p-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all shadow-lg disabled:opacity-50"
+                  className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-espresso text-[15px] font-bold text-white transition-colors hover:bg-gray-900 disabled:bg-gray-300"
                 >
-                  <CheckCircle size={24} />
-                  <span className="font-bold text-lg">Confirmar Entrega y Pago</span>
+                  <CheckCircle size={20} />
+                  Confirmar entrega y pago
                 </button>
               ) : (
-                // Para mesas, seleccionar método de pago
-                <>
+                [
+                  { metodo: 'Efectivo', icono: Banknote, texto: 'Efectivo' },
+                  { metodo: 'Tarjeta', icono: CreditCard, texto: 'Tarjeta débito o crédito' },
+                  { metodo: 'QR', icono: QrCode, texto: 'QR o transferencia' }
+                ].map(({ metodo, icono: Icono, texto }) => (
                   <button
-                    onClick={() => confirmarPago('Efectivo')}
+                    key={metodo}
+                    onClick={() => confirmarPago(metodo)}
                     disabled={cargando}
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50"
+                    className="group flex h-14 w-full items-center gap-3 rounded-2xl border border-gray-200 px-4 text-left transition-colors hover:border-espresso hover:bg-espresso hover:text-white disabled:opacity-50"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                        <span className="text-2xl">💵</span>
-                      </div>
-                      <div className="text-left">
-                        <p className="font-bold text-lg">Efectivo</p>
-                        <p className="text-sm text-green-100">Pago en efectivo</p>
-                      </div>
-                    </div>
-                    <ChevronDown className="rotate-[-90deg]" size={24} />
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-orange-50 text-orange-700 transition-colors group-hover:bg-white/10 group-hover:text-orange-200">
+                      <Icono size={18} />
+                    </span>
+                    <span className="flex-1 text-[15px] font-bold">{texto}</span>
+                    <ChevronDown className="-rotate-90 text-gray-400 group-hover:text-white" size={18} />
                   </button>
-
-                  <button
-                    onClick={() => confirmarPago('Tarjeta')}
-                    disabled={cargando}
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                        <span className="text-2xl">💳</span>
-                      </div>
-                      <div className="text-left">
-                        <p className="font-bold text-lg">Tarjeta</p>
-                        <p className="text-sm text-blue-100">Débito o crédito</p>
-                      </div>
-                    </div>
-                    <ChevronDown className="rotate-[-90deg]" size={24} />
-                  </button>
-
-                  <button
-                    onClick={() => confirmarPago('QR')}
-                    disabled={cargando}
-                    className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                        <span className="text-2xl">🌐</span>
-                      </div>
-                      <div className="text-left">
-                        <p className="font-bold text-lg">QR / Transferencia</p>
-                        <p className="text-sm text-purple-100">Pago digital</p>
-                      </div>
-                    </div>
-                    <ChevronDown className="rotate-[-90deg]" size={24} />
-                  </button>
-                </>
+                ))
               )}
             </div>
-
-            <button
-              onClick={() => setModalPago(null)}
-              disabled={cargando}
-              className="w-full py-3 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium disabled:opacity-50"
-            >
-              Cancelar
-            </button>
           </div>
         </div>
       )}

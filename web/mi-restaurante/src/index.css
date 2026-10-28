@@ -1,13 +1,63 @@
+:root {
+  --qp-ink: #2a1d15;
+  --qp-caramel: #c8955e;
+  --qp-caramel-soft: #f5e9da;
+  --qp-line: #e7e5e4;
+  --qp-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--qp-ink);
+  background: #ffffff;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  font-feature-settings: 'tnum' 0;
+}
+
+/* Superficies del navegador con la paleta de Qpro */
+::selection {
+  background: var(--qp-caramel-soft);
+  color: var(--qp-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--qp-caramel);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6d3d1 transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 999px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+input, textarea, select { caret-color: var(--qp-caramel); }
+
+/* Cifras de precios y totales alineadas */
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Riel horizontal con snap, sin barra visible en táctil */
+.qp-rail {
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.qp-rail::-webkit-scrollbar { display: none; }
+.qp-rail > * { scroll-snap-align: start; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
