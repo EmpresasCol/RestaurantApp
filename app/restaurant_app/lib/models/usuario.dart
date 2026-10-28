@@ -1,4 +1,5 @@
-enum RolUsuario { administrador, mesero, cocina, caja }
+// Mismos roles que la API. Un rol desconocido NO se convierte en uno con permisos.
+enum RolUsuario { administrador, mesero, cocina, caja, domiciliario, desconocido }
 
 class Usuario {
   final int id;
@@ -18,7 +19,7 @@ class Usuario {
       id: json['id'],
       nombre: json['nombre'],
       nombreUsuario: json['nombreUsuario'],
-      rol: _rolFromString(json['rol']),
+      rol: _rolFromString(json['rol'] ?? ''),
     );
   }
 
@@ -28,7 +29,8 @@ class Usuario {
       case 'mesero': return RolUsuario.mesero;
       case 'cocina': return RolUsuario.cocina;
       case 'caja': return RolUsuario.caja;
-      default: return RolUsuario.mesero;
+      case 'domiciliario': return RolUsuario.domiciliario;
+      default: return RolUsuario.desconocido;
     }
   }
 }

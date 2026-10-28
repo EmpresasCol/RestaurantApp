@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/domicilio_domiciliario.dart';
 import '../services/domiciliario_service.dart';
+import '../services/sesion.dart';
 
 class DomiciliarioProvider with ChangeNotifier {
   final DomiciliarioService _service = DomiciliarioService();
@@ -45,8 +46,10 @@ class DomiciliarioProvider with ChangeNotifier {
 
   Future<void> cargarDesdePrefs() async {
     final prefs = await SharedPreferences.getInstance();
+    await Sesion.cargar();
     final jsonStr = prefs.getString('domiciliario_sesion');
-    if (jsonStr == null) return;
+    // Sin token no hay sesión: la API rechazaría todas las peticiones.
+    if (jsonStr == null || Sesion.token == null) return;
 
     try {
       final data = json.decode(jsonStr);
@@ -92,6 +95,7 @@ class DomiciliarioProvider with ChangeNotifier {
     _entregasTotales = 0;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('domiciliario_sesion');
+    await Sesion.cerrar();
     notifyListeners();
   }
 

@@ -42,7 +42,9 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: ${ENVIRONMENT:-Production}
-      EnableSwagger: ${ENABLE_SWAGGER:-true}
+      EnableSwagger: ${ENABLE_SWAGGER:-false}
+      Jwt__Key: ${JWT_KEY:-}
+      Cors__Origenes: ${CORS_ORIGENES:-http://localhost:3000,http://localhost:3001}
       ConnectionStrings__DefaultConnection: "server=restaurant-db;port=3306;database=${DB_NAME:-restaurantebd};user=root;password=${DB_ROOT_PASSWORD:-root};"
     ports:
       - "${API_PORT:-5000}:5000"

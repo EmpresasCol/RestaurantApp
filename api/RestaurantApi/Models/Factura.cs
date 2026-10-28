@@ -11,7 +11,7 @@
         public decimal Propina { get; set; } = 0;
         public decimal Total { get; set; }
         public string? ArchivoUrl { get; set; }
-        public DateTime FechaEmision { get; set; } = DateTime.Now;
+        public DateTime FechaEmision { get; set; } = DateTime.UtcNow;
 
         // Relación
         public Pago? Pago { get; set; }

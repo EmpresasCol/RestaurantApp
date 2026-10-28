@@ -56,6 +56,6 @@ namespace RestaurantApi.Models
         [StringLength(500)]
         public string? Notas { get; set; }
 
-        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     }
 }

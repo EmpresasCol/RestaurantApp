@@ -1,4 +1,5 @@
-enum EstadoMesa { libre, ocupada, reservada }
+// Estados de la API: Disponible, Ocupada, EsperandoPago.
+enum EstadoMesa { libre, ocupada, esperandoPago, reservada }
 
 class Mesa {
   final int id;
@@ -17,19 +18,27 @@ class Mesa {
 
   factory Mesa.fromJson(Map<String, dynamic> json) {
     return Mesa(
-      id: json['id'] ?? 0,  // ✅ Protección contra null
+      id: json['id'] ?? 0,
       numero: json['numero'] ?? 0,
       capacidad: json['capacidad'] ?? 4,
-      estado: _estadoFromString(json['estado'] ?? 'libre'),
+      estado: _estadoFromString(json['estado'] ?? ''),
     );
   }
 
   static EstadoMesa _estadoFromString(String estado) {
     switch (estado.toLowerCase()) {
-      case 'libre': return EstadoMesa.libre;
-      case 'ocupada': return EstadoMesa.ocupada;
-      case 'reservada': return EstadoMesa.reservada;
-      default: return EstadoMesa.libre;
+      case 'disponible':
+      case 'libre':
+        return EstadoMesa.libre;
+      case 'ocupada':
+        return EstadoMesa.ocupada;
+      case 'esperandopago':
+        return EstadoMesa.esperandoPago;
+      case 'reservada':
+        return EstadoMesa.reservada;
+      // Un estado desconocido nunca debe ofrecer la mesa como libre.
+      default:
+        return EstadoMesa.ocupada;
     }
   }
 }

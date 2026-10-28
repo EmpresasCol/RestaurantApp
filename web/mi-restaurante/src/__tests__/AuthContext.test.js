@@ -23,8 +23,15 @@ function renderConAuth() {
   return { ref, ...utils };
 }
 
-// Respuesta real de POST /api/usuarios/login (LoginResponseDto: sin token)
-const respuestaLoginApi = (rol) => ({ id: 1, nombre: 'Ana', nombreUsuario: 'ana', rol });
+// JWT con la forma que emite la API (el cliente no verifica la firma; la API sí).
+const jwtDePrueba = (rol) => {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  return `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: '1', role: rol, exp })}.firma`;
+};
+
+// Respuesta real de POST /api/usuarios/login (LoginResponseDto, ahora con token)
+const respuestaLoginApi = (rol) => ({ id: 1, nombre: 'Ana', nombreUsuario: 'ana', rol, token: jwtDePrueba(rol) });
 
 beforeEach(() => {
   localStorage.clear();

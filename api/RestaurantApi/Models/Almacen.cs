@@ -29,6 +29,6 @@ namespace RestaurantApi.Models
 
         public bool Activo { get; set; } = true;
 
-        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     }
 }

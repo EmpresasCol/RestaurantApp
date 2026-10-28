@@ -61,9 +61,11 @@ namespace RestaurantApi.Services
                     return;
                 }
 
-                foreach (var token in tokens)
+                // Sin credenciales de Firebase no hay a quién enviar (los tokens nunca se imprimen).
+                if (FirebaseMessaging.DefaultInstance == null)
                 {
-                    Console.WriteLine($"   Token: {token.Substring(0, 20)}...");
+                    Console.WriteLine("⚠️ Firebase no está inicializado; se omite la notificación");
+                    return;
                 }
 
                 var message = new MulticastMessage()
@@ -113,7 +115,6 @@ namespace RestaurantApi.Services
             catch (Exception ex)
             {
                 Console.WriteLine($"❌ Error enviando notificación: {ex.Message}");
-                Console.WriteLine($"   Stack: {ex.StackTrace}");
             }
         }
     }

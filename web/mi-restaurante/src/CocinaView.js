@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { POLLING_DOMICILIOS_MS, ordenarPorPrioridad, transformarDomicilios } from "./utils/kds"
 import {
   ChefHat,
   Clock,
@@ -14,14 +15,12 @@ import {
   actualizarEstadoDomicilio,
 } from "./services/domiciliosApi"
 
-const POLLING_DOMICILIOS_MS = 5000
-
 function CocinaView({ pedidos = [], onActualizarPedidos }) {
   const { usuario, logout } = useAuth()
 
   const [cargandoEstado, setCargandoEstado] = useState(null)
   const [modalConfirmacion, setModalConfirmacion] = useState(null)
-  const [todosLosPedidos, setTodosLosPedidos] = useState([])
+  const [domicilios, setDomicilios] = useState([])
   const [horaActual, setHoraActual] = useState(new Date())
 
   // Reloj del header (segundo a segundo)
@@ -30,50 +29,23 @@ function CocinaView({ pedidos = [], onActualizarPedidos }) {
     return () => clearInterval(t)
   }, [])
 
-  const transformarDomicilios = useCallback((domiciliosData) => {
-    if (!Array.isArray(domiciliosData)) return []
-    return domiciliosData
-      .filter((d) => d.estado === "EnPreparacion")
-      .map((d) => ({
-        id: `D${d.id}`,
-        domicilioId: d.id,
-        mesa: `Domicilio #${d.id}`,
-        cliente: d.clienteNombre,
-        telefono: d.clienteTelefono,
-        direccion: d.direccionCompleta,
-        items: d.detalles.map((det) => ({
-          id: det.id,
-          nombre: det.platilloNombre,
-          cantidad: det.cantidad,
-          notas: det.nota || "",
-        })),
-        hora: new Date(d.fechaPedido),
-        estado: "EnPreparacion",
-        tipo: "domicilio",
-        notasCliente: d.notasCliente,
-      }))
-  }, [])
-
   const cargarTodosLosDatos = useCallback(async () => {
     try {
-      const domiciliosData = await getDomiciliosActivos()
-      const domicilios = transformarDomicilios(domiciliosData)
-      const mesas = (pedidos || []).map((p) => ({ ...p, tipo: "mesa" }))
-      setTodosLosPedidos([...mesas, ...domicilios])
+      setDomicilios(transformarDomicilios(await getDomiciliosActivos()))
     } catch (error) {
-      console.error("Error al cargar datos:", error)
+      console.error("Error al cargar domicilios:", error)
     }
-  }, [pedidos, transformarDomicilios])
+  }, [])
 
+  // Polling solo de domicilios con intervalo estable (los pedidos de mesa los
+  // refresca el padre cada 2 s y llegan por props).
   useEffect(() => {
     cargarTodosLosDatos()
-  }, [cargarTodosLosDatos])
-
-  // Polling solo de domicilios (los pedidos de mesa los refresca el padre)
-  useEffect(() => {
     const interval = setInterval(cargarTodosLosDatos, POLLING_DOMICILIOS_MS)
     return () => clearInterval(interval)
   }, [cargarTodosLosDatos])
+
+  const todosLosPedidos = [...(pedidos || []).map((p) => ({ ...p, tipo: "mesa" })), ...domicilios]
 
   const calcularTiempoTranscurrido = (horaInicio) =>
     Math.floor((new Date() - horaInicio) / 60000)
@@ -130,12 +102,11 @@ function CocinaView({ pedidos = [], onActualizarPedidos }) {
     })
   }
 
-  // Solo se muestran pedidos en preparación. Los "Listo" salen de la vista.
-  const pedidosEnPreparacion = todosLosPedidos
-    .filter(
-      (p) => p.estado === "EnProceso" || p.estado === "EnPreparacion"
-    )
-    .sort((a, b) => new Date(a.hora) - new Date(b.hora))
+  // Solo se muestran pedidos en preparación, por prioridad (espera + volumen).
+  const pedidosEnPreparacion = ordenarPorPrioridad(
+    todosLosPedidos.filter((p) => p.estado === "EnProceso" || p.estado === "EnPreparacion"),
+    horaActual
+  )
 
   const cantidadActivas = pedidosEnPreparacion.length
 

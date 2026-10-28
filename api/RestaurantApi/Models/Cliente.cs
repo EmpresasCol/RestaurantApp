@@ -22,7 +22,7 @@ namespace RestaurantApi.Models
         [MaxLength(100)]
         public string? Email { get; set; }
 
-        public DateTime FechaRegistro { get; set; } = DateTime.Now;
+        public DateTime FechaRegistro { get; set; } = DateTime.UtcNow;
 
         // Navegación
         public virtual ICollection<Direccion> Direcciones { get; set; } = new List<Direccion>();

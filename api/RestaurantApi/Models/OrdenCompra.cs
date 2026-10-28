@@ -24,8 +24,8 @@
         public decimal Impuestos { get; set; } = 0;
         public decimal Total { get; set; } = 0;
         public string? Notas { get; set; }
-        public DateTime FechaCreacion { get; set; } = DateTime.Now;
-        public DateTime FechaActualizacion { get; set; } = DateTime.Now;
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+        public DateTime FechaActualizacion { get; set; } = DateTime.UtcNow;
 
         // Navegación
         public Proveedor? Proveedor { get; set; }

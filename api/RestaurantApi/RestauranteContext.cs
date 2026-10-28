@@ -32,6 +32,7 @@ namespace RestaurantApi
         public DbSet<Lote> Lotes { get; set; }
         public DbSet<MovimientoInventario> MovimientosInventario { get; set; }
         public DbSet<Receta> Recetas { get; set; }
+        public DbSet<AlertaInventario> AlertasInventario { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -345,6 +346,46 @@ namespace RestaurantApi
                 entity.Property(e => e.CostoTotal)
                     .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
             });
+
+            modelBuilder.Entity<AlertaInventario>(entity =>
+            {
+                entity.ToTable("AlertasInventario");
+                entity.Property(e => e.TipoAlerta).HasConversion<string>();
+                entity.Property(e => e.Nivel).HasConversion<string>();
+            });
+
+            // Dos domiciliarios no pueden tomar el mismo pedido: el UPDATE incluye
+            // el Estado y el DomiciliarioId leídos (concurrencia optimista sin columna nueva).
+            modelBuilder.Entity<Domicilio>(entity =>
+            {
+                entity.Property(e => e.Estado).IsConcurrencyToken();
+                entity.Property(e => e.DomiciliarioId).IsConcurrencyToken();
+            });
+
+            // Las fechas se guardan en UTC; al leerlas se marcan como UTC para que
+            // el JSON lleve la "Z" y cada cliente las convierta a su hora local.
+            var utc = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>(
+                v => v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : v,
+                v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            var utcNullable = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime?, DateTime?>(
+                v => v.HasValue && v.Value.Kind == DateTimeKind.Local ? v.Value.ToUniversalTime() : v,
+                v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : v);
+
+            // Columnas DATE (sin hora): son fechas de calendario, no instantes.
+            var soloFecha = new HashSet<string>
+            {
+                "FechaIngreso", "FechaVencimiento", "FechaOrden", "FechaEntregaEstimada", "FechaEntregaReal"
+            };
+
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    if (soloFecha.Contains(property.Name)) continue;
+                    if (property.ClrType == typeof(DateTime)) property.SetValueConverter(utc);
+                    else if (property.ClrType == typeof(DateTime?)) property.SetValueConverter(utcNullable);
+                }
+            }
         }
     }
 }

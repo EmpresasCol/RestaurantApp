@@ -9,6 +9,17 @@ using System.Threading.Tasks;
 
 namespace RestaurantApi.Services
 {
+    /// <summary>
+    /// Descuento automático de inventario por recetas.
+    ///
+    /// Cada sincronización compara el consumo que DEBERÍA tener un pedido (recetas × cantidades
+    /// actuales) con el consumo neto ya registrado en MovimientosInventario y aplica solo la
+    /// diferencia. Así, editar cantidades, quitar platos, recrear detalles o cancelar deja el
+    /// stock correcto y llamar varias veces no duplica nada.
+    ///
+    /// Los movimientos de un pedido se identifican por prefijo exacto con separador
+    /// ("Pedido #1 - ", "Ajuste Pedido #1 - "): "Pedido #1 - " no coincide con "Pedido #10 - ".
+    /// </summary>
     public class InventarioService : IInventarioService
     {
         private readonly RestauranteContext _context;
@@ -20,486 +31,325 @@ namespace RestaurantApi.Services
             _logger = logger;
         }
 
-        /// <summary>
-        /// Descuenta automáticamente el stock correspondiente a los platillos de un pedido.
-        /// Soporta descuentos por detalle para permitir que adiciones a un pedido existente también descuenten stock.
-        /// </summary>
-        public async Task<ResultadoInventarioDto> DescontarStockPorPedidoAsync(int pedidoId)
+        /// <summary>Origen de los movimientos (pedido en mesa o domicilio).</summary>
+        private sealed record Origen(string Tipo, int Id, int UsuarioId)
+        {
+            public string PrefijoVenta => $"{Tipo} #{Id} - ";
+            public string PrefijoAjuste => $"Ajuste {Tipo} #{Id} - ";
+            // Formatos usados por versiones anteriores del servicio.
+            public string ReferenciaLegacy => $"{Tipo} #{Id}";
+            public string PrefijoCancelacionLegacy => Tipo == "Pedido" ? $"Cancelación #{Id} - " : $"Cancelación Domicilio #{Id} - ";
+        }
+
+        public Task<ResultadoInventarioDto> DescontarStockPorPedidoAsync(int pedidoId)
+            => SincronizarPedidoAsync(pedidoId, cancelar: false);
+
+        public Task<ResultadoInventarioDto> RevertirStockPorPedidoAsync(int pedidoId)
+            => SincronizarPedidoAsync(pedidoId, cancelar: true);
+
+        public Task<ResultadoInventarioDto> DescontarStockPorDomicilioAsync(int domicilioId)
+            => SincronizarDomicilioAsync(domicilioId, cancelar: false);
+
+        public Task<ResultadoInventarioDto> RevertirStockPorDomicilioAsync(int domicilioId)
+            => SincronizarDomicilioAsync(domicilioId, cancelar: true);
+
+        private async Task<ResultadoInventarioDto> SincronizarPedidoAsync(int pedidoId, bool cancelar)
+        {
+            var pedido = await _context.Pedidos
+                .Include(p => p.Detalles)
+                .FirstOrDefaultAsync(p => p.Id == pedidoId);
+
+            if (pedido == null)
+                return new ResultadoInventarioDto { Exitoso = false, Mensaje = "Pedido no encontrado." };
+
+            var lineas = cancelar || pedido.Estado == EstadoPedido.Cancelado
+                ? new List<(int, int)>()
+                : pedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
+
+            return await SincronizarAsync(new Origen("Pedido", pedidoId, pedido.UsuarioId), lineas, exigirDetalles: !cancelar);
+        }
+
+        private async Task<ResultadoInventarioDto> SincronizarDomicilioAsync(int domicilioId, bool cancelar)
+        {
+            var domicilio = await _context.Domicilios
+                .Include(d => d.Detalles)
+                .FirstOrDefaultAsync(d => d.Id == domicilioId);
+
+            if (domicilio == null)
+                return new ResultadoInventarioDto { Exitoso = false, Mensaje = "Domicilio no encontrado." };
+
+            var lineas = cancelar || domicilio.Estado == "Cancelado"
+                ? new List<(int, int)>()
+                : domicilio.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
+
+            return await SincronizarAsync(new Origen("Domicilio", domicilioId, domicilio.UsuarioCreadorId), lineas, exigirDetalles: !cancelar);
+        }
+
+        private async Task<ResultadoInventarioDto> SincronizarAsync(Origen origen, List<(int PlatilloId, int Cantidad)> lineas, bool exigirDetalles)
         {
             try
             {
-                // 1. Cargar el pedido con sus detalles y platillos
-                var pedido = await _context.Pedidos
-                    .Include(p => p.Detalles)
-                        .ThenInclude(d => d.Platillo)
-                    .FirstOrDefaultAsync(p => p.Id == pedidoId);
+                var deseado = await ConsumoDeseadoAsync(lineas);
 
-                if (pedido == null || pedido.Detalles == null || !pedido.Detalles.Any())
+                var movimientos = await _context.MovimientosInventario
+                    .Where(m => m.Referencia != null &&
+                                (m.Referencia == origen.ReferenciaLegacy
+                                 || m.Referencia.StartsWith(origen.PrefijoVenta)
+                                 || m.Referencia.StartsWith(origen.PrefijoAjuste)
+                                 || m.Referencia.StartsWith(origen.PrefijoCancelacionLegacy)))
+                    .ToListAsync();
+
+                if (exigirDetalles && lineas.Count == 0 && movimientos.Count == 0)
                 {
-                    _logger.LogWarning("⚠️ Pedido #{PedidoId} no encontrado o sin detalles.", pedidoId);
-                    return new ResultadoInventarioDto { Exitoso = false, Mensaje = "Pedido no encontrado o sin detalles." };
+                    _logger.LogWarning("⚠️ {Tipo} #{Id} sin detalles: no hay inventario que descontar.", origen.Tipo, origen.Id);
+                    return new ResultadoInventarioDto { Exitoso = false, Mensaje = $"{origen.Tipo} sin detalles." };
                 }
 
-                // Asegurar que existan recetas predeterminadas en el sistema
-                await InicializarRecetasPredeterminadasAsync();
+                // Consumo neto ya registrado por (producto, almacén, lote): salidas − entradas.
+                var neto = movimientos
+                    .GroupBy(m => (m.ProductoId, m.AlmacenId, m.LoteId))
+                    .ToDictionary(g => g.Key, g => g.Sum(m => m.TipoMovimiento == "Salida" ? m.Cantidad : -m.Cantidad));
 
-                // 2. Obtener almacén de consumo (prioritariamente Cocina o Principal)
-                var almacenCocina = await _context.Almacenes
-                    .FirstOrDefaultAsync(a => a.Tipo == "Cocina" || a.Nombre.Contains("Cocina") || a.Nombre.Contains("Principal"))
-                    ?? await _context.Almacenes.FirstOrDefaultAsync();
+                var productos = deseado.Keys.Union(neto.Keys.Select(k => k.ProductoId)).ToList();
+                var almacenConsumoId = await AlmacenConsumoIdAsync();
+                var faltantes = new List<(int ProductoId, decimal Cantidad)>();
+                int generados = 0;
 
-                int almacenDefaultId = almacenCocina?.Id ?? 1;
-                int movimientosCount = 0;
-
-                // 3. Procesar cada detalle del pedido
-                foreach (var detalle in pedido.Detalles)
+                foreach (var productoId in productos)
                 {
-                    if (detalle.PlatilloId <= 0 || detalle.Cantidad <= 0)
-                        continue;
+                    var objetivo = deseado.GetValueOrDefault(productoId);
+                    var actual = neto.Where(kv => kv.Key.ProductoId == productoId).Sum(kv => kv.Value);
+                    // Las cantidades se guardan con 2 decimales: comparar al centésimo evita oscilaciones.
+                    var diferencia = Math.Round(objetivo - actual, 2);
 
-                    // Referencia única por detalle (evita duplicados si se llama varias veces)
-                    var referenciaDetalle = $"Pedido #{pedidoId} - Detalle #{detalle.Id}";
-                    var referenciaLegacy = $"Pedido #{pedidoId}";
-
-                    var yaDescontado = await _context.MovimientosInventario
-                        .AnyAsync(m => (m.Referencia == referenciaDetalle || m.Referencia == referenciaLegacy) 
-                                       && m.TipoMovimiento == "Salida");
-
-                    if (yaDescontado)
+                    if (diferencia > 0)
                     {
-                        continue;
+                        var (movs, faltante) = await DescontarAsync(origen, productoId, diferencia, almacenConsumoId);
+                        generados += movs;
+                        if (faltante > 0) faltantes.Add((productoId, faltante));
                     }
-
-                    // Buscar recetas asociadas al platillo
-                    var recetas = await _context.Recetas
-                        .Where(r => r.PlatilloId == detalle.PlatilloId)
-                        .Include(r => r.Producto)
-                        .ToListAsync();
-
-                    if (recetas.Any())
+                    else if (diferencia < 0)
                     {
-                        // Descontar insumos según la ficha técnica (receta)
-                        foreach (var receta in recetas)
-                        {
-                            decimal cantidadADescontar = receta.CantidadRequerida * detalle.Cantidad;
-                            await AplicarSalidaStockAsync(
-                                receta.ProductoId,
-                                almacenDefaultId,
-                                cantidadADescontar,
-                                $"Venta Pedido #{pedidoId}: '{detalle.Platillo?.Nombre}' x{detalle.Cantidad}",
-                                referenciaDetalle,
-                                pedido.UsuarioId
-                            );
-                            movimientosCount++;
-                        }
-                    }
-                    else if (detalle.Platillo != null)
-                    {
-                        // Si no tiene receta configurada, intentar vincular directamente con un producto homónimo
-                        var nombrePlatilloNorm = NormalizarTexto(detalle.Platillo.Nombre);
-                        var productos = await _context.ProductosInventario.ToListAsync();
-                        var productoMatch = productos.FirstOrDefault(p =>
-                        {
-                            var pNorm = NormalizarTexto(p.Nombre);
-                            return pNorm == nombrePlatilloNorm ||
-                                   pNorm.Contains(nombrePlatilloNorm) ||
-                                   nombrePlatilloNorm.Contains(pNorm);
-                        });
-
-                        if (productoMatch != null)
-                        {
-                            decimal cantidadADescontar = 1m * detalle.Cantidad;
-                            await AplicarSalidaStockAsync(
-                                productoMatch.Id,
-                                almacenDefaultId,
-                                cantidadADescontar,
-                                $"Venta Directa Pedido #{pedidoId}: '{detalle.Platillo.Nombre}' x{detalle.Cantidad}",
-                                referenciaDetalle,
-                                pedido.UsuarioId
-                            );
-                            movimientosCount++;
-                        }
-                        else
-                        {
-                            _logger.LogInformation("ℹ️ Platillo '{Platillo}' no tiene receta ni producto directo vinculado.", detalle.Platillo.Nombre);
-                        }
+                        generados += await DevolverAsync(origen, productoId, -diferencia, neto);
                     }
                 }
 
-                if (movimientosCount > 0)
-                {
+                if (generados > 0)
                     await _context.SaveChangesAsync();
-                    _logger.LogInformation("✅ Inventario descontado exitosamente para Pedido #{PedidoId}. Movimientos: {Count}", pedidoId, movimientosCount);
-                }
+
+                await RegistrarFaltantesAsync(origen, faltantes, almacenConsumoId);
+
+                if (generados > 0)
+                    _logger.LogInformation("📦 Inventario sincronizado para {Tipo} #{Id}. Movimientos: {Count}", origen.Tipo, origen.Id, generados);
 
                 return new ResultadoInventarioDto
                 {
                     Exitoso = true,
-                    Mensaje = movimientosCount > 0 
-                        ? $"Se generaron {movimientosCount} movimientos de inventario."
-                        : "El inventario del pedido ya estaba sincronizado.",
-                    MovimientosGenerados = movimientosCount
+                    Mensaje = generados > 0
+                        ? $"Se generaron {generados} movimientos de inventario."
+                        : "El inventario ya estaba sincronizado.",
+                    MovimientosGenerados = generados
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error al descontar inventario para Pedido #{PedidoId}", pedidoId);
-                return new ResultadoInventarioDto
-                {
-                    Exitoso = false,
-                    Mensaje = $"Error al descontar inventario: {ex.Message}"
-                };
+                _logger.LogError(ex, "❌ Error al sincronizar inventario para {Tipo} #{Id}", origen.Tipo, origen.Id);
+                return new ResultadoInventarioDto { Exitoso = false, Mensaje = "Error al sincronizar el inventario." };
             }
         }
 
         /// <summary>
-        /// Revierte el descuento de inventario si un pedido es cancelado.
+        /// Cantidad de cada insumo que corresponde a las líneas, según las recetas.
+        /// Un platillo sin receta solo descuenta un producto cuyo nombre sea EXACTAMENTE igual
+        /// (p. ej. bebidas embotelladas); nunca por coincidencia parcial ("Pan" ≠ "Panna Cotta").
         /// </summary>
-        public async Task<ResultadoInventarioDto> RevertirStockPorPedidoAsync(int pedidoId)
+        private async Task<Dictionary<int, decimal>> ConsumoDeseadoAsync(List<(int PlatilloId, int Cantidad)> lineas)
         {
-            try
+            var porPlatillo = lineas
+                .Where(l => l.PlatilloId > 0 && l.Cantidad > 0)
+                .GroupBy(l => l.PlatilloId)
+                .ToDictionary(g => g.Key, g => g.Sum(l => l.Cantidad));
+
+            var resultado = new Dictionary<int, decimal>();
+            if (porPlatillo.Count == 0) return resultado;
+
+            var ids = porPlatillo.Keys.ToList();
+            var recetas = await _context.Recetas.Where(r => ids.Contains(r.PlatilloId)).ToListAsync();
+
+            foreach (var r in recetas)
+                resultado[r.ProductoId] = resultado.GetValueOrDefault(r.ProductoId) + r.CantidadRequerida * porPlatillo[r.PlatilloId];
+
+            var sinReceta = ids.Except(recetas.Select(r => r.PlatilloId)).ToList();
+            if (sinReceta.Count > 0)
             {
-                var prefijoReferencia = $"Pedido #{pedidoId}";
-                var referenciaReverso = $"Cancelación #{pedidoId}";
-
-                // Evitar revertir más de una vez
-                var yaRevertido = await _context.MovimientosInventario
-                    .AnyAsync(m => m.Referencia != null && m.Referencia.StartsWith(referenciaReverso));
-
-                if (yaRevertido)
+                var platillos = await _context.Platillos.Where(p => sinReceta.Contains(p.Id)).ToListAsync();
+                var productos = await _context.ProductosInventario.ToListAsync();
+                foreach (var platillo in platillos)
                 {
-                    return new ResultadoInventarioDto { Exitoso = true, Mensaje = "El pedido ya había sido revertido previamente." };
+                    var nombre = NormalizarTexto(platillo.Nombre);
+                    var producto = productos.FirstOrDefault(p => NormalizarTexto(p.Nombre) == nombre);
+                    if (producto != null)
+                        resultado[producto.Id] = resultado.GetValueOrDefault(producto.Id) + porPlatillo[platillo.Id];
+                    else
+                        _logger.LogInformation("ℹ️ Platillo '{Platillo}' no tiene receta configurada.", platillo.Nombre);
                 }
-
-                // Buscar todos los movimientos de salida originados por este pedido
-                var movimientosSalida = await _context.MovimientosInventario
-                    .Where(m => m.Referencia != null && m.Referencia.StartsWith(prefijoReferencia) && m.TipoMovimiento == "Salida")
-                    .ToListAsync();
-
-                if (!movimientosSalida.Any())
-                {
-                    return new ResultadoInventarioDto { Exitoso = true, Mensaje = "No había movimientos previos para revertir." };
-                }
-
-                int revertidos = 0;
-                foreach (var mov in movimientosSalida)
-                {
-                    // Restaurar el stock
-                    var stock = await _context.Stock
-                        .FirstOrDefaultAsync(s => s.ProductoId == mov.ProductoId && s.AlmacenId == mov.AlmacenId);
-
-                    if (stock != null)
-                    {
-                        stock.Cantidad += mov.Cantidad;
-                        // CostoTotal es columna GENERADA en MySQL, no se asigna
-                        stock.FechaActualizacion = DateTime.UtcNow;
-                    }
-
-                    // Restaurar en lote si existía
-                    if (mov.LoteId.HasValue)
-                    {
-                        var lote = await _context.Lotes.FindAsync(mov.LoteId.Value);
-                        if (lote != null)
-                        {
-                            lote.CantidadActual += mov.Cantidad;
-                        }
-                    }
-
-                    // Registrar movimiento de Entrada por cancelación
-                    // CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
-                    var reverso = new MovimientoInventario
-                    {
-                        ProductoId = mov.ProductoId,
-                        AlmacenId = mov.AlmacenId,
-                        LoteId = mov.LoteId,
-                        TipoMovimiento = "Entrada",
-                        Cantidad = mov.Cantidad,
-                        CostoUnitario = mov.CostoUnitario,
-                        Motivo = $"Reverso por Pedido #{pedidoId} Cancelado ({mov.Motivo})",
-                        Referencia = $"{referenciaReverso} - Mov #{mov.Id}",
-                        UsuarioId = (mov.UsuarioId.HasValue && mov.UsuarioId.Value > 0) ? mov.UsuarioId.Value : 1,
-                        Fecha = DateTime.UtcNow
-                    };
-
-                    _context.MovimientosInventario.Add(reverso);
-                    revertidos++;
-                }
-
-                await _context.SaveChangesAsync();
-                _logger.LogInformation("🔄 Inventario revertido para Pedido #{PedidoId}. Movimientos restaurados: {Count}", pedidoId, revertidos);
-
-                return new ResultadoInventarioDto
-                {
-                    Exitoso = true,
-                    Mensaje = $"Se restauraron {revertidos} insumos al inventario.",
-                    MovimientosGenerados = revertidos
-                };
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Error al revertir inventario para Pedido #{PedidoId}", pedidoId);
-                return new ResultadoInventarioDto { Exitoso = false, Mensaje = ex.Message };
-            }
+
+            foreach (var k in resultado.Keys.ToList())
+                resultado[k] = Math.Round(resultado[k], 2);
+            return resultado;
         }
 
         /// <summary>
-        /// Descuenta inventario para pedidos a domicilio.
+        /// Saca la cantidad del stock existente (primero el almacén de consumo, luego el resto)
+        /// y de los lotes por FIFO. Nunca deja existencias negativas: lo que no alcanza se
+        /// devuelve como faltante para alertar.
         /// </summary>
-        public async Task<ResultadoInventarioDto> DescontarStockPorDomicilioAsync(int domicilioId)
+        private async Task<(int Movimientos, decimal Faltante)> DescontarAsync(Origen origen, int productoId, decimal cantidad, int almacenConsumoId)
         {
-            try
-            {
-                var domicilio = await _context.Domicilios
-                    .Include(d => d.Detalles)
-                        .ThenInclude(dd => dd.Platillo)
-                    .FirstOrDefaultAsync(d => d.Id == domicilioId);
+            var stocks = (await _context.Stock.Where(s => s.ProductoId == productoId).ToListAsync())
+                .OrderByDescending(s => s.AlmacenId == almacenConsumoId)
+                .ThenByDescending(s => s.Cantidad)
+                .ToList();
 
-                if (domicilio == null || domicilio.Detalles == null || !domicilio.Detalles.Any())
-                    return new ResultadoInventarioDto { Exitoso = false, Mensaje = "Domicilio no encontrado o sin platillos." };
-
-                await InicializarRecetasPredeterminadasAsync();
-
-                var almacenCocina = await _context.Almacenes
-                    .FirstOrDefaultAsync(a => a.Tipo == "Cocina" || a.Nombre.Contains("Cocina") || a.Nombre.Contains("Principal"))
-                    ?? await _context.Almacenes.FirstOrDefaultAsync();
-
-                int almacenId = almacenCocina?.Id ?? 1;
-                int count = 0;
-
-                foreach (var det in domicilio.Detalles)
-                {
-                    if (det.PlatilloId <= 0 || det.Cantidad <= 0)
-                        continue;
-
-                    var referenciaDetalle = $"Domicilio #{domicilioId} - Detalle #{det.Id}";
-                    var referenciaLegacy = $"Domicilio #{domicilioId}";
-
-                    var yaDescontado = await _context.MovimientosInventario
-                        .AnyAsync(m => (m.Referencia == referenciaDetalle || m.Referencia == referenciaLegacy) 
-                                       && m.TipoMovimiento == "Salida");
-
-                    if (yaDescontado)
-                        continue;
-
-                    var recetas = await _context.Recetas
-                        .Where(r => r.PlatilloId == det.PlatilloId)
-                        .Include(r => r.Producto)
-                        .ToListAsync();
-
-                    if (recetas.Any())
-                    {
-                        foreach (var receta in recetas)
-                        {
-                            decimal cantidad = receta.CantidadRequerida * det.Cantidad;
-                            await AplicarSalidaStockAsync(
-                                receta.ProductoId,
-                                almacenId,
-                                cantidad,
-                                $"Venta Domicilio #{domicilioId}: '{det.Platillo?.Nombre}' x{det.Cantidad}",
-                                referenciaDetalle,
-                                domicilio.UsuarioCreadorId
-                            );
-                            count++;
-                        }
-                    }
-                    else if (det.Platillo != null)
-                    {
-                        var platilloNorm = NormalizarTexto(det.Platillo.Nombre);
-                        var productos = await _context.ProductosInventario.ToListAsync();
-                        var productoMatch = productos.FirstOrDefault(p =>
-                        {
-                            var pNorm = NormalizarTexto(p.Nombre);
-                            return pNorm == platilloNorm || pNorm.Contains(platilloNorm) || platilloNorm.Contains(pNorm);
-                        });
-
-                        if (productoMatch != null)
-                        {
-                            decimal cantidad = 1m * det.Cantidad;
-                            await AplicarSalidaStockAsync(
-                                productoMatch.Id,
-                                almacenId,
-                                cantidad,
-                                $"Venta Directa Domicilio #{domicilioId}: '{det.Platillo.Nombre}' x{det.Cantidad}",
-                                referenciaDetalle,
-                                domicilio.UsuarioCreadorId
-                            );
-                            count++;
-                        }
-                    }
-                }
-
-                if (count > 0)
-                {
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("✅ Inventario descontado para Domicilio #{DomicilioId}. Movimientos: {Count}", domicilioId, count);
-                }
-
-                return new ResultadoInventarioDto 
-                { 
-                    Exitoso = true, 
-                    Mensaje = count > 0 ? $"Descontados {count} insumos para el domicilio." : "Ya sincronizado.",
-                    MovimientosGenerados = count 
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Error al descontar inventario para Domicilio #{DomicilioId}", domicilioId);
-                return new ResultadoInventarioDto { Exitoso = false, Mensaje = ex.Message };
-            }
-        }
-
-        /// <summary>
-        /// Revierte el inventario de un pedido a domicilio cancelado.
-        /// </summary>
-        public async Task<ResultadoInventarioDto> RevertirStockPorDomicilioAsync(int domicilioId)
-        {
-            try
-            {
-                var prefijoReferencia = $"Domicilio #{domicilioId}";
-                var referenciaReverso = $"Cancelación Domicilio #{domicilioId}";
-
-                var yaRevertido = await _context.MovimientosInventario
-                    .AnyAsync(m => m.Referencia != null && m.Referencia.StartsWith(referenciaReverso));
-
-                if (yaRevertido)
-                {
-                    return new ResultadoInventarioDto { Exitoso = true, Mensaje = "El domicilio ya había sido revertido." };
-                }
-
-                var movimientosSalida = await _context.MovimientosInventario
-                    .Where(m => m.Referencia != null && m.Referencia.StartsWith(prefijoReferencia) && m.TipoMovimiento == "Salida")
-                    .ToListAsync();
-
-                if (!movimientosSalida.Any())
-                {
-                    return new ResultadoInventarioDto { Exitoso = true, Mensaje = "No había movimientos para revertir." };
-                }
-
-                int count = 0;
-                foreach (var mov in movimientosSalida)
-                {
-                    var stock = await _context.Stock
-                        .FirstOrDefaultAsync(s => s.ProductoId == mov.ProductoId && s.AlmacenId == mov.AlmacenId);
-
-                    if (stock != null)
-                    {
-                        stock.Cantidad += mov.Cantidad;
-                        // CostoTotal es columna GENERADA en MySQL, no se asigna
-                        stock.FechaActualizacion = DateTime.UtcNow;
-                    }
-
-                    if (mov.LoteId.HasValue)
-                    {
-                        var lote = await _context.Lotes.FindAsync(mov.LoteId.Value);
-                        if (lote != null)
-                        {
-                            lote.CantidadActual += mov.Cantidad;
-                        }
-                    }
-
-                    // CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
-                    _context.MovimientosInventario.Add(new MovimientoInventario
-                    {
-                        ProductoId = mov.ProductoId,
-                        AlmacenId = mov.AlmacenId,
-                        LoteId = mov.LoteId,
-                        TipoMovimiento = "Entrada",
-                        Cantidad = mov.Cantidad,
-                        CostoUnitario = mov.CostoUnitario,
-                        Motivo = $"Reverso por Domicilio #{domicilioId} Cancelado",
-                        Referencia = $"{referenciaReverso} - Mov #{mov.Id}",
-                        UsuarioId = (mov.UsuarioId.HasValue && mov.UsuarioId.Value > 0) ? mov.UsuarioId.Value : 1,
-                        Fecha = DateTime.UtcNow
-                    });
-
-                    count++;
-                }
-
-                await _context.SaveChangesAsync();
-                return new ResultadoInventarioDto { Exitoso = true, MovimientosGenerados = count };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Error al revertir inventario para Domicilio #{DomicilioId}", domicilioId);
-                return new ResultadoInventarioDto { Exitoso = false, Mensaje = ex.Message };
-            }
-        }
-
-        /// <summary>
-        /// Aplica una salida de stock y registra el movimiento de inventario correspondiente.
-        /// Actualiza además el lote FIFO correspondiente si existe.
-        /// </summary>
-        private async Task AplicarSalidaStockAsync(int productoId, int almacenDefaultId, decimal cantidad, string motivo, string referencia, int? usuarioId)
-        {
-            // 1. Buscar stock existente prioritariamente en el almacén indicado o en cualquiera con existencia
-            var stock = await _context.Stock
-                .FirstOrDefaultAsync(s => s.ProductoId == productoId && s.AlmacenId == almacenDefaultId)
-                ?? await _context.Stock
-                    .Where(s => s.ProductoId == productoId)
-                    .OrderByDescending(s => s.Cantidad)
-                    .FirstOrDefaultAsync();
-
-            int almacenEfectivoId = stock?.AlmacenId ?? almacenDefaultId;
-
-            // Obtener producto para precio de costo de respaldo
             var producto = await _context.ProductosInventario.FindAsync(productoId);
-            decimal costoUnitario = (stock != null && stock.CostoPromedio > 0) 
-                ? stock.CostoPromedio 
-                : (producto?.PrecioCosto ?? 0);
+            var restante = cantidad;
+            int movimientos = 0;
 
-            if (stock == null)
+            foreach (var stock in stocks)
             {
-                // Si no hay registro de stock previo, se crea
-                // NOTA: CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
-                stock = new Stock
-                {
-                    ProductoId = productoId,
-                    AlmacenId = almacenEfectivoId,
-                    Cantidad = -cantidad,
-                    CostoPromedio = costoUnitario,
-                    FechaActualizacion = DateTime.UtcNow
-                };
-                _context.Stock.Add(stock);
-            }
-            else
-            {
-                stock.Cantidad -= cantidad;
-                // NOTA: CostoTotal es columna GENERADA en MySQL, no se asigna manualmente
+                if (restante <= 0) break;
+                if (stock.Cantidad <= 0) continue;
+
+                var tomar = Math.Min(restante, stock.Cantidad);
+                stock.Cantidad -= tomar;
                 stock.FechaActualizacion = DateTime.UtcNow;
+                restante -= tomar;
+
+                var costoStock = stock.CostoPromedio > 0 ? stock.CostoPromedio : producto?.PrecioCosto ?? 0;
+                var lotes = await _context.Lotes
+                    .Where(l => l.ProductoId == productoId && l.AlmacenId == stock.AlmacenId && l.CantidadActual > 0)
+                    .OrderBy(l => l.FechaVencimiento == null)
+                    .ThenBy(l => l.FechaVencimiento)
+                    .ThenBy(l => l.FechaIngreso)
+                    .ToListAsync();
+
+                var pendiente = tomar;
+                foreach (var lote in lotes)
+                {
+                    if (pendiente <= 0) break;
+                    var deLote = Math.Min(pendiente, lote.CantidadActual);
+                    lote.CantidadActual -= deLote;
+                    pendiente -= deLote;
+                    AgregarMovimiento(origen, productoId, stock.AlmacenId, lote.Id, deLote, salida: true,
+                        lote.CostoUnitario > 0 ? lote.CostoUnitario : costoStock);
+                    movimientos++;
+                }
+
+                if (pendiente > 0)
+                {
+                    AgregarMovimiento(origen, productoId, stock.AlmacenId, null, pendiente, salida: true, costoStock);
+                    movimientos++;
+                }
             }
 
-            // 2. Descontar de Lote por FIFO si existen lotes activos
-            int? loteIdUsado = null;
-            var loteActivo = await _context.Lotes
-                .Where(l => l.ProductoId == productoId && l.CantidadActual > 0)
-                .OrderBy(l => l.FechaVencimiento)
-                .ThenBy(l => l.FechaIngreso)
-                .FirstOrDefaultAsync();
+            return (movimientos, Math.Max(0, restante));
+        }
 
-            if (loteActivo != null)
+        /// <summary>Devuelve al stock (y al lote) de donde salió, hasta lo consumido en cada uno.</summary>
+        private async Task<int> DevolverAsync(Origen origen, int productoId, decimal cantidad,
+            Dictionary<(int ProductoId, int AlmacenId, int? LoteId), decimal> neto)
+        {
+            var restante = cantidad;
+            int movimientos = 0;
+
+            foreach (var (clave, consumido) in neto.Where(kv => kv.Key.ProductoId == productoId && kv.Value > 0).ToList())
             {
-                loteIdUsado = loteActivo.Id;
-                loteActivo.CantidadActual = Math.Max(0, loteActivo.CantidadActual - cantidad);
+                if (restante <= 0) break;
+                var devolver = Math.Min(restante, consumido);
+
+                var stock = await _context.Stock.FirstOrDefaultAsync(s => s.ProductoId == productoId && s.AlmacenId == clave.AlmacenId);
+                if (stock == null)
+                {
+                    stock = new Stock { ProductoId = productoId, AlmacenId = clave.AlmacenId, Cantidad = 0 };
+                    _context.Stock.Add(stock);
+                }
+                stock.Cantidad += devolver;
+                stock.FechaActualizacion = DateTime.UtcNow;
+
+                if (clave.LoteId.HasValue)
+                {
+                    var lote = await _context.Lotes.FindAsync(clave.LoteId.Value);
+                    if (lote != null) lote.CantidadActual += devolver;
+                }
+
+                AgregarMovimiento(origen, productoId, clave.AlmacenId, clave.LoteId, devolver, salida: false, stock.CostoPromedio);
+                restante -= devolver;
+                movimientos++;
             }
 
-            // 3. Registrar el movimiento de auditoría
-            // NOTA: CostoTotal es columna GENERADA en MySQL (CostoUnitario * Cantidad), no se asigna manualmente
-            // UsuarioId es NOT NULL en BD, se usa 1 (Admin) como fallback
-            var movimiento = new MovimientoInventario
+            return movimientos;
+        }
+
+        private void AgregarMovimiento(Origen origen, int productoId, int almacenId, int? loteId, decimal cantidad, bool salida, decimal costoUnitario)
+        {
+            // CostoTotal es columna GENERADA en MySQL; UsuarioId es NOT NULL (1 = Admin como respaldo).
+            _context.MovimientosInventario.Add(new MovimientoInventario
             {
                 ProductoId = productoId,
-                AlmacenId = almacenEfectivoId,
-                LoteId = loteIdUsado,
-                TipoMovimiento = "Salida",
+                AlmacenId = almacenId,
+                LoteId = loteId,
+                TipoMovimiento = salida ? "Salida" : "Entrada",
                 Cantidad = cantidad,
                 CostoUnitario = costoUnitario,
-                Motivo = motivo,
-                Referencia = referencia,
-                UsuarioId = (usuarioId.HasValue && usuarioId.Value > 0) ? usuarioId.Value : 1,
+                Motivo = salida ? $"Venta {origen.Tipo} #{origen.Id}" : $"Devolución por ajuste/cancelación de {origen.Tipo} #{origen.Id}",
+                Referencia = (salida ? origen.PrefijoVenta : origen.PrefijoAjuste) + $"Producto #{productoId}",
+                UsuarioId = origen.UsuarioId > 0 ? origen.UsuarioId : 1,
                 Fecha = DateTime.UtcNow
-            };
+            });
+        }
 
-            _context.MovimientosInventario.Add(movimiento);
+        /// <summary>
+        /// Registra una alerta crítica por cada insumo que no alcanzó (una por pedido y producto).
+        /// Se guarda aparte: si la alerta falla, el descuento ya aplicado se conserva.
+        /// </summary>
+        private async Task RegistrarFaltantesAsync(Origen origen, List<(int ProductoId, decimal Cantidad)> faltantes, int almacenId)
+        {
+            if (faltantes.Count == 0) return;
+            try
+            {
+                foreach (var (productoId, cantidad) in faltantes)
+                {
+                    var encabezado = $"Stock insuficiente para {origen.Tipo} #{origen.Id}:";
+                    var existe = await _context.AlertasInventario
+                        .AnyAsync(a => !a.Leida && a.ProductoId == productoId && a.Mensaje.StartsWith(encabezado));
+                    if (existe) continue;
+
+                    _context.AlertasInventario.Add(new AlertaInventario
+                    {
+                        TipoAlerta = TipoAlerta.StockCritico,
+                        Nivel = NivelAlerta.Critico,
+                        ProductoId = productoId,
+                        AlmacenId = almacenId,
+                        Mensaje = $"{encabezado} faltaron {cantidad:0.##} unidades. Verifique el inventario físico.",
+                        FechaGeneracion = DateTime.UtcNow
+                    });
+                }
+                await _context.SaveChangesAsync();
+                _logger.LogWarning("⚠️ {Tipo} #{Id}: stock insuficiente en {Count} insumos.", origen.Tipo, origen.Id, faltantes.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "No se pudo registrar la alerta de stock insuficiente para {Tipo} #{Id}", origen.Tipo, origen.Id);
+            }
+        }
+
+        private async Task<int> AlmacenConsumoIdAsync()
+        {
+            var almacen = await _context.Almacenes
+                .FirstOrDefaultAsync(a => a.Tipo == "Cocina" || a.Nombre.Contains("Cocina") || a.Nombre.Contains("Principal"))
+                ?? await _context.Almacenes.FirstOrDefaultAsync();
+            return almacen?.Id ?? 1;
         }
 
         /// <summary>
@@ -527,6 +377,7 @@ namespace RestaurantApi.Services
 
         /// <summary>
         /// Inicializa recetas predeterminadas para los platillos del restaurante si aún no existen.
+        /// Se ejecuta solo al arrancar la API.
         /// </summary>
         public async Task InicializarRecetasPredeterminadasAsync()
         {
@@ -596,15 +447,9 @@ namespace RestaurantApi.Services
             foreach (var r in recetasBase)
             {
                 var targetPlatilloNorm = NormalizarTexto(r.Platillo);
-                var platillo = platillos.FirstOrDefault(p =>
-                {
-                    var pNorm = NormalizarTexto(p.Nombre);
-                    return pNorm == targetPlatilloNorm ||
-                           pNorm.Contains(targetPlatilloNorm) ||
-                           targetPlatilloNorm.Contains(pNorm);
-                });
+                var platillo = platillos.FirstOrDefault(p => NormalizarTexto(p.Nombre) == targetPlatilloNorm);
 
-                var producto = productos.FirstOrDefault(p => 
+                var producto = productos.FirstOrDefault(p =>
                     !string.IsNullOrEmpty(p.Codigo) && p.Codigo.Equals(r.CodigoProd, StringComparison.OrdinalIgnoreCase));
 
                 if (platillo != null && producto != null)

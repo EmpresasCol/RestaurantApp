@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Printer, Download, QrCode } from 'lucide-react';
+import { getMesas } from './services/api';
 
 function GeneradorQR() {
   const baseURL = window.location.origin + window.location.pathname;
-  const mesas = Array.from({ length: 12 }, (_, i) => i + 1);
+  // Mesas reales de la API: el QR lleva el Id (lo que espera POST /pedidos) y el número visible.
+  const [idPorNumero, setIdPorNumero] = useState({});
+  const mesas = Object.keys(idPorNumero).map(Number).sort((a, b) => a - b);
   const [diseñoSeleccionado, setDiseñoSeleccionado] = useState('premium');
+
+  useEffect(() => {
+    getMesas()
+      .then((data) => setIdPorNumero(Object.fromEntries(data.map((m) => [m.numero, m.id]))))
+      .catch(() => setIdPorNumero({}));
+  }, []);
+
+  const urlMesa = (numero) => `${baseURL}?mesa=${idPorNumero[numero]}&numero=${numero}`;
 
   const imprimirTodo = () => {
     window.print();
@@ -48,12 +59,12 @@ function GeneradorQR() {
   };
 
   const abrirEnNavegador = (mesa) => {
-    const url = `${baseURL}?mesa=${mesa}`;
+    const url = urlMesa(mesa);
     window.open(url, '_blank');
   };
 
   const renderQRPremium = (mesa) => {
-    const url = `${baseURL}?mesa=${mesa}`;
+    const url = urlMesa(mesa);
     
     return (
       <div 
@@ -115,7 +126,7 @@ function GeneradorQR() {
   };
 
   const renderQRMinimalista = (mesa) => {
-    const url = `${baseURL}?mesa=${mesa}`;
+    const url = urlMesa(mesa);
     
     return (
       <div 

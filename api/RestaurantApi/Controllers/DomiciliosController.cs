@@ -1,4 +1,6 @@
 // api/RestaurantApi/Controllers/DomiciliosController.cs
+using System.Linq.Expressions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
@@ -9,8 +11,13 @@ namespace RestaurantApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Administrador,Caja,Cocina")]
     public class DomiciliosController : ControllerBase
     {
+        private const int CantidadMaximaPorLinea = 100;
+        private static readonly string[] MetodosPagoValidos = { "Efectivo", "Transferencia", "Tarjeta", "Nequi", "Daviplata" };
+        private static readonly string[] EstadosActivos = { "EnPreparacion", "Listo", "Recogido", "EnCamino" };
+
         private readonly RestauranteContext _context;
         private readonly IInventarioService _inventarioService;
 
@@ -25,119 +32,25 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<IEnumerable<DomicilioResponseDto>>> GetDomicilios()
         {
             var domicilios = await _context.Domicilios
-                .Include(d => d.Cliente)
-                .Include(d => d.Direccion)
-                .Include(d => d.Detalles)
-                    .ThenInclude(dd => dd.Platillo)
-                .Include(d => d.UsuarioCreador)
-                .Include(d => d.Domiciliario)
                 .OrderByDescending(d => d.FechaPedido)
-                .Select(d => new DomicilioResponseDto
-                {
-                    Id = d.Id,
-                    ClienteId = d.ClienteId,
-                    ClienteNombre = d.Cliente.Nombre,
-                    ClienteTelefono = d.Cliente.Telefono,
-                    DireccionId = d.DireccionId,
-                    DireccionCompleta = d.Direccion.DireccionCompleta,
-                    Barrio = d.Direccion.Barrio ?? "",
-                    ReferenciasAdicionales = d.Direccion.ReferenciasAdicionales ?? "",
-                    FechaPedido = d.FechaPedido,
-                    Estado = d.Estado,
-                    Subtotal = d.Subtotal,
-                    CostoEnvio = d.CostoEnvio,
-                    Total = d.Total,
-                    MetodoPago = d.MetodoPago,
-                    PagadoAnticipado = d.PagadoAnticipado,
-                    NotasCliente = d.NotasCliente ?? "",
-                    NotasInternas = d.NotasInternas ?? "",
-                    UsuarioCreadorId = d.UsuarioCreadorId,
-                    UsuarioCreadorNombre = d.UsuarioCreador.Nombre,
-                    DomiciliarioId = d.DomiciliarioId,
-                    DomiciliarioNombre = d.Domiciliario != null ? d.Domiciliario.Nombre : null,
-                    FechaEstimadaEntrega = d.FechaEstimadaEntrega,
-                    FechaEntrega = d.FechaEntrega,
-                    Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
-                    {
-                        Id = dd.Id,
-                        PlatilloId = dd.PlatilloId,
-                        PlatilloNombre = dd.Platillo.Nombre,
-                        Cantidad = dd.Cantidad,
-                        PrecioUnitario = dd.PrecioUnitario,
-                        Subtotal = dd.Subtotal,
-                        Nota = dd.Nota ?? ""
-                    }).ToList()
-                })
+                .Select(AResponseDto)
                 .ToListAsync();
 
             return Ok(domicilios);
         }
 
         // GET: api/domicilios/activos
+        /// <summary>Domicilios en curso: en preparación, listos, recogidos o en camino.</summary>
         [HttpGet("activos")]
         public async Task<ActionResult<IEnumerable<DomicilioResponseDto>>> GetDomiciliosActivos()
         {
-            try
-            {
-                Console.WriteLine("📥 Obteniendo domicilios activos");
+            var domicilios = await _context.Domicilios
+                .Where(d => EstadosActivos.Contains(d.Estado))
+                .OrderBy(d => d.FechaPedido)
+                .Select(AResponseDto)
+                .ToListAsync();
 
-                var domicilios = await _context.Domicilios
-                    .Include(d => d.Cliente)
-                    .Include(d => d.Direccion)
-                    .Include(d => d.Detalles)
-                        .ThenInclude(dd => dd.Platillo)
-                    .Include(d => d.UsuarioCreador)
-                    .Include(d => d.Domiciliario)
-                    .Where(d => d.Estado == "EnPreparacion" || d.Estado == "EnCamino")
-                    .OrderBy(d => d.FechaPedido)
-                    .ToListAsync();
-
-                Console.WriteLine($"✅ Domicilios encontrados: {domicilios.Count}");
-
-                var resultado = domicilios.Select(d => new DomicilioResponseDto
-                {
-                    Id = d.Id,
-                    ClienteId = d.ClienteId,
-                    ClienteNombre = d.Cliente.Nombre,
-                    ClienteTelefono = d.Cliente.Telefono,
-                    DireccionId = d.DireccionId,
-                    DireccionCompleta = d.Direccion.DireccionCompleta,
-                    Barrio = d.Direccion.Barrio ?? "",
-                    ReferenciasAdicionales = d.Direccion.ReferenciasAdicionales ?? "",
-                    FechaPedido = d.FechaPedido,
-                    Estado = d.Estado,
-                    Subtotal = d.Subtotal,
-                    CostoEnvio = d.CostoEnvio,
-                    Total = d.Total,
-                    MetodoPago = d.MetodoPago,
-                    PagadoAnticipado = d.PagadoAnticipado,
-                    NotasCliente = d.NotasCliente ?? "",
-                    NotasInternas = d.NotasInternas ?? "",
-                    UsuarioCreadorId = d.UsuarioCreadorId,
-                    UsuarioCreadorNombre = d.UsuarioCreador.Nombre,
-                    DomiciliarioId = d.DomiciliarioId,
-                    DomiciliarioNombre = d.Domiciliario != null ? d.Domiciliario.Nombre : null,
-                    FechaEstimadaEntrega = d.FechaEstimadaEntrega,
-                    FechaEntrega = d.FechaEntrega,
-                    Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
-                    {
-                        Id = dd.Id,
-                        PlatilloId = dd.PlatilloId,
-                        PlatilloNombre = dd.Platillo.Nombre,
-                        Cantidad = dd.Cantidad,
-                        PrecioUnitario = dd.PrecioUnitario,
-                        Subtotal = dd.Subtotal,
-                        Nota = dd.Nota ?? ""
-                    }).ToList()
-                }).ToList();
-
-                return Ok(resultado);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Error: {ex.Message}");
-                return StatusCode(500, new { message = "Error al obtener domicilios activos", error = ex.Message });
-            }
+            return Ok(domicilios);
         }
 
         // GET: api/domicilios/{id}
@@ -145,218 +58,95 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<DomicilioResponseDto>> GetDomicilio(int id)
         {
             var domicilio = await _context.Domicilios
-                .Include(d => d.Cliente)
-                .Include(d => d.Direccion)
-                .Include(d => d.Detalles)
-                    .ThenInclude(dd => dd.Platillo)
-                .Include(d => d.UsuarioCreador)
-                .Include(d => d.Domiciliario)
                 .Where(d => d.Id == id)
-                .Select(d => new DomicilioResponseDto
-                {
-                    Id = d.Id,
-                    ClienteId = d.ClienteId,
-                    ClienteNombre = d.Cliente.Nombre,
-                    ClienteTelefono = d.Cliente.Telefono,
-                    DireccionId = d.DireccionId,
-                    DireccionCompleta = d.Direccion.DireccionCompleta,
-                    Barrio = d.Direccion.Barrio ?? "",
-                    ReferenciasAdicionales = d.Direccion.ReferenciasAdicionales ?? "",
-                    FechaPedido = d.FechaPedido,
-                    Estado = d.Estado,
-                    Subtotal = d.Subtotal,
-                    CostoEnvio = d.CostoEnvio,
-                    Total = d.Total,
-                    MetodoPago = d.MetodoPago,
-                    PagadoAnticipado = d.PagadoAnticipado,
-                    NotasCliente = d.NotasCliente ?? "",
-                    NotasInternas = d.NotasInternas ?? "",
-                    UsuarioCreadorId = d.UsuarioCreadorId,
-                    UsuarioCreadorNombre = d.UsuarioCreador.Nombre,
-                    DomiciliarioId = d.DomiciliarioId,
-                    DomiciliarioNombre = d.Domiciliario != null ? d.Domiciliario.Nombre : null,
-                    FechaEstimadaEntrega = d.FechaEstimadaEntrega,
-                    FechaEntrega = d.FechaEntrega,
-                    Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
-                    {
-                        Id = dd.Id,
-                        PlatilloId = dd.PlatilloId,
-                        PlatilloNombre = dd.Platillo.Nombre,
-                        Cantidad = dd.Cantidad,
-                        PrecioUnitario = dd.PrecioUnitario,
-                        Subtotal = dd.Subtotal,
-                        Nota = dd.Nota ?? ""
-                    }).ToList()
-                })
+                .Select(AResponseDto)
                 .FirstOrDefaultAsync();
 
             if (domicilio == null)
-            {
                 return NotFound(new { message = "Domicilio no encontrado" });
-            }
 
             return Ok(domicilio);
         }
 
         // POST: api/domicilios
         [HttpPost]
+        [Authorize(Roles = "Administrador,Caja")]
         public async Task<ActionResult<DomicilioResponseDto>> CreateDomicilio([FromBody] CreateDomicilioDto dto)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            if (dto.Detalles == null || dto.Detalles.Count == 0)
+                return BadRequest(new { message = "El domicilio debe incluir al menos un platillo" });
 
-            try
+            if (dto.Detalles.Any(d => d.Cantidad <= 0 || d.Cantidad > CantidadMaximaPorLinea))
+                return BadRequest(new { message = $"La cantidad de cada platillo debe estar entre 1 y {CantidadMaximaPorLinea}" });
+
+            if (dto.CostoEnvio < 0)
+                return BadRequest(new { message = "El costo de envío no puede ser negativo" });
+
+            var metodoPago = string.IsNullOrWhiteSpace(dto.MetodoPago) ? "Efectivo" : dto.MetodoPago;
+            if (!MetodosPagoValidos.Contains(metodoPago))
+                return BadRequest(new { message = "Método de pago inválido" });
+
+            if (!await _context.Clientes.AnyAsync(c => c.Id == dto.ClienteId))
+                return BadRequest(new { message = "Cliente no encontrado" });
+
+            if (!await _context.Direcciones.AnyAsync(d => d.Id == dto.DireccionId && d.ClienteId == dto.ClienteId))
+                return BadRequest(new { message = "Dirección no encontrada para el cliente" });
+
+            // Quien crea el domicilio es el usuario del token, no el que diga el cuerpo.
+            var usuarioCreadorId = QproClaims.IdUsuario(HttpContext?.User) ?? dto.UsuarioCreadorId;
+            if (!await _context.Usuarios.AnyAsync(u => u.Id == usuarioCreadorId))
+                return BadRequest(new { message = "Usuario creador no válido" });
+
+            var platilloIds = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
+            var platillos = await _context.Platillos
+                .Where(p => platilloIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id);
+
+            var faltantes = platilloIds.Except(platillos.Keys).ToList();
+            if (faltantes.Count > 0)
+                return BadRequest(new { message = $"Platillo(s) no encontrado(s): {string.Join(", ", faltantes)}" });
+
+            var detalles = dto.Detalles.Select(d => new DomicilioDetalle
             {
-                Console.WriteLine("📥 Recibiendo petición para crear domicilio");
+                PlatilloId = d.PlatilloId,
+                Cantidad = d.Cantidad,
+                PrecioUnitario = platillos[d.PlatilloId].Precio,
+                Subtotal = platillos[d.PlatilloId].Precio * d.Cantidad,
+                Nota = d.Nota ?? ""
+            }).ToList();
 
-                // Validar que el cliente exista
-                var clienteExiste = await _context.Clientes.AnyAsync(c => c.Id == dto.ClienteId);
-                if (!clienteExiste)
-                {
-                    return BadRequest(new { message = "Cliente no encontrado" });
-                }
+            var subtotal = detalles.Sum(d => d.Subtotal);
 
-                // Validar que la dirección exista
-                var direccionExiste = await _context.Direcciones.AnyAsync(d => d.Id == dto.DireccionId);
-                if (!direccionExiste)
-                {
-                    return BadRequest(new { message = "Dirección no encontrada" });
-                }
-
-                // Validar platillos y calcular subtotal
-                decimal subtotal = 0;
-                var detallesConPrecios = new List<(int PlatilloId, int Cantidad, decimal PrecioUnitario, string Nota)>();
-
-                foreach (var detalle in dto.Detalles)
-                {
-                    var platillo = await _context.Platillos.FindAsync(detalle.PlatilloId);
-                    if (platillo == null)
-                    {
-                        return BadRequest(new { message = $"Platillo con ID {detalle.PlatilloId} no encontrado" });
-                    }
-
-                    decimal subtotalDetalle = platillo.Precio * detalle.Cantidad;
-                    subtotal += subtotalDetalle;
-
-                    detallesConPrecios.Add((
-                        detalle.PlatilloId,
-                        detalle.Cantidad,
-                        platillo.Precio,
-                        detalle.Nota ?? ""
-                    ));
-                }
-
-                decimal total = subtotal + dto.CostoEnvio;
-
-                // Crear domicilio con estado EnPreparacion
-                var domicilio = new Domicilio
-                {
-                    ClienteId = dto.ClienteId,
-                    DireccionId = dto.DireccionId,
-                    FechaPedido = DateTime.Now,
-                    Estado = "EnPreparacion",
-                    Subtotal = subtotal,
-                    CostoEnvio = dto.CostoEnvio,
-                    Total = total,
-                    MetodoPago = dto.MetodoPago ?? "Efectivo",
-                    PagadoAnticipado = dto.PagadoAnticipado,
-                    NotasCliente = dto.NotasCliente ?? "",
-                    NotasInternas = dto.NotasInternas ?? "",
-                    UsuarioCreadorId = dto.UsuarioCreadorId,
-                    FechaEstimadaEntrega = DateTime.Now.AddMinutes(30)
-                };
-
-                _context.Domicilios.Add(domicilio);
-                await _context.SaveChangesAsync();
-
-                // Crear detalles
-                foreach (var (platilloId, cantidad, precioUnitario, nota) in detallesConPrecios)
-                {
-                    var detalle = new DomicilioDetalle
-                    {
-                        DomicilioId = domicilio.Id,
-                        PlatilloId = platilloId,
-                        Cantidad = cantidad,
-                        PrecioUnitario = precioUnitario,
-                        Subtotal = precioUnitario * cantidad,
-                        Nota = nota
-                    };
-
-                    _context.DomicilioDetalles.Add(detalle);
-                }
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                // 📦 Descontar automáticamente del inventario para el domicilio
-                try
-                {
-                    await _inventarioService.DescontarStockPorDomicilioAsync(domicilio.Id);
-                }
-                catch (Exception exInv)
-                {
-                    Console.WriteLine($"⚠️ Error al descontar inventario para domicilio {domicilio.Id}: {exInv.Message}");
-                }
-
-                // Retornar domicilio creado
-                var domicilioCreado = await _context.Domicilios
-                    .Include(d => d.Cliente)
-                    .Include(d => d.Direccion)
-                    .Include(d => d.Detalles)
-                        .ThenInclude(dd => dd.Platillo)
-                    .Include(d => d.UsuarioCreador)
-                    .Where(d => d.Id == domicilio.Id)
-                    .Select(d => new DomicilioResponseDto
-                    {
-                        Id = d.Id,
-                        ClienteId = d.ClienteId,
-                        ClienteNombre = d.Cliente.Nombre,
-                        ClienteTelefono = d.Cliente.Telefono,
-                        DireccionId = d.DireccionId,
-                        DireccionCompleta = d.Direccion.DireccionCompleta,
-                        Barrio = d.Direccion.Barrio ?? "",
-                        ReferenciasAdicionales = d.Direccion.ReferenciasAdicionales ?? "",
-                        FechaPedido = d.FechaPedido,
-                        Estado = d.Estado,
-                        Subtotal = d.Subtotal,
-                        CostoEnvio = d.CostoEnvio,
-                        Total = d.Total,
-                        MetodoPago = d.MetodoPago,
-                        PagadoAnticipado = d.PagadoAnticipado,
-                        NotasCliente = d.NotasCliente ?? "",
-                        NotasInternas = d.NotasInternas ?? "",
-                        UsuarioCreadorId = d.UsuarioCreadorId,
-                        UsuarioCreadorNombre = d.UsuarioCreador.Nombre,
-                        DomiciliarioId = d.DomiciliarioId,
-                        DomiciliarioNombre = d.Domiciliario != null ? d.Domiciliario.Nombre : null,
-                        FechaEstimadaEntrega = d.FechaEstimadaEntrega,
-                        FechaEntrega = d.FechaEntrega,
-                        Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
-                        {
-                            Id = dd.Id,
-                            PlatilloId = dd.PlatilloId,
-                            PlatilloNombre = dd.Platillo.Nombre,
-                            Cantidad = dd.Cantidad,
-                            PrecioUnitario = dd.PrecioUnitario,
-                            Subtotal = dd.Subtotal,
-                            Nota = dd.Nota ?? ""
-                        }).ToList()
-                    })
-                    .FirstOrDefaultAsync();
-
-                return CreatedAtAction(nameof(GetDomicilio), new { id = domicilio.Id }, domicilioCreado);
-            }
-            catch (Exception ex)
+            // Domicilio y detalles en un solo SaveChanges.
+            var domicilio = new Domicilio
             {
-                await transaction.RollbackAsync();
-                Console.WriteLine($"❌ Error: {ex.Message}");
-                Console.WriteLine($"❌ Inner: {ex.InnerException?.Message}");
-                return StatusCode(500, new
-                {
-                    message = "Error al crear domicilio",
-                    error = ex.Message,
-                    innerError = ex.InnerException?.Message
-                });
-            }
+                ClienteId = dto.ClienteId,
+                DireccionId = dto.DireccionId,
+                FechaPedido = DateTime.UtcNow,
+                Estado = "EnPreparacion",
+                Subtotal = subtotal,
+                CostoEnvio = dto.CostoEnvio,
+                Total = subtotal + dto.CostoEnvio,
+                MetodoPago = metodoPago,
+                PagadoAnticipado = dto.PagadoAnticipado,
+                NotasCliente = dto.NotasCliente ?? "",
+                NotasInternas = dto.NotasInternas ?? "",
+                UsuarioCreadorId = usuarioCreadorId,
+                FechaEstimadaEntrega = DateTime.UtcNow.AddMinutes(30),
+                Detalles = detalles
+            };
+
+            _context.Domicilios.Add(domicilio);
+            await _context.SaveChangesAsync();
+
+            await _inventarioService.DescontarStockPorDomicilioAsync(domicilio.Id);
+
+            var domicilioCreado = await _context.Domicilios
+                .Where(d => d.Id == domicilio.Id)
+                .Select(AResponseDto)
+                .FirstAsync();
+
+            return CreatedAtAction(nameof(GetDomicilio), new { id = domicilio.Id }, domicilioCreado);
         }
 
         // PUT: api/domicilios/{id}/estado
@@ -366,61 +156,50 @@ namespace RestaurantApi.Controllers
             var domicilio = await _context.Domicilios.FindAsync(id);
 
             if (domicilio == null)
-            {
                 return NotFound(new { message = "Domicilio no encontrado" });
-            }
 
-            var estadosValidos = new[] { "EnPreparacion", "Listo", "EnCamino", "Entregado", "Cancelado" };
-            if (!estadosValidos.Contains(dto.Estado))
-            {
+            if (string.IsNullOrWhiteSpace(dto.Estado) || !EstadosPedido.EsEstadoDomicilio(dto.Estado) || dto.Estado == "Recogido")
                 return BadRequest(new { message = "Estado inválido" });
-            }
+
+            if (!EstadosPedido.PuedeCambiarDomicilio(domicilio.Estado, dto.Estado))
+                return Conflict(new { message = $"No se puede pasar un domicilio de {domicilio.Estado} a {dto.Estado}" });
+
+            if (domicilio.Estado == dto.Estado)
+                return NoContent();
 
             domicilio.Estado = dto.Estado;
-
             if (dto.Estado == "Entregado")
-            {
-                domicilio.FechaEntrega = DateTime.Now;
-            }
+                domicilio.FechaEntrega = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
-
-            // Sincronizar inventario según estado del domicilio
             try
             {
-                if (dto.Estado == "Cancelado")
-                {
-                    await _inventarioService.RevertirStockPorDomicilioAsync(id);
-                }
-                else if (dto.Estado == "Entregado" || dto.Estado == "Listo")
-                {
-                    await _inventarioService.DescontarStockPorDomicilioAsync(id);
-                }
+                await _context.SaveChangesAsync();
             }
-            catch (Exception exInv)
+            catch (DbUpdateConcurrencyException)
             {
-                Console.WriteLine($"⚠️ Error al actualizar inventario para domicilio {id}: {exInv.Message}");
+                return Conflict(new { message = "El domicilio cambió mientras lo editabas. Recarga e intenta de nuevo." });
             }
+
+            if (dto.Estado == "Cancelado")
+                await _inventarioService.RevertirStockPorDomicilioAsync(id);
+            else
+                await _inventarioService.DescontarStockPorDomicilioAsync(id);
 
             return NoContent();
         }
 
         // PUT: api/domicilios/{id}/metodo-pago
         [HttpPut("{id}/metodo-pago")]
+        [Authorize(Roles = "Administrador,Caja")]
         public async Task<IActionResult> ActualizarMetodoPago(int id, [FromBody] ActualizarMetodoPagoDto dto)
         {
             var domicilio = await _context.Domicilios.FindAsync(id);
 
             if (domicilio == null)
-            {
                 return NotFound(new { message = "Domicilio no encontrado" });
-            }
 
-            var metodosValidos = new[] { "Efectivo", "Transferencia", "Tarjeta", "Nequi", "Daviplata" };
-            if (!metodosValidos.Contains(dto.MetodoPago))
-            {
+            if (!MetodosPagoValidos.Contains(dto.MetodoPago))
                 return BadRequest(new { message = "Método de pago inválido" });
-            }
 
             domicilio.MetodoPago = dto.MetodoPago;
             domicilio.PagadoAnticipado = dto.PagadoAnticipado;
@@ -434,7 +213,7 @@ namespace RestaurantApi.Controllers
         [HttpGet("estadisticas/hoy")]
         public async Task<ActionResult<EstadisticasDomiciliosDto>> GetEstadisticasHoy()
         {
-            var hoy = DateTime.Today;
+            var hoy = HoraLocal.InicioDeHoyUtc();
             var manana = hoy.AddDays(1);
 
             var domiciliosHoy = await _context.Domicilios
@@ -446,7 +225,7 @@ namespace RestaurantApi.Controllers
                 TotalDomicilios = domiciliosHoy.Count,
                 EnPreparacion = domiciliosHoy.Count(d => d.Estado == "EnPreparacion"),
                 Listo = domiciliosHoy.Count(d => d.Estado == "Listo"),
-                EnCamino = domiciliosHoy.Count(d => d.Estado == "EnCamino"),
+                EnCamino = domiciliosHoy.Count(d => d.Estado == "EnCamino" || d.Estado == "Recogido"),
                 Entregados = domiciliosHoy.Count(d => d.Estado == "Entregado"),
                 Cancelados = domiciliosHoy.Count(d => d.Estado == "Cancelado"),
                 TotalVentas = domiciliosHoy.Where(d => d.Estado == "Entregado").Sum(d => d.Total)
@@ -454,5 +233,42 @@ namespace RestaurantApi.Controllers
 
             return Ok(estadisticas);
         }
+
+        private static readonly Expression<Func<Domicilio, DomicilioResponseDto>> AResponseDto = d => new DomicilioResponseDto
+        {
+            Id = d.Id,
+            ClienteId = d.ClienteId,
+            ClienteNombre = d.Cliente.Nombre,
+            ClienteTelefono = d.Cliente.Telefono,
+            DireccionId = d.DireccionId,
+            DireccionCompleta = d.Direccion.DireccionCompleta,
+            Barrio = d.Direccion.Barrio ?? "",
+            ReferenciasAdicionales = d.Direccion.ReferenciasAdicionales ?? "",
+            FechaPedido = d.FechaPedido,
+            Estado = d.Estado,
+            Subtotal = d.Subtotal,
+            CostoEnvio = d.CostoEnvio,
+            Total = d.Total,
+            MetodoPago = d.MetodoPago,
+            PagadoAnticipado = d.PagadoAnticipado,
+            NotasCliente = d.NotasCliente ?? "",
+            NotasInternas = d.NotasInternas ?? "",
+            UsuarioCreadorId = d.UsuarioCreadorId,
+            UsuarioCreadorNombre = d.UsuarioCreador.Nombre,
+            DomiciliarioId = d.DomiciliarioId,
+            DomiciliarioNombre = d.Domiciliario != null ? d.Domiciliario.Nombre : null,
+            FechaEstimadaEntrega = d.FechaEstimadaEntrega,
+            FechaEntrega = d.FechaEntrega,
+            Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
+            {
+                Id = dd.Id,
+                PlatilloId = dd.PlatilloId,
+                PlatilloNombre = dd.Platillo.Nombre,
+                Cantidad = dd.Cantidad,
+                PrecioUnitario = dd.PrecioUnitario,
+                Subtotal = dd.Subtotal,
+                Nota = dd.Nota ?? ""
+            }).ToList()
+        };
     }
 }

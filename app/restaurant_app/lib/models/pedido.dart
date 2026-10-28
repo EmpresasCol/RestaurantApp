@@ -1,4 +1,5 @@
-enum EstadoPedido { enProceso, listo, entregado, pagado, cancelado }
+// `desconocido`: estado que la app aún no conoce; no se trata como EnProceso.
+enum EstadoPedido { enProceso, listo, entregado, pagado, cancelado, desconocido }
 
 class Pedido {
   final int id;
@@ -22,7 +23,8 @@ class Pedido {
       id: json['id'] ?? 0,
       mesaId: json['mesaId'] ?? 0,
       mesaNumero: json['mesaNumero'] ?? json['mesaId'] ?? 0,
-      fecha: DateTime.parse(json['fecha']),
+      // La API envía UTC con "Z"; toLocal() deja la hora del dispositivo.
+      fecha: DateTime.parse(json['fecha']).toLocal(),
       estado: _estadoFromString(json['estado'] ?? ''),
       detalles: (json['detalles'] as List?)
           ?.map((d) => ItemPedido.fromJson(d))
@@ -36,7 +38,9 @@ class Pedido {
   bool get puedeEditar {
     if (estado != EstadoPedido.enProceso) return false;
     final diff = DateTime.now().difference(fecha);
-    return diff.inMinutes <= 5;
+    // Una fecha "en el futuro" (desfase de zona horaria o reloj) no deja el pedido
+    // editable indefinidamente; se toleran 2 min de diferencia entre relojes.
+    return diff >= const Duration(minutes: -2) && diff <= const Duration(minutes: 5);
   }
 
   // ✅ SOLO puede entregar si está LISTO (cambio principal)
@@ -56,7 +60,7 @@ class Pedido {
       case 'entregado': return EstadoPedido.entregado;
       case 'pagado': return EstadoPedido.pagado;
       case 'cancelado': return EstadoPedido.cancelado;
-      default: return EstadoPedido.enProceso;
+      default: return EstadoPedido.desconocido;
     }
   }
 }

@@ -14,7 +14,9 @@
 //   · Rate limiting recomendado a nivel de infraestructura (AWS WAF / API Gateway).
 
 using System.Security.Cryptography;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
@@ -24,6 +26,8 @@ namespace RestaurantApi.Controllers
 {
     [ApiController]
     [Route("api/publico/domicilios")]
+    [AllowAnonymous]
+    [EnableRateLimiting("publico")]
     public class DomiciliosPublicoController : ControllerBase
     {
         private readonly RestauranteContext _context;
@@ -78,15 +82,14 @@ namespace RestaurantApi.Controllers
                     _context.Clientes.Add(cliente);
                     await _context.SaveChangesAsync();
                 }
-                else
-                {
-                    // Actualizar el nombre si cambió (UX: el cliente puede ajustar).
-                    if (!string.IsNullOrWhiteSpace(dto.ClienteNombre)
-                        && cliente.Nombre != dto.ClienteNombre.Trim())
-                    {
-                        cliente.Nombre = dto.ClienteNombre.Trim();
-                    }
-                }
+
+                // Un cliente existente NO se modifica desde la página pública: cualquiera que
+                // conozca el teléfono podría cambiar sus datos. Si el nombre difiere, queda
+                // como nota interna del pedido para que el restaurante lo verifique.
+                var nombreIndicado = dto.ClienteNombre?.Trim();
+                var notaNombre = !string.IsNullOrWhiteSpace(nombreIndicado) && nombreIndicado != cliente.Nombre
+                    ? $"Nombre indicado en la página pública: {nombreIndicado}"
+                    : null;
 
                 // 2. Crear una nueva dirección para este pedido (puede haber múltiples).
                 var direccion = new Direccion
@@ -137,7 +140,7 @@ namespace RestaurantApi.Controllers
                 const decimal costoEnvioBase = 3000m;
 
                 // 5. Crear el domicilio.
-                var ahora = DateTime.Now;
+                var ahora = DateTime.UtcNow;
                 var token = GenerarTokenSeguro();
 
                 var domicilio = new Domicilio
@@ -152,6 +155,7 @@ namespace RestaurantApi.Controllers
                     MetodoPago           = dto.MetodoPago,
                     PagadoAnticipado     = false,
                     NotasCliente         = dto.NotasCliente,
+                    NotasInternas        = notaNombre,
                     UsuarioCreadorId     = await ResolverUsuarioSistemaPublico(),
                     FechaEstimadaEntrega = ahora.AddMinutes(50), // 30 prep + 20 entrega
                     TokenSeguimiento     = token,
@@ -183,7 +187,7 @@ namespace RestaurantApi.Controllers
                 // 7. Notificar a cocina/admin por FCM.
                 await _realtime.NotificarNuevoDomicilioAsync(domicilio);
 
-                _logger.LogInformation("📥 Domicilio público creado #{Id} · token {Token}", domicilio.Id, token);
+                _logger.LogInformation("📥 Domicilio público creado #{Id}", domicilio.Id);
 
                 return Ok(new CreateDomicilioPublicoResponseDto
                 {
@@ -220,7 +224,7 @@ namespace RestaurantApi.Controllers
 
             if (d is null) return NotFound(new { message = "Pedido no encontrado" });
 
-            var ahora = DateTime.Now;
+            var ahora = DateTime.UtcNow;
 
             return Ok(new SeguimientoPublicoDto
             {
@@ -280,8 +284,11 @@ namespace RestaurantApi.Controllers
             if (domicilio.Estado != "EnPreparacion")
                 return Conflict(new { message = "El pedido ya está en una fase que no permite edición" });
 
-            if (!domicilio.PuedeEditarHasta.HasValue || DateTime.Now > domicilio.PuedeEditarHasta.Value)
+            if (!domicilio.PuedeEditarHasta.HasValue || DateTime.UtcNow > domicilio.PuedeEditarHasta.Value)
                 return Conflict(new { message = "La ventana de edición ha expirado" });
+
+            if (dto.Detalles.Count == 0)
+                return BadRequest(new { message = "Debe incluir al menos un platillo" });
 
             // Validar platillos
             var ids = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
@@ -320,8 +327,18 @@ namespace RestaurantApi.Controllers
             domicilio.Total        = subtotal + domicilio.CostoEnvio;
             domicilio.NotasCliente = dto.NotasCliente ?? domicilio.NotasCliente;
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(new { message = "El pedido cambió de estado mientras lo editabas" });
+            }
             await tx.CommitAsync();
+
+            // Lo quitado vuelve al stock y lo agregado se descuenta (solo la diferencia).
+            await _inventarioService.DescontarStockPorDomicilioAsync(domicilio.Id);
 
             await _realtime.NotificarCambioEstadoAsync(domicilio);
 
@@ -351,7 +368,7 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = "Ya enviaste una observación para este pedido" });
 
             domicilio.ObservacionCliente = dto.Observacion.Trim();
-            domicilio.FechaObservacion   = DateTime.Now;
+            domicilio.FechaObservacion   = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
             await _realtime.NotificarObservacionAsync(domicilio);

@@ -50,6 +50,6 @@ namespace RestaurantApi.Models
 
         public int? UsuarioId { get; set; }
 
-        public DateTime Fecha { get; set; } = DateTime.Now;
+        public DateTime Fecha { get; set; } = DateTime.UtcNow;
     }
 }

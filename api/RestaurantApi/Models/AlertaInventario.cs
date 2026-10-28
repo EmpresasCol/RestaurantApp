@@ -26,7 +26,7 @@
         public string Mensaje { get; set; } = null!;
         public NivelAlerta Nivel { get; set; } = NivelAlerta.Info;
         public bool Leida { get; set; } = false;
-        public DateTime FechaGeneracion { get; set; } = DateTime.Now;
+        public DateTime FechaGeneracion { get; set; } = DateTime.UtcNow;
         public DateTime? FechaLeida { get; set; }
 
         // Navegación

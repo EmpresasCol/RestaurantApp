@@ -5,15 +5,18 @@
 //
 // Ruta: api/admin/domiciliarios/*
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
+using RestaurantApi.Services;
 
 namespace RestaurantApi.Controllers
 {
     [ApiController]
     [Route("api/admin/domiciliarios")]
+    [Authorize(Roles = "Administrador")]
     public class AdminDomiciliariosController : ControllerBase
     {
         private readonly RestauranteContext _context;
@@ -30,10 +33,12 @@ namespace RestaurantApi.Controllers
         [HttpGet("ranking")]
         public async Task<ActionResult<IEnumerable<EstadisticasDomiciliarioDto>>> GetRanking()
         {
-            var hoy          = DateTime.Today;
-            var inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek + (int)DayOfWeek.Monday);
-            if (inicioSemana > hoy) inicioSemana = inicioSemana.AddDays(-7);
-            var inicioMes    = new DateTime(hoy.Year, hoy.Month, 1);
+            var hoyLocal     = HoraLocal.AhoraColombia().Date;
+            var semanaLocal  = hoyLocal.AddDays(-(int)hoyLocal.DayOfWeek + (int)DayOfWeek.Monday);
+            if (semanaLocal > hoyLocal) semanaLocal = semanaLocal.AddDays(-7);
+            var hoy          = HoraLocal.AUtc(hoyLocal);
+            var inicioSemana = HoraLocal.AUtc(semanaLocal);
+            var inicioMes    = HoraLocal.AUtc(new DateTime(hoyLocal.Year, hoyLocal.Month, 1));
 
             var domiciliarios = await _context.Usuarios
                 .AsNoTracking()

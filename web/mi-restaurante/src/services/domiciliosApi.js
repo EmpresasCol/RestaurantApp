@@ -1,18 +1,22 @@
 // src/services/domiciliosApi.js
-const API_URL = process.env.REACT_APP_API_URL || '/api';
+import { getApiBaseUrl, encabezadosAuth, manejarNoAutorizado } from './sesion';
+
+const API_URL = getApiBaseUrl();
 
 const fetchWithHeaders = async (url, options = {}) => {
   const headers = {
     'Content-Type': 'application/json',
     'ngrok-skip-browser-warning': '69420',
-    'User-Agent': 'RestaurantApp',
+    ...encabezadosAuth(),
     ...options.headers
   };
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers
   });
+  manejarNoAutorizado(response.status);
+  return response;
 };
 
 // ==================== CLIENTES ====================

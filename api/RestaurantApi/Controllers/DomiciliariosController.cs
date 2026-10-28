@@ -3,7 +3,9 @@
 // No expone información más allá de lo necesario: el domiciliario solo ve
 // pedidos 'Listo' sin asignar y los suyos asignados en curso.
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
@@ -13,58 +15,70 @@ namespace RestaurantApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Domiciliario,Administrador")]
     public class DomiciliariosController : ControllerBase
     {
         private readonly RestauranteContext _context;
         private readonly DomicilioRealtimeService _realtime;
         private readonly ILogger<DomiciliariosController> _logger;
+        private readonly JwtTokenService _jwt;
 
         public DomiciliariosController(
             RestauranteContext context,
             DomicilioRealtimeService realtime,
-            ILogger<DomiciliariosController> logger)
+            ILogger<DomiciliariosController> logger,
+            JwtTokenService? jwt = null)
         {
             _context  = context;
             _realtime = realtime;
             _logger   = logger;
+            _jwt      = jwt ?? new JwtTokenService(new JwtOptions());
         }
 
         // ══════════════════════════════════════════════════════════════════
         // LOGIN
         // ══════════════════════════════════════════════════════════════════
 
-        /// <summary>
-        /// Login dedicado para domiciliarios desde la app móvil.
-        /// Nota: el hash de contraseña debe migrarse a BCrypt (pendiente global del proyecto).
-        /// </summary>
+        /// <summary>Login dedicado para domiciliarios desde la app móvil.</summary>
         [HttpPost("login")]
+        [AllowAnonymous]
+        [EnableRateLimiting("login")]
         public async Task<ActionResult<LoginDomiciliarioResponseDto>> Login([FromBody] LoginRequestDto req)
         {
             if (string.IsNullOrWhiteSpace(req.Usuario) || string.IsNullOrWhiteSpace(req.Clave))
                 return BadRequest(new { message = "Usuario y contraseña son obligatorios" });
 
             var usuario = await _context.Usuarios
-                .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.NombreUsuario == req.Usuario);
 
-            if (usuario is null || usuario.ClaveHash != req.Clave)
+            var migrar = false;
+            if (usuario is null)
+                ClaveHasher.VerificarFicticio(req.Clave);
+
+            if (usuario is null || !ClaveHasher.Verificar(req.Clave, usuario.ClaveHash, out migrar))
             {
                 // No revelamos si el usuario existe o no: mismo mensaje.
-                _logger.LogWarning("🚫 Login domiciliario fallido: {User}", req.Usuario);
+                _logger.LogWarning("🚫 Login domiciliario fallido");
                 return Unauthorized(new { message = "Credenciales inválidas" });
+            }
+
+            if (migrar)
+            {
+                usuario.ClaveHash = ClaveHasher.Hash(req.Clave);
+                await _context.SaveChangesAsync();
             }
 
             if (usuario.Rol != RolUsuario.Domiciliario)
             {
-                _logger.LogWarning("⛔ {User} intentó login como domiciliario con rol {Rol}",
-                    req.Usuario, usuario.Rol);
+                _logger.LogWarning("⛔ Usuario {Id} intentó login como domiciliario con rol {Rol}",
+                    usuario.Id, usuario.Rol);
                 return Unauthorized(new
                 {
                     message = "Esta cuenta no tiene permisos de domiciliario."
                 });
             }
 
-            var hoy = DateTime.Today;
+            var hoy = HoraLocal.InicioDeHoyUtc();
             var manana = hoy.AddDays(1);
 
             var entregasHoy = await _context.Domicilios
@@ -85,7 +99,8 @@ namespace RestaurantApi.Controllers
                 NombreUsuario   = usuario.NombreUsuario,
                 Rol             = usuario.Rol.ToString(),
                 EntregasHoy     = entregasHoy,
-                EntregasTotales = entregasTotales
+                EntregasTotales = entregasTotales,
+                Token           = _jwt.Crear(usuario)
             });
         }
 
@@ -98,12 +113,8 @@ namespace RestaurantApi.Controllers
         [HttpGet("{domiciliarioId:int}/pedidos")]
         public async Task<ActionResult<IEnumerable<DomicilioDomiciliarioDto>>> GetPedidos(int domiciliarioId)
         {
-            // Validación rápida: el usuario debe existir y ser domiciliario.
-            var esDomiciliario = await _context.Usuarios
-                .AnyAsync(u => u.Id == domiciliarioId && u.Rol == RolUsuario.Domiciliario);
-
-            if (!esDomiciliario)
-                return Unauthorized(new { message = "Usuario no autorizado" });
+            var rechazo = await ValidarDomiciliarioAsync(domiciliarioId);
+            if (rechazo is not null) return rechazo;
 
             var pedidos = await _context.Domicilios
                 .AsNoTracking()
@@ -135,7 +146,8 @@ namespace RestaurantApi.Controllers
         [HttpPut("{domiciliarioId:int}/pedidos/{domicilioId:int}/recoger")]
         public async Task<IActionResult> MarcarRecogido(int domiciliarioId, int domicilioId)
         {
-            using var tx = await _context.Database.BeginTransactionAsync();
+            var rechazo = await ValidarDomiciliarioAsync(domiciliarioId);
+            if (rechazo is not null) return rechazo;
 
             var domicilio = await _context.Domicilios.FindAsync(domicilioId);
             if (domicilio is null)
@@ -150,10 +162,18 @@ namespace RestaurantApi.Controllers
 
             domicilio.DomiciliarioId = domiciliarioId;
             domicilio.Estado         = "Recogido";
-            domicilio.FechaRecogida  = DateTime.Now;
+            domicilio.FechaRecogida  = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();
-            await tx.CommitAsync();
+            // Estado y DomiciliarioId son tokens de concurrencia: si otro domiciliario
+            // lo tomó entre la lectura y el guardado, el UPDATE no afecta filas.
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(new { message = "Este pedido ya fue tomado por otro domiciliario" });
+            }
 
             // Notificar a cliente (por token) y admin vía FCM.
             await _realtime.NotificarCambioEstadoAsync(domicilio);
@@ -169,6 +189,9 @@ namespace RestaurantApi.Controllers
         [HttpPut("{domiciliarioId:int}/pedidos/{domicilioId:int}/en-camino")]
         public async Task<IActionResult> MarcarEnCamino(int domiciliarioId, int domicilioId)
         {
+            var rechazo = await ValidarDomiciliarioAsync(domiciliarioId);
+            if (rechazo is not null) return rechazo;
+
             var domicilio = await _context.Domicilios.FindAsync(domicilioId);
             if (domicilio is null) return NotFound();
 
@@ -191,6 +214,9 @@ namespace RestaurantApi.Controllers
         [HttpPut("{domiciliarioId:int}/pedidos/{domicilioId:int}/entregar")]
         public async Task<IActionResult> MarcarEntregado(int domiciliarioId, int domicilioId)
         {
+            var rechazo = await ValidarDomiciliarioAsync(domiciliarioId);
+            if (rechazo is not null) return rechazo;
+
             var domicilio = await _context.Domicilios.FindAsync(domicilioId);
             if (domicilio is null) return NotFound();
 
@@ -201,7 +227,7 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = $"Estado inválido: {domicilio.Estado}" });
 
             domicilio.Estado       = "Entregado";
-            domicilio.FechaEntrega = DateTime.Now;
+            domicilio.FechaEntrega = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
             await _realtime.NotificarCambioEstadoAsync(domicilio);
@@ -217,16 +243,19 @@ namespace RestaurantApi.Controllers
         [HttpGet("{domiciliarioId:int}/estadisticas")]
         public async Task<ActionResult<EstadisticasDomiciliarioDto>> GetEstadisticas(int domiciliarioId)
         {
+            var rechazo = await ValidarDomiciliarioAsync(domiciliarioId);
+            if (rechazo is not null) return rechazo;
+
             var usuario = await _context.Usuarios
                 .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == domiciliarioId && u.Rol == RolUsuario.Domiciliario);
+                .FirstAsync(u => u.Id == domiciliarioId);
 
-            if (usuario is null) return NotFound();
-
-            var hoy    = DateTime.Today;
-            var inicioSemana = hoy.AddDays(-(int)hoy.DayOfWeek + (int)DayOfWeek.Monday);
-            if (inicioSemana > hoy) inicioSemana = inicioSemana.AddDays(-7);
-            var inicioMes = new DateTime(hoy.Year, hoy.Month, 1);
+            var hoyLocal     = HoraLocal.AhoraColombia().Date;
+            var semanaLocal  = hoyLocal.AddDays(-(int)hoyLocal.DayOfWeek + (int)DayOfWeek.Monday);
+            if (semanaLocal > hoyLocal) semanaLocal = semanaLocal.AddDays(-7);
+            var hoy          = HoraLocal.AUtc(hoyLocal);
+            var inicioSemana = HoraLocal.AUtc(semanaLocal);
+            var inicioMes    = HoraLocal.AUtc(new DateTime(hoyLocal.Year, hoyLocal.Month, 1));
 
             var entregas = await _context.Domicilios
                 .AsNoTracking()
@@ -254,6 +283,22 @@ namespace RestaurantApi.Controllers
         // ══════════════════════════════════════════════════════════════════
         // Helpers
         // ══════════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// El id de la ruta debe ser el del token (salvo administrador) y corresponder
+        /// a un usuario con rol Domiciliario. Devuelve null si puede continuar.
+        /// </summary>
+        private async Task<ActionResult?> ValidarDomiciliarioAsync(int domiciliarioId)
+        {
+            var idToken = QproClaims.IdUsuario(HttpContext?.User);
+            if (idToken.HasValue && idToken.Value != domiciliarioId && !QproClaims.EsAdministrador(HttpContext?.User))
+                return Forbid();
+
+            var esDomiciliario = await _context.Usuarios
+                .AnyAsync(u => u.Id == domiciliarioId && u.Rol == RolUsuario.Domiciliario);
+
+            return esDomiciliario ? null : Forbid();
+        }
 
         private static DomicilioDomiciliarioDto MapToDomiciliarioDto(Domicilio d) => new()
         {

@@ -10,106 +10,33 @@ import { ChefHat, Clock, CheckCircle, Truck, AlertCircle } from "lucide-react"
 import { useAuth } from "./context/AuthContext"
 import * as api from "./services/api"
 import { getDomiciliosActivos, actualizarEstadoDomicilio } from "./services/domiciliosApi"
+import { POLLING_DOMICILIOS_MS, ordenarPorPrioridad, transformarDomicilios } from "./utils/kds"
 
 function Cocina({ pedidos = [], onActualizarPedidos }) {
   const { usuario } = useAuth()
   const [filtroMesa, setFiltroMesa] = useState("todas")
   const [cargandoEstado, setCargandoEstado] = useState(null)
   const [modalConfirmacion, setModalConfirmacion] = useState(null)
-  const [todosLosPedidos, setTodosLosPedidos] = useState([])
+  const [domicilios, setDomicilios] = useState([])
 
-  // Carga inicial / cuando cambian los pedidos del padre
+  // Domicilios cada 5 s con intervalo estable; los pedidos de mesa llegan del padre
+  // por props (antes el intervalo dependía de `pedidos` y se reiniciaba cada 2 s).
   useEffect(() => {
     cargarTodosLosDatos()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedidos])
-
-  // Polling de domicilios cada 5s (evita recargar pedidos de mesa para no
-  // duplicar tráfico con el polling del padre)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      cargarDomiciliosSoloActualizacion()
-    }, 5000)
+    const interval = setInterval(cargarTodosLosDatos, POLLING_DOMICILIOS_MS)
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pedidos])
+  }, [])
 
   const cargarTodosLosDatos = async () => {
     try {
-      const pedidosMesas = pedidos || []
-      const domiciliosData = await getDomiciliosActivos()
-
-      const domiciliosTransformados = Array.isArray(domiciliosData)
-        ? domiciliosData
-            .filter((d) => d.estado === "EnPreparacion")
-            .map((d) => ({
-              id: `D${d.id}`,
-              domicilioId: d.id,
-              mesa: `Domicilio #${d.id}`,
-              cliente: d.clienteNombre,
-              telefono: d.clienteTelefono,
-              direccion: d.direccionCompleta,
-              items: d.detalles.map((det) => ({
-                id: det.id,
-                nombre: det.platilloNombre,
-                cantidad: det.cantidad,
-                notas: det.nota || "",
-              })),
-              hora: new Date(d.fechaPedido),
-              estado: "EnPreparacion",
-              tipo: "domicilio",
-              notasCliente: d.notasCliente,
-            }))
-        : []
-
-      const pedidosMesasTransformados = pedidosMesas.map((p) => ({
-        ...p,
-        tipo: "mesa",
-      }))
-
-      setTodosLosPedidos([...pedidosMesasTransformados, ...domiciliosTransformados])
+      setDomicilios(transformarDomicilios(await getDomiciliosActivos()))
     } catch (error) {
-      console.error("Error al cargar datos:", error)
+      console.error("Error al cargar domicilios:", error)
     }
   }
 
-  const cargarDomiciliosSoloActualizacion = async () => {
-    try {
-      const domiciliosData = await getDomiciliosActivos()
-
-      const domiciliosTransformados = Array.isArray(domiciliosData)
-        ? domiciliosData
-            .filter((d) => d.estado === "EnPreparacion")
-            .map((d) => ({
-              id: `D${d.id}`,
-              domicilioId: d.id,
-              mesa: `Domicilio #${d.id}`,
-              cliente: d.clienteNombre,
-              telefono: d.clienteTelefono,
-              direccion: d.direccionCompleta,
-              items: d.detalles.map((det) => ({
-                id: det.id,
-                nombre: det.platilloNombre,
-                cantidad: det.cantidad,
-                notas: det.nota || "",
-              })),
-              hora: new Date(d.fechaPedido),
-              estado: "EnPreparacion",
-              tipo: "domicilio",
-              notasCliente: d.notasCliente,
-            }))
-        : []
-
-      const pedidosMesasTransformados = (pedidos || []).map((p) => ({
-        ...p,
-        tipo: "mesa",
-      }))
-
-      setTodosLosPedidos([...pedidosMesasTransformados, ...domiciliosTransformados])
-    } catch (error) {
-      console.error("Error al actualizar domicilios:", error)
-    }
-  }
+  const todosLosPedidos = [...(pedidos || []).map((p) => ({ ...p, tipo: "mesa" })), ...domicilios]
 
   const calcularTiempoTranscurrido = (horaInicio) => {
     const ahora = new Date()
@@ -189,14 +116,14 @@ function Cocina({ pedidos = [], onActualizarPedidos }) {
     return aNum - bNum
   })
 
-  const pedidosFiltrados = todosLosPedidos
+  const pedidosFiltrados = ordenarPorPrioridad(todosLosPedidos
     .filter((pedido) => pedido.estado !== "Pagado" && pedido.estado !== "Cancelado")
     .filter((pedido) => {
       if (!puedeFiltrarMesas()) return true
       if (filtroMesa === "todas") return true
       return pedido.mesa.toString() === filtroMesa
     })
-    .sort((a, b) => new Date(a.hora) - new Date(b.hora))
+  )
 
   const getEstadoColor = (estado) => {
     switch (estado) {

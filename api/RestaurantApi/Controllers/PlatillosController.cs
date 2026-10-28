@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 using RestaurantApi.Dtos;
@@ -7,16 +8,21 @@ namespace RestaurantApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize(Roles = "Administrador")]
     public class PlatillosController : ControllerBase
     {
         private readonly RestauranteContext _context;
+        private readonly ILogger<PlatillosController>? _logger;
 
-        public PlatillosController(RestauranteContext context)
+        public PlatillosController(RestauranteContext context, ILogger<PlatillosController>? logger = null)
         {
             _context = context;
+            _logger = logger;
         }
 
+        // La carta es pública: la consulta el menú QR del comensal.
         [HttpGet]
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<PlatilloDto>>> GetPlatillos()
         {
             var platillos = await _context.Platillos.ToListAsync();
@@ -32,6 +38,7 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<ActionResult<PlatilloDto>> GetPlatillo(int id)
         {
             var platillo = await _context.Platillos.FindAsync(id);
@@ -51,6 +58,10 @@ namespace RestaurantApi.Controllers
         [HttpPost]
         public async Task<ActionResult<Platillo>> PostPlatillo(Platillo platillo)
         {
+            if (platillo.Precio <= 0)
+                return BadRequest(new { message = "El precio debe ser mayor que cero" });
+
+            platillo.Id = 0;
             _context.Platillos.Add(platillo);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetPlatillo), new { id = platillo.Id }, platillo);
@@ -70,6 +81,9 @@ namespace RestaurantApi.Controllers
             {
                 return NotFound(new { message = $"Platillo con ID {id} no encontrado" });
             }
+
+            if (platillo.Precio <= 0)
+                return BadRequest(new { message = "El precio debe ser mayor que cero" });
 
             try
             {
@@ -91,9 +105,10 @@ namespace RestaurantApi.Controllers
                 }
                 return BadRequest(new { message = "Error de concurrencia al actualizar" });
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
             {
-                return BadRequest(new { message = $"Error al actualizar: {ex.InnerException?.Message ?? ex.Message}" });
+                _logger?.LogError(ex, "Error al actualizar platillo {Id}", id);
+                return BadRequest(new { message = "No se pudo actualizar el platillo. Verifica los datos." });
             }
         }
 
@@ -120,9 +135,10 @@ namespace RestaurantApi.Controllers
                 await _context.SaveChangesAsync();
                 return NoContent();
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
             {
-                return BadRequest(new { message = $"Error al eliminar: {ex.Message}" });
+                _logger?.LogError(ex, "Error al eliminar platillo {Id}", id);
+                return BadRequest(new { message = "No se pudo eliminar el platillo: tiene registros asociados." });
             }
         }
 

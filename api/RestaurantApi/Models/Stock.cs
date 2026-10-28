@@ -33,6 +33,6 @@ namespace RestaurantApi.Models
         [Column(TypeName = "decimal(12,2)")]
         public decimal CostoTotal { get; set; }
 
-        public DateTime FechaActualizacion { get; set; } = DateTime.Now; 
+        public DateTime FechaActualizacion { get; set; } = DateTime.UtcNow; 
     }
 }

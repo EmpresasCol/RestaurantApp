@@ -18,7 +18,7 @@ namespace RestaurantApi.Models
         public int DireccionId { get; set; }
 
         [Required]
-        public DateTime FechaPedido { get; set; } = DateTime.Now;
+        public DateTime FechaPedido { get; set; } = DateTime.UtcNow;
 
         [Required]
         [MaxLength(50)]

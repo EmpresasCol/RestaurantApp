@@ -20,9 +20,10 @@ namespace RestaurantApi.Dtos
 
         public decimal? CostoUnitario { get; set; }
 
-        public string Motivo { get; set; }
+        public string? Motivo { get; set; }
 
-        public string Referencia { get; set; }
+        [StringLength(100)]
+        public string? Referencia { get; set; }
 
         public int? LoteId { get; set; }
 

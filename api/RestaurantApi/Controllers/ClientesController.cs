@@ -1,4 +1,5 @@
 ﻿// api/RestaurantApi/Controllers/ClientesController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
@@ -6,8 +7,10 @@ using RestaurantApi.Dtos;
 
 namespace RestaurantApi.Controllers
 {
+    // Datos personales (Ley 1581/2012): solo personal que gestiona domicilios.
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Administrador,Caja")]
     public class ClientesController : ControllerBase
     {
         private readonly RestauranteContext _context;
@@ -99,7 +102,7 @@ namespace RestaurantApi.Controllers
                 Nombre = dto.Nombre,
                 Telefono = dto.Telefono,
                 Email = dto.Email,
-                FechaRegistro = DateTime.Now
+                FechaRegistro = DateTime.UtcNow
             };
 
             _context.Clientes.Add(cliente);
@@ -138,7 +141,7 @@ namespace RestaurantApi.Controllers
                     Nombre = dto.Cliente.Nombre,
                     Telefono = dto.Cliente.Telefono,
                     Email = dto.Cliente.Email,
-                    FechaRegistro = DateTime.Now
+                    FechaRegistro = DateTime.UtcNow
                 };
 
                 _context.Clientes.Add(cliente);
@@ -165,10 +168,10 @@ namespace RestaurantApi.Controllers
                     DireccionId = direccion.Id
                 });
             }
-            catch (Exception ex)
+            catch
             {
                 await transaction.RollbackAsync();
-                return StatusCode(500, new { message = "Error al crear cliente y dirección", error = ex.Message });
+                throw;
             }
         }
 

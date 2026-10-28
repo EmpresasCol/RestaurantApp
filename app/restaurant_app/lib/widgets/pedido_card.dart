@@ -30,6 +30,8 @@ class PedidoCard extends StatelessWidget {
         return Colors.grey;
       case EstadoPedido.cancelado:
         return Colors.red;
+      case EstadoPedido.desconocido:
+        return Colors.blueGrey;
     }
   }
 
@@ -45,6 +47,8 @@ class PedidoCard extends StatelessWidget {
         return 'Pagado';
       case EstadoPedido.cancelado:
         return 'Cancelado';
+      case EstadoPedido.desconocido:
+        return 'Estado desconocido';
     }
   }
 
@@ -60,6 +64,8 @@ class PedidoCard extends StatelessWidget {
         return Icons.attach_money;
       case EstadoPedido.cancelado:
         return Icons.cancel;
+      case EstadoPedido.desconocido:
+        return Icons.help_outline;
     }
   }
 

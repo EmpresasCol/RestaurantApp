@@ -21,14 +21,15 @@ function GestionUsuarios() {
     rol: 'Caja'
   });
 
-  const roles = ['Administrador', 'Caja', 'Cocina', 'Mesero'];
+  const roles = ['Administrador', 'Caja', 'Cocina', 'Mesero', 'Domiciliario'];
 
   const getRolColor = (rol) => {
     const colores = {
       'Administrador': 'bg-purple-100 text-purple-700 border-purple-300',
       'Caja': 'bg-green-100 text-green-700 border-green-300',
       'Cocina': 'bg-orange-100 text-orange-700 border-orange-300',
-      'Mesero': 'bg-blue-100 text-blue-700 border-blue-300'
+      'Mesero': 'bg-blue-100 text-blue-700 border-blue-300',
+      'Domiciliario': 'bg-teal-100 text-teal-700 border-teal-300'
     };
     return colores[rol] || 'bg-gray-100 text-gray-700 border-gray-300';
   };
@@ -43,6 +44,8 @@ function GestionUsuarios() {
         return '👨‍🍳';
       case 'Mesero':
         return '🍽️';
+      case 'Domiciliario':
+        return '🛵';
       default:
         return '👤';
     }

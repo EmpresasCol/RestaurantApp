@@ -17,6 +17,8 @@ class MesaCard extends StatelessWidget {
         return Colors.green;
       case EstadoMesa.ocupada:
         return Colors.red;
+      case EstadoMesa.esperandoPago:
+        return Colors.purple;
       case EstadoMesa.reservada:
         return Colors.orange;
     }
@@ -28,6 +30,8 @@ class MesaCard extends StatelessWidget {
         return Icons.check_circle;
       case EstadoMesa.ocupada:
         return Icons.person;
+      case EstadoMesa.esperandoPago:
+        return Icons.receipt_long;
       case EstadoMesa.reservada:
         return Icons.access_time;
     }

@@ -1,6 +1,14 @@
 // src/context/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as api from '../services/api';
+import {
+  EVENTO_SESION_EXPIRADA,
+  borrarSesion,
+  guardarSesion,
+  leerToken,
+  obtenerToken,
+  obtenerUsuarioGuardado,
+} from '../services/sesion';
 
 const AuthContext = createContext();
 
@@ -15,6 +23,15 @@ export function useAuth() {
 // Roles permitidos en la web. Mesero está bloqueado: usa la app móvil.
 const ROLES_WEB_PERMITIDOS = ['administrador', 'caja', 'cocina'];
 
+// ?mesa=<id de la mesa>&numero=<número visible>; solo enteros positivos.
+const leerMesaDeUrl = () => {
+  const params = new URLSearchParams(window.location.search);
+  const entero = (valor) => (/^\d+$/.test(valor ?? '') && Number(valor) > 0 ? Number(valor) : null);
+  const mesa = entero(params.get('mesa'));
+  if (!mesa) return null;
+  return { mesa, numero: entero(params.get('numero')) ?? mesa };
+};
+
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(null);
   const [esClienteQR, setEsClienteQR] = useState(false);
@@ -22,47 +39,34 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     verificarSesion();
+    const alExpirar = () => {
+      setUsuario(null);
+      setEsClienteQR(false);
+    };
+    window.addEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
+    return () => window.removeEventListener(EVENTO_SESION_EXPIRADA, alExpirar);
   }, []);
 
   const verificarSesion = () => {
     try {
-      // Cliente QR (parámetro ?mesa=X en URL)
-      const params = new URLSearchParams(window.location.search);
-      const mesaUrl = params.get('mesa');
-
-      if (mesaUrl) {
+      // Comensal que entra por el QR de su mesa
+      const mesaQR = leerMesaDeUrl();
+      if (mesaQR) {
         setEsClienteQR(true);
-        setUsuario({
-          rol: 'cliente',
-          nombre: 'Cliente',
-          mesa: parseInt(mesaUrl, 10),
-        });
-        setCargando(false);
+        setUsuario({ rol: 'cliente', nombre: 'Cliente', mesa: mesaQR.mesa, numeroMesa: mesaQR.numero });
         return;
       }
 
-      // Sesión guardada
-      const usuarioGuardado = localStorage.getItem('usuario');
-      const tokenGuardado = localStorage.getItem('token');
-
-      if (usuarioGuardado && tokenGuardado) {
-        const user = JSON.parse(usuarioGuardado);
-        const rol = user.rol?.toLowerCase();
-
-        // Bloquear roles no permitidos en sesión persistida
-        if (!ROLES_WEB_PERMITIDOS.includes(rol)) {
-          console.log(`⛔ Rol no permitido en sesión persistida: ${rol} - cerrando`);
-          localStorage.removeItem('usuario');
-          localStorage.removeItem('token');
-          setUsuario(null);
-        } else {
-          setUsuario(user);
-        }
+      // Sesión guardada: el rol sale del JWT vigente, no de lo que diga localStorage.
+      const payload = leerToken(obtenerToken());
+      const rol = payload?.role?.toLowerCase();
+      if (!payload || !ROLES_WEB_PERMITIDOS.includes(rol)) {
+        borrarSesion();
+        return;
       }
-    } catch (error) {
-      console.error('Error al verificar sesión:', error);
-      localStorage.removeItem('usuario');
-      localStorage.removeItem('token');
+
+      const guardado = obtenerUsuarioGuardado() || {};
+      setUsuario({ ...guardado, id: Number(payload.sub), rol });
     } finally {
       setCargando(false);
     }
@@ -72,23 +76,22 @@ export function AuthProvider({ children }) {
     const { username, password } = credenciales;
 
     try {
-      console.log('🔐 Intentando login con:', username);
-
       const response = await api.login(username, password);
-      console.log('✅ Respuesta de la API:', response);
-
       const rol = response.rol?.toLowerCase();
 
-      // Bloquear meseros: deben usar la app móvil
+      // Bloquear meseros: deben usar la aplicación móvil
       if (rol === 'mesero') {
         throw new Error(
           'Los meseros deben usar la aplicación móvil. Por favor, descarga la app en tu dispositivo móvil.'
         );
       }
 
-      // Validar que el rol esté permitido en la web
       if (!ROLES_WEB_PERMITIDOS.includes(rol)) {
         throw new Error('No tienes permisos para acceder al sistema web');
+      }
+
+      if (!leerToken(response.token)) {
+        throw new Error('El servidor no devolvió una sesión válida. Intenta de nuevo.');
       }
 
       const datosUsuario = {
@@ -98,29 +101,20 @@ export function AuthProvider({ children }) {
         nombre: response.nombre,
       };
 
-      console.log('✅ Usuario autenticado:', datosUsuario);
-
+      guardarSesion(datosUsuario, response.token);
       setUsuario(datosUsuario);
       setEsClienteQR(false);
 
-      localStorage.setItem('usuario', JSON.stringify(datosUsuario));
-      if (response.token) {
-        localStorage.setItem('token', response.token);
-      }
-
       return datosUsuario;
     } catch (error) {
-      console.error('❌ Error en login:', error);
       throw new Error(error.message || 'Error al iniciar sesión');
     }
   };
 
   const logout = () => {
-    console.log('🚪 Cerrando sesión...');
     setUsuario(null);
     setEsClienteQR(false);
-    localStorage.removeItem('usuario');
-    localStorage.removeItem('token');
+    borrarSesion();
     window.history.replaceState({}, document.title, window.location.pathname);
     window.location.reload();
   };

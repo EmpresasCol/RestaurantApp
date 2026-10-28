@@ -1,42 +1,28 @@
 // src/services/api.js
-const getApiBaseUrl = () => {
-  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      if (window.location.port === '3001') return '/api';
-      return 'http://localhost:5000/api';
-    }
-    // En producción (Render, Vercel, etc.): la variable REACT_APP_API_URL
-    // siempre debe estar configurada. Si falta, usar mismo origen.
-    return `${window.location.protocol}//${window.location.host}/api`;
-  }
-  return '/api';
-};
+import { getApiBaseUrl, encabezadosAuth, manejarNoAutorizado } from './sesion';
 
 const API_URL = getApiBaseUrl();
-console.log('🌐 API URL configurada:', API_URL);
 
-// ✅ Función auxiliar para hacer fetch con headers de ngrok
+// Toda petición lleva el JWT de la sesión; un 401 cierra la sesión vencida.
 const fetchWithHeaders = async (url, options = {}) => {
   const headers = {
     'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': '69420', // ✅ CRÍTICO: Evita la página de advertencia de ngrok
-    'User-Agent': 'RestaurantApp',
+    'ngrok-skip-browser-warning': '69420', // evita la página de advertencia si la API está tras ngrok
+    ...encabezadosAuth(),
     ...options.headers
   };
 
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     headers
   });
+  if (!url.endsWith('/login')) manejarNoAutorizado(response.status);
+  return response;
 };
 
 // ==================== AUTENTICACIÓN ====================
 export const login = async (usuario, clave) => {
   try {
-    console.log('🔐 Intentando login con:', { usuario });
-    
     const response = await fetchWithHeaders(`${API_URL}/usuarios/login`, {
       method: 'POST',
       body: JSON.stringify({ usuario, clave })
@@ -47,9 +33,7 @@ export const login = async (usuario, clave) => {
       throw new Error(errorData.message || 'Credenciales inválidas');
     }
 
-    const data = await response.json();
-    console.log('✅ Login exitoso:', data);
-    return data;
+    return await response.json();
   } catch (error) {
     console.error('❌ Error en login:', error);
     throw error;
@@ -183,6 +167,13 @@ export const getPedidos = async () => {
     console.error('Error en getPedidos:', error);
     throw error;
   }
+};
+
+// Solo pedidos abiertos (EnProceso, Listo, Entregado): lo que cocina consulta en cada ciclo.
+export const getPedidosActivos = async () => {
+  const response = await fetchWithHeaders(`${API_URL}/pedidos/activos`);
+  if (!response.ok) throw new Error('Error al obtener pedidos activos');
+  return await response.json();
 };
 
 export const createPedido = async (mesaId, items) => {
@@ -368,6 +359,22 @@ export const createFactura = async (pagoId, nitCliente = null, nombreCliente = n
 };
 
 // ==================== USUARIOS ====================
+// Mismo orden que el enum RolUsuario de la API. Un rol desconocido se rechaza aquí:
+// omitirlo haría que .NET lo lea como 0 = Administrador.
+export const ROLES_USUARIO = {
+  Administrador: 0,
+  Mesero: 1,
+  Cocina: 2,
+  Caja: 3,
+  Domiciliario: 4
+};
+
+const rolAEnum = (rol) => {
+  const valor = ROLES_USUARIO[rol];
+  if (valor === undefined) throw new Error(`Rol inválido: ${rol}`);
+  return valor;
+};
+
 export const getUsuarios = async () => {
   try {
     const response = await fetchWithHeaders(`${API_URL}/usuarios`);
@@ -392,24 +399,12 @@ export const getUsuario = async (id) => {
 
 export const createUsuario = async (usuarioData) => {
   try {
-    console.log('📤 Creando usuario:', usuarioData);
-    
-    // ✅ MAPEAR ROL DE STRING A NÚMERO
-    const rolMap = {
-      'Administrador': 0,
-      'Mesero': 1,
-      'Cocina': 2,
-      'Caja': 3
-    };
-    
     const dataBackend = {
       NombreUsuario: usuarioData.nombreUsuario,
       ClaveHash: usuarioData.clave,
       Nombre: usuarioData.nombre,
-      Rol: rolMap[usuarioData.rol]
+      Rol: rolAEnum(usuarioData.rol)
     };
-
-    console.log('📤 Enviando al backend:', dataBackend);
 
     const response = await fetchWithHeaders(`${API_URL}/usuarios`, {
       method: 'POST',
@@ -432,28 +427,16 @@ export const createUsuario = async (usuarioData) => {
 
 export const updateUsuario = async (id, usuarioData) => {
   try {
-    console.log('🔄 Actualizando usuario:', { id, ...usuarioData });
-    
-    // ✅ MAPEAR ROL DE STRING A NÚMERO
-    const rolMap = {
-      'Administrador': 0,
-      'Mesero': 1,
-      'Cocina': 2,
-      'Caja': 3
-    };
-    
     const dataBackend = {
       Id: id,
       NombreUsuario: usuarioData.nombreUsuario,
       Nombre: usuarioData.nombre,
-      Rol: rolMap[usuarioData.rol]
+      Rol: rolAEnum(usuarioData.rol)
     };
 
     if (usuarioData.clave) {
       dataBackend.ClaveHash = usuarioData.clave;
     }
-
-    console.log('📤 Enviando al backend:', dataBackend);
 
     const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, {
       method: 'PUT',

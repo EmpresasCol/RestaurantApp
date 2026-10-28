@@ -1,4 +1,5 @@
 using Google;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi;
@@ -14,15 +15,18 @@ namespace RestaurantApi.Controllers
 {
     [Route("api/inventario")]
     [ApiController]
+    [Authorize(Roles = "Administrador")]
     public class InventarioController : ControllerBase
     {
         private readonly RestauranteContext _context;
         private readonly IInventarioService _inventarioService;
+        private readonly ILogger<InventarioController> _logger;
 
-        public InventarioController(RestauranteContext context, IInventarioService inventarioService)
+        public InventarioController(RestauranteContext context, IInventarioService inventarioService, ILogger<InventarioController> logger)
         {
             _context = context;
             _inventarioService = inventarioService;
+            _logger = logger;
         }
 
         // ==================== CATEGORÍAS ====================
@@ -43,7 +47,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener categorías: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener categorías");
+                return StatusCode(500, new { message = "Error al obtener categorías" });
             }
         }
 
@@ -66,7 +71,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener categoría: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener categoría");
+                return StatusCode(500, new { message = "Error al obtener categoría" });
             }
         }
 
@@ -99,7 +105,7 @@ namespace RestaurantApi.Controllers
                     Tipo = dto.Tipo,
                     Color = dto.Color ?? "#3b82f6",
                     Activo = dto.Activo,
-                    FechaCreacion = DateTime.Now
+                    FechaCreacion = DateTime.UtcNow
                 };
 
                 _context.CategoriasInventario.Add(categoria);
@@ -109,7 +115,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al crear categoría: {ex.Message}");
+                _logger.LogError(ex, "Error al crear categoría");
+                return StatusCode(500, new { message = "Error al crear categoría" });
             }
         }
 
@@ -154,7 +161,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al actualizar categoría: {ex.Message}");
+                _logger.LogError(ex, "Error al actualizar categoría");
+                return StatusCode(500, new { message = "Error al actualizar categoría" });
             }
         }
 
@@ -189,7 +197,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al eliminar categoría: {ex.Message}");
+                _logger.LogError(ex, "Error al eliminar categoría");
+                return StatusCode(500, new { message = "Error al eliminar categoría" });
             }
         }
 
@@ -225,7 +234,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener proveedores: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener proveedores");
+                return StatusCode(500, new { message = "Error al obtener proveedores" });
             }
         }
 
@@ -248,7 +258,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener proveedor: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener proveedor");
+                return StatusCode(500, new { message = "Error al obtener proveedor" });
             }
         }
 
@@ -275,7 +286,7 @@ namespace RestaurantApi.Controllers
                     Ciudad = dto.Ciudad,
                     TipoProductos = dto.TipoProductos,
                     Activo = dto.Activo,
-                    FechaRegistro = DateTime.Now
+                    FechaRegistro = DateTime.UtcNow
                 };
 
                 _context.Proveedores.Add(proveedor);
@@ -285,7 +296,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al crear proveedor: {ex.Message}");
+                _logger.LogError(ex, "Error al crear proveedor");
+                return StatusCode(500, new { message = "Error al crear proveedor" });
             }
         }
 
@@ -324,7 +336,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al actualizar proveedor: {ex.Message}");
+                _logger.LogError(ex, "Error al actualizar proveedor");
+                return StatusCode(500, new { message = "Error al actualizar proveedor" });
             }
         }
 
@@ -359,7 +372,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al eliminar proveedor: {ex.Message}");
+                _logger.LogError(ex, "Error al eliminar proveedor");
+                return StatusCode(500, new { message = "Error al eliminar proveedor" });
             }
         }
 
@@ -381,7 +395,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener almacenes: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener almacenes");
+                return StatusCode(500, new { message = "Error al obtener almacenes" });
             }
         }
 
@@ -404,7 +419,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener almacén: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener almacén");
+                return StatusCode(500, new { message = "Error al obtener almacén" });
             }
         }
 
@@ -438,7 +454,7 @@ namespace RestaurantApi.Controllers
                     Ubicacion = dto.Ubicacion,
                     Tipo = dto.Tipo,
                     Activo = dto.Activo,
-                    FechaCreacion = DateTime.Now
+                    FechaCreacion = DateTime.UtcNow
                 };
 
                 _context.Almacenes.Add(almacen);
@@ -448,7 +464,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al crear almacén: {ex.Message}");
+                _logger.LogError(ex, "Error al crear almacén");
+                return StatusCode(500, new { message = "Error al crear almacén" });
             }
         }
 
@@ -494,7 +511,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al actualizar almacén: {ex.Message}");
+                _logger.LogError(ex, "Error al actualizar almacén");
+                return StatusCode(500, new { message = "Error al actualizar almacén" });
             }
         }
 
@@ -529,7 +547,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al eliminar almacén: {ex.Message}");
+                _logger.LogError(ex, "Error al eliminar almacén");
+                return StatusCode(500, new { message = "Error al eliminar almacén" });
             }
         }
 
@@ -574,7 +593,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener productos: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener productos");
+                return StatusCode(500, new { message = "Error al obtener productos" });
             }
         }
 
@@ -600,7 +620,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener producto: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener producto");
+                return StatusCode(500, new { message = "Error al obtener producto" });
             }
         }
 
@@ -663,7 +684,7 @@ namespace RestaurantApi.Controllers
                     DiasVencimiento = dto.DiasVencimiento,
                     ImagenUrl = dto.ImagenUrl,
                     Activo = dto.Activo,
-                    FechaCreacion = DateTime.Now
+                    FechaCreacion = DateTime.UtcNow
                 };
 
                 _context.ProductosInventario.Add(producto);
@@ -673,7 +694,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al crear producto: {ex.Message}");
+                _logger.LogError(ex, "Error al crear producto");
+                return StatusCode(500, new { message = "Error al crear producto" });
             }
         }
 
@@ -741,7 +763,7 @@ namespace RestaurantApi.Controllers
                 producto.DiasVencimiento = dto.DiasVencimiento;
                 producto.ImagenUrl = dto.ImagenUrl;
                 producto.Activo = dto.Activo;
-                producto.FechaActualizacion = DateTime.Now;
+                producto.FechaActualizacion = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
 
@@ -749,7 +771,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al actualizar producto: {ex.Message}");
+                _logger.LogError(ex, "Error al actualizar producto");
+                return StatusCode(500, new { message = "Error al actualizar producto" });
             }
         }
 
@@ -793,7 +816,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al eliminar producto: {ex.Message}");
+                _logger.LogError(ex, "Error al eliminar producto");
+                return StatusCode(500, new { message = "Error al eliminar producto" });
             }
         }
 
@@ -830,7 +854,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener stock: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener stock");
+                return StatusCode(500, new { message = "Error al obtener stock" });
             }
         }
 
@@ -866,7 +891,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener stock por almacén: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener stock por almacén");
+                return StatusCode(500, new { message = "Error al obtener stock por almacén" });
             }
         }
 
@@ -902,7 +928,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener stock por producto: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener stock por producto");
+                return StatusCode(500, new { message = "Error al obtener stock por producto" });
             }
         }
 
@@ -939,7 +966,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener movimientos: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener movimientos");
+                return StatusCode(500, new { message = "Error al obtener movimientos" });
             }
         }
         /// <summary>
@@ -986,7 +1014,7 @@ namespace RestaurantApi.Controllers
                         AlmacenId = dto.AlmacenId,
                         Cantidad = 0,
                         CostoPromedio = dto.CostoUnitario ?? 0,
-                        FechaActualizacion = DateTime.Now
+                        FechaActualizacion = DateTime.UtcNow
                     };
                     _context.Stock.Add(stock);
                 }
@@ -1027,7 +1055,7 @@ namespace RestaurantApi.Controllers
 
                 // Actualizar stock
                 stock.Cantidad = nuevaCantidad;
-                stock.FechaActualizacion = DateTime.Now;
+                stock.FechaActualizacion = DateTime.UtcNow;
 
                 // Crear el movimiento (CostoTotal es generado automáticamente por MySQL)
                 var movimiento = new MovimientoInventario
@@ -1037,11 +1065,12 @@ namespace RestaurantApi.Controllers
                     TipoMovimiento = dto.TipoMovimiento,
                     Cantidad = dto.Cantidad,
                     CostoUnitario = costoUnitario,
-                    Motivo = dto.Motivo,
-                    Referencia = dto.Referencia,
+                    Motivo = dto.Motivo ?? string.Empty,
+                    Referencia = dto.Referencia ?? string.Empty,
                     LoteId = dto.LoteId,
-                    UsuarioId = (dto.UsuarioId.HasValue && dto.UsuarioId.Value > 0) ? dto.UsuarioId.Value : 1,
-                    Fecha = DateTime.Now
+                    // El responsable es quien está autenticado, no lo que diga el cuerpo.
+                    UsuarioId = QproClaims.IdUsuario(User) ?? 1,
+                    Fecha = DateTime.UtcNow
                 };
 
                 _context.MovimientosInventario.Add(movimiento);
@@ -1051,7 +1080,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al crear movimiento: {ex.Message}");
+                _logger.LogError(ex, "Error al crear movimiento");
+                return StatusCode(500, new { message = "Error al crear movimiento" });
             }
         }
 
@@ -1090,7 +1120,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener lotes: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener lotes");
+                return StatusCode(500, new { message = "Error al obtener lotes" });
             }
         }
 
@@ -1102,7 +1133,8 @@ namespace RestaurantApi.Controllers
         {
             try
             {
-                var fechaLimite = DateTime.Now.AddDays(dias);
+                var hoyColombia = HoraLocal.AhoraColombia().Date;
+                var fechaLimite = hoyColombia.AddDays(dias);
 
                 var lotes = await _context.Lotes
                     .Include(l => l.Producto)
@@ -1122,7 +1154,7 @@ namespace RestaurantApi.Controllers
                         AlmacenNombre = l.Almacen.Nombre,
                         l.CantidadActual,
                         l.FechaVencimiento,
-                        DiasParaVencer = EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value)
+                        DiasParaVencer = EF.Functions.DateDiffDay(hoyColombia, l.FechaVencimiento.Value)
                     })
                     .ToListAsync();
 
@@ -1130,7 +1162,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener lotes próximos a vencer: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener lotes próximos a vencer");
+                return StatusCode(500, new { message = "Error al obtener lotes próximos a vencer" });
             }
         }
 
@@ -1175,7 +1208,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener stock general: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener stock general");
+                return StatusCode(500, new { message = "Error al obtener stock general" });
             }
         }
 
@@ -1185,6 +1219,7 @@ namespace RestaurantApi.Controllers
         {
             try
             {
+                var hoyColombia = HoraLocal.AhoraColombia().Date;
                 var resultado = await _context.Lotes
                     .Include(l => l.Producto)
                     .Include(l => l.Almacen)
@@ -1202,11 +1237,11 @@ namespace RestaurantApi.Controllers
                         l.CantidadActual,
                         UnidadMedida = l.Producto.UnidadMedida,
                         l.FechaVencimiento,
-                        DiasParaVencer = EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value),
+                        DiasParaVencer = EF.Functions.DateDiffDay(hoyColombia, l.FechaVencimiento.Value),
                         NivelAlerta =
-                            l.FechaVencimiento.Value < DateTime.Now ? "Vencido" :
-                            EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value) <= 3 ? "Critico" :
-                            EF.Functions.DateDiffDay(DateTime.Now, l.FechaVencimiento.Value) <= 7 ? "Advertencia" :
+                            l.FechaVencimiento.Value < hoyColombia ? "Vencido" :
+                            EF.Functions.DateDiffDay(hoyColombia, l.FechaVencimiento.Value) <= 3 ? "Critico" :
+                            EF.Functions.DateDiffDay(hoyColombia, l.FechaVencimiento.Value) <= 7 ? "Advertencia" :
                             "Normal"
                     })
                     .ToListAsync();
@@ -1215,7 +1250,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener productos próximos a vencer: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener productos próximos a vencer");
+                return StatusCode(500, new { message = "Error al obtener productos próximos a vencer" });
             }
         }
 
@@ -1251,7 +1287,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener valor de inventario por almacén: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener valor de inventario por almacén");
+                return StatusCode(500, new { message = "Error al obtener valor de inventario por almacén" });
             }
         }
 
@@ -1289,7 +1326,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener alertas de stock: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener alertas de stock");
+                return StatusCode(500, new { message = "Error al obtener alertas de stock" });
             }
         }
 
@@ -1329,7 +1367,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener recetas: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener recetas");
+                return StatusCode(500, new { message = "Error al obtener recetas" });
             }
         }
 
@@ -1367,7 +1406,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al obtener receta del platillo: {ex.Message}");
+                _logger.LogError(ex, "Error al obtener receta del platillo");
+                return StatusCode(500, new { message = "Error al obtener receta del platillo" });
             }
         }
 
@@ -1429,7 +1469,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al registrar ingrediente en receta: {ex.Message}");
+                _logger.LogError(ex, "Error al registrar ingrediente en receta");
+                return StatusCode(500, new { message = "Error al registrar ingrediente en receta" });
             }
         }
 
@@ -1466,7 +1507,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al actualizar receta: {ex.Message}");
+                _logger.LogError(ex, "Error al actualizar receta");
+                return StatusCode(500, new { message = "Error al actualizar receta" });
             }
         }
 
@@ -1488,7 +1530,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al eliminar ingrediente de receta: {ex.Message}");
+                _logger.LogError(ex, "Error al eliminar ingrediente de receta");
+                return StatusCode(500, new { message = "Error al eliminar ingrediente de receta" });
             }
         }
 
@@ -1505,7 +1548,8 @@ namespace RestaurantApi.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, $"Error al inicializar recetas: {ex.Message}");
+                _logger.LogError(ex, "Error al inicializar recetas");
+                return StatusCode(500, new { message = "Error al inicializar recetas" });
             }
         }
     }

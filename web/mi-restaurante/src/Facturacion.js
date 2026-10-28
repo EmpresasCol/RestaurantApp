@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, FileText, Calendar, DollarSign, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle, Users, Truck } from 'lucide-react';
 import * as api from './services/api';
 import { getDomicilios, actualizarEstadoDomicilio } from './services/domiciliosApi';
+import { etiquetaImpuesto, impuestoIncluido } from './utils/impuestos';
 
 // Componente de Notificación Toast
 function Toast({ mensaje, tipo, onClose }) {
@@ -60,6 +61,7 @@ function Facturacion() {
   const [pedidos, setPedidos] = useState([]);
   const [domicilios, setDomicilios] = useState([]);
   const [pagos, setPagos] = useState([]);
+  const [facturasApi, setFacturasApi] = useState([]); // facturas persistidas (consecutivo FV-…)
   const [cargando, setCargando] = useState(false);
   const [notificacion, setNotificacion] = useState(null);
 
@@ -84,11 +86,13 @@ function Facturacion() {
   // ✅ Cargar datos: pedidos normales + domicilios
   const cargarDatos = useCallback(async (mostrarMensaje = false) => {
     try {
-      const [pedidosData, pagosData, domiciliosData] = await Promise.all([
+      const [pedidosData, pagosData, domiciliosData, facturasData] = await Promise.all([
         api.getPedidos(),
         api.getPagos(),
-        getDomicilios()
+        getDomicilios(),
+        api.getFacturas()
       ]);
+      setFacturasApi(Array.isArray(facturasData) ? facturasData : []);
 
       // Filtrar solo pedidos listos para facturar (mesas)
       const pedidosFiltrados = pedidosData.filter(pedido => 
@@ -139,10 +143,12 @@ function Facturacion() {
   // ✅ Transformar pedidos de mesas a formato de facturas
   const facturasPedidos = pedidos.map(pedido => {
     const subtotal = pedido.detalles.reduce((sum, d) => sum + (d.precio * d.cantidad), 0);
-    const impuestos = Math.round(subtotal * 0.19);
-    const total = subtotal + impuestos;
+    // Precios con impuesto incluido: el total es el consumo (lo mismo que cobra la API).
+    const impuestos = impuestoIncluido(subtotal);
+    const total = subtotal;
 
     const pago = pagos.find(p => p.pedidoId === pedido.id);
+    const facturaEmitida = pago && facturasApi.find(f => f.pagoId === pago.id);
 
     let estado = 'pendiente';
     if (pedido.estado === 'Pagado') {
@@ -159,14 +165,14 @@ function Facturacion() {
     return {
       id: `P${pedido.id}`,
       pedidoId: pedido.id,
-      numeroFactura: `#${pedido.id.toString().padStart(6, '0')}`,
+      numeroFactura: facturaEmitida?.numeroFactura ?? `#${pedido.id.toString().padStart(6, '0')}`,
       mesa: pedido.mesaNumero,
       fecha: new Date(pedido.fecha),
       cliente: {
-        nombre: `Cliente Mesa ${pedido.mesaNumero}`,
-        documento: '00000000',
-        telefono: '3000000000',
-        email: 'cliente@email.com'
+        nombre: facturaEmitida?.nombreCliente ?? 'Consumidor final',
+        documento: facturaEmitida?.nitCliente ?? '222222222222',
+        telefono: '',
+        email: ''
       },
       items: pedido.detalles.map(d => ({
         nombre: d.platilloNombre,
@@ -201,9 +207,9 @@ function Facturacion() {
       fecha: new Date(domicilio.fechaPedido),
       cliente: {
         nombre: domicilio.clienteNombre,
-        documento: '00000000',
+        documento: '222222222222',
         telefono: domicilio.clienteTelefono,
-        email: 'cliente@email.com'
+        email: ''
       },
       direccion: domicilio.direccionCompleta,
       barrio: domicilio.barrio,
@@ -215,7 +221,7 @@ function Facturacion() {
       })),
       subtotal: domicilio.subtotal,
       costoEnvio: domicilio.costoEnvio,
-      impuestos: Math.round(domicilio.subtotal * 0.19),
+      impuestos: impuestoIncluido(domicilio.subtotal),
       total: domicilio.total,
       estado: estado,
       metodoPago: domicilio.metodoPago.toLowerCase(),
@@ -267,7 +273,7 @@ function Facturacion() {
 
       const cumpleFecha =
         !filtroFecha ||
-        factura.fecha.toISOString().split('T')[0] === filtroFecha;
+        factura.fecha.toLocaleDateString('en-CA') === filtroFecha; // fecha local YYYY-MM-DD
 
       return cumpleBusqueda && cumpleEstado && cumpleFecha;
     })
@@ -292,14 +298,15 @@ function Facturacion() {
         await actualizarEstadoDomicilio(modalPago.domicilioId, 'Entregado');
         console.log(`✅ Domicilio ${modalPago.domicilioId} marcado como Entregado`);
       } else {
-        // Pago normal de mesa
-        await api.createPago(
+        // Pago de mesa: la API valida el monto, cierra el pedido y libera la mesa
+        // en una sola transacción; luego se emite la factura con su consecutivo.
+        const pago = await api.createPago(
           modalPago.pedidoId,
-          modalPago.subtotal,
+          modalPago.total,
           metodoPago,
           0
         );
-        await api.updatePedido(modalPago.pedidoId, 'Pagado');
+        await api.createFactura(pago.id);
       }
 
       setModalPago(null);
@@ -570,7 +577,7 @@ function Facturacion() {
                   </div>
                   ` : ''}
                   <div class="total-row">
-                    <span>IVA (19%):</span>
+                    <span>${etiquetaImpuesto()}:</span>
                     <span>${formatearPrecio(factura.impuestos)}</span>
                   </div>
                   <div class="total-row final">
@@ -1047,7 +1054,7 @@ function Facturacion() {
                                 </div>
                               )}
                               <div className="flex justify-between text-sm py-2 border-b border-gray-200">
-                                <span className="text-gray-600 font-medium">IVA (19%):</span>
+                                <span className="text-gray-600 font-medium">{etiquetaImpuesto()}:</span>
                                 <span className="font-semibold text-orange-600">{formatearPrecio(factura.impuestos)}</span>
                               </div>
                               <div className="flex justify-between pt-3 border-t-2 border-gray-900">

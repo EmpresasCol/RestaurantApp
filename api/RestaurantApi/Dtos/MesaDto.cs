@@ -4,6 +4,6 @@
     {
         public int Id { get; set; }
         public int Numero { get; set; }
-        public string Estado { get; set; }
+        public string Estado { get; set; } = string.Empty;
     }
 }

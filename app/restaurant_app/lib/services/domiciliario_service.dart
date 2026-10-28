@@ -7,14 +7,12 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/usuario.dart';
 import '../models/domicilio_domiciliario.dart';
+import 'sesion.dart';
 
 class DomiciliarioService {
   static const _timeout = Duration(seconds: 15);
 
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'ngrok-skip-browser-warning': '69420',
-      };
+  Map<String, String> get _headers => Sesion.encabezados();
 
   // ── LOGIN ───────────────────────────────────────────────────────────────
 
@@ -29,12 +27,17 @@ class DomiciliarioService {
 
     if (resp.statusCode == 200) {
       final data = json.decode(resp.body);
+      final token = data['token'] as String?;
+      if (token == null || token.isEmpty) {
+        throw Exception('El servidor no devolvió una sesión válida');
+      }
+      await Sesion.guardar(token);
       return LoginDomiciliarioResult(
         usuario: Usuario(
           id: data['id'],
           nombre: data['nombre'],
           nombreUsuario: data['nombreUsuario'],
-          rol: RolUsuario.mesero, // el enum existente no tiene domiciliario; lo manejamos aparte
+          rol: RolUsuario.domiciliario,
         ),
         entregasHoy: data['entregasHoy'] ?? 0,
         entregasTotales: data['entregasTotales'] ?? 0,

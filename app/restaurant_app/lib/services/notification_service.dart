@@ -66,12 +66,12 @@ class NotificationService {
       
       String? token = await _fcm.getToken();
       if (token != null) {
-        debugPrint('📱 FCM Token: $token');
+        debugPrint('📱 Token FCM obtenido');
         await _guardarToken(token);
       }
 
       _fcm.onTokenRefresh.listen((newToken) async {
-        debugPrint('🔄 Token actualizado: $newToken');
+        debugPrint('🔄 Token FCM actualizado');
         await _guardarToken(newToken);
       });
 

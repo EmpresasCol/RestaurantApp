@@ -32,7 +32,7 @@ namespace RestaurantApi.Models
 
         public bool Activa { get; set; } = true;
 
-        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
 
         // Navegación
         [ForeignKey("ClienteId")]

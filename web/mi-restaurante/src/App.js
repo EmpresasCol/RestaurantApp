@@ -1,5 +1,5 @@
 // src/App.js 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, Plus, Minus, X, ChefHat, Receipt, Menu as MenuIcon, QrCode, LogOut, BarChart3, Utensils, Users, Truck } from 'lucide-react';
 import * as api from './services/api';
 import Facturacion from './Facturacion';
@@ -35,20 +35,18 @@ function AppContent() {
   const [modalAlerta, setModalAlerta] = useState(null);
   const [pedidosAnteriores, setPedidosAnteriores] = useState(0);
   const [pedidosNuevos, setPedidosNuevos] = useState([]);
+  // El intervalo de cocina captura cargarPedidos una sola vez: los ids vistos van en un ref.
+  const idsPedidosVistos = useRef([]);
 
 
 
+  // El QR trae el Id de la mesa (lo que espera la API) y su número visible.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const mesaUrl = params.get('mesa');
-    
-    if (mesaUrl) {
-      const numeroMesa = parseInt(mesaUrl);
-      if (numeroMesa >= 1 && numeroMesa <= 12) {
-        setMesaSeleccionada(numeroMesa);
-      }
+    if (esClienteQR && usuario?.mesa) {
+      setMesaSeleccionada(usuario.mesa);
     }
-  }, []);
+  }, [esClienteQR, usuario]);
+  const numeroMesa = usuario?.numeroMesa ?? mesaSeleccionada;
 
   useEffect(() => {
     cargarPlatillos();
@@ -88,7 +86,7 @@ function AppContent() {
 
   const cargarPedidos = async () => {
     try {
-      const data = await api.getPedidos();
+      const data = await api.getPedidosActivos();
       const pedidosTransformados = data
         .filter(p => p.estado !== 'Entregado' && p.estado !== 'Pagado' && p.estado !== 'Cancelado')
         .map(p => ({
@@ -104,8 +102,9 @@ function AppContent() {
           estado: p.estado
         }));
 
-      const idsAnteriores = pedidos.map(p => p.id);
+      const idsAnteriores = idsPedidosVistos.current;
       const nuevos = pedidosTransformados.filter(p => !idsAnteriores.includes(p.id));
+      idsPedidosVistos.current = pedidosTransformados.map(p => p.id);
 
       if (nuevos.length > 0) {
         console.log('🔔 Nuevos pedidos detectados:', nuevos.length);
@@ -175,7 +174,7 @@ function AppContent() {
     if (carrito.length > 0 && mesaSeleccionada) {
       setModalConfirmacion({
         titulo: '¿Confirmar Pedido?',
-        mensaje: `Mesa: ${mesaSeleccionada}\nTotal de items: ${carrito.reduce((sum, item) => sum + item.cantidad, 0)}\n\n¿Deseas enviar este pedido a la cocina?`,
+        mensaje: `Mesa: ${numeroMesa}\nTotal de items: ${carrito.reduce((sum, item) => sum + item.cantidad, 0)}\n\n¿Deseas enviar este pedido a la cocina?`,
         onConfirmar: async () => {
           setCargando(true);
           setModalConfirmacion(null);
@@ -186,7 +185,7 @@ function AppContent() {
             setModalAlerta({
               tipo: 'exito',
               titulo: '¡Pedido Enviado!',
-              mensaje: `Tu pedido ha sido enviado a la cocina de la mesa ${mesaSeleccionada}.`
+              mensaje: `Tu pedido ha sido enviado a la cocina de la mesa ${numeroMesa}.`
             });
           } catch (error) {
             setModalAlerta({
@@ -227,7 +226,7 @@ function AppContent() {
               <div>
                 <h1 className="text-4xl font-bold mb-2">🍽️ Restaurante Délice</h1>
                 {mesaSeleccionada && (
-                  <p className="text-orange-100 text-lg">Mesa: <span className="font-bold">{mesaSeleccionada}</span></p>
+                  <p className="text-orange-100 text-lg">Mesa: <span className="font-bold">{numeroMesa}</span></p>
                 )}
               </div>
               <button
@@ -303,7 +302,7 @@ function AppContent() {
                   <ShoppingCart size={28} />
                   <div>
                     <h2 className="text-2xl font-bold">Tu Pedido</h2>
-                    <p className="text-orange-100">Mesa {mesaSeleccionada}</p>
+                    <p className="text-orange-100">Mesa {numeroMesa}</p>
                   </div>
                 </div>
                 <button

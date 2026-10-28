@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
@@ -8,8 +10,11 @@ namespace RestaurantApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize(Roles = "Administrador,Cocina,Caja,Mesero")]
     public class PedidosController : ControllerBase
     {
+        private const int CantidadMaximaPorLinea = 100;
+
         private readonly RestauranteContext _context;
         private readonly ILogger<PedidosController> _logger;
         private readonly IInventarioService _inventarioService;
@@ -25,339 +30,126 @@ namespace RestaurantApi.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PedidoDto>>> GetPedidos()
         {
-            var pedidos = await _context.Pedidos
-                .Include(p => p.Mesa)
-                .Include(p => p.Usuario)
-                .Include(p => p.Detalles)
-                    .ThenInclude(d => d.Platillo)
+            var pedidos = await ConsultaCompleta()
                 .OrderByDescending(p => p.Fecha)
                 .ToListAsync();
 
-            return pedidos.Select(p => new PedidoDto
-            {
-                Id = p.Id,
-                MesaId = p.MesaId,
-                MesaNumero = p.Mesa?.Numero ?? 0,
-                Estado = p.Estado.ToString(),
-                Fecha = p.Fecha,
-                UsuarioId = p.UsuarioId,
-                MeseroNombre = p.Usuario?.Nombre ?? "Sin asignar",
-                Detalles = p.Detalles.Select(d => new PedidoDetalleDto
-                {
-                    Id = d.Id,
-                    PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
-                    Cantidad = d.Cantidad,
-                    Precio = d.Platillo?.Precio ?? 0,
-                    Nota = d.Nota,
-                    Estado = d.Estado.ToString()
-                }).ToList()
-            }).ToList();
+            return pedidos.Select(MapearPedidoADto).ToList();
+        }
+
+        /// <summary>
+        /// Pedidos abiertos (EnProceso, Listo, Entregado) del más antiguo al más reciente.
+        /// Es lo que consultan cocina y meseros en cada ciclo, sin traer el histórico.
+        /// </summary>
+        [HttpGet("activos")]
+        public async Task<ActionResult<IEnumerable<PedidoDto>>> GetPedidosActivos()
+        {
+            var pedidos = await ConsultaCompleta()
+                .Where(p => p.Estado == EstadoPedido.EnProceso
+                         || p.Estado == EstadoPedido.Listo
+                         || p.Estado == EstadoPedido.Entregado)
+                .OrderBy(p => p.Fecha)
+                .ToListAsync();
+
+            return pedidos.Select(MapearPedidoADto).ToList();
         }
 
         // GET: api/Pedidos/5
         [HttpGet("{id}")]
         public async Task<ActionResult<PedidoDto>> GetPedido(int id)
         {
-            var pedido = await _context.Pedidos
-                .Include(p => p.Mesa)
-                .Include(p => p.Usuario)
-                .Include(p => p.Detalles)
-                    .ThenInclude(d => d.Platillo)
-                .FirstOrDefaultAsync(p => p.Id == id);
-
+            var pedido = await ConsultaCompleta().FirstOrDefaultAsync(p => p.Id == id);
             if (pedido == null)
                 return NotFound();
 
-            return new PedidoDto
-            {
-                Id = pedido.Id,
-                MesaId = pedido.MesaId,
-                MesaNumero = pedido.Mesa?.Numero ?? 0,
-                Estado = pedido.Estado.ToString(),
-                Fecha = pedido.Fecha,
-                UsuarioId = pedido.UsuarioId,
-                MeseroNombre = pedido.Usuario?.Nombre ?? "Sin asignar",
-                Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
-                {
-                    Id = d.Id,
-                    PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
-                    Cantidad = d.Cantidad,
-                    Precio = d.Platillo?.Precio ?? 0,
-                    Nota = d.Nota,
-                    Estado = d.Estado.ToString()
-                }).ToList()
-            };
+            return MapearPedidoADto(pedido);
         }
 
         // POST: api/Pedidos
+        /// <summary>
+        /// Crea un pedido de mesa. Anónimo para el menú QR del comensal; si llega con token,
+        /// el pedido queda a nombre del usuario autenticado (el UsuarioId del cuerpo se ignora).
+        /// </summary>
         [HttpPost]
+        [AllowAnonymous]
+        [EnableRateLimiting("publico")]
         public async Task<ActionResult<PedidoDto>> PostPedido(CrearPedidoDto crearPedido)
         {
-            try
+            var mesa = await _context.Mesas.FindAsync(crearPedido.MesaId);
+            if (mesa == null)
+                return BadRequest($"Mesa {crearPedido.MesaId} no existe");
+
+            var error = await ValidarDetallesAsync(crearPedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList());
+            if (error != null)
+                return BadRequest(error);
+
+            var usuarioId = QproClaims.IdUsuario(HttpContext?.User) ?? await ObtenerUsuarioGenericoQR();
+
+            // Pedido y detalles en un solo SaveChanges: o se crea todo o nada.
+            var pedido = new Pedido
             {
-                _logger.LogInformation($"📝 Creando pedido para Mesa {crearPedido.MesaId}");
-                _logger.LogInformation($"   UsuarioId recibido: {crearPedido.UsuarioId}");
-
-                // Validar que la mesa existe
-                var mesa = await _context.Mesas.FindAsync(crearPedido.MesaId);
-                if (mesa == null)
+                MesaId = crearPedido.MesaId,
+                UsuarioId = usuarioId,
+                Estado = EstadoPedido.EnProceso,
+                Fecha = DateTime.UtcNow,
+                Detalles = crearPedido.Detalles.Select(d => new PedidoDetalle
                 {
-                    _logger.LogWarning($"❌ Mesa {crearPedido.MesaId} no encontrada");
-                    return BadRequest($"Mesa {crearPedido.MesaId} no existe");
-                }
-
-                // ✅ LÓGICA CORREGIDA: Usar UsuarioId del DTO, o usuario genérico QR si no viene
-                int usuarioId;
-                if (crearPedido.UsuarioId > 0)
-                {
-                    // Validar que el usuario existe
-                    var usuarioExiste = await _context.Usuarios.AnyAsync(u => u.Id == crearPedido.UsuarioId);
-                    if (!usuarioExiste)
-                    {
-                        _logger.LogWarning($"⚠️ Usuario {crearPedido.UsuarioId} no existe, usando usuario QR");
-                        usuarioId = await ObtenerUsuarioGenericoQR();
-                    }
-                    else
-                    {
-                        usuarioId = crearPedido.UsuarioId;
-                    }
-                }
-                else
-                {
-                    // Si no viene UsuarioId, usar el genérico de QR
-                    _logger.LogInformation("📱 Pedido desde QR (sin UsuarioId), usando usuario genérico");
-                    usuarioId = await ObtenerUsuarioGenericoQR();
-                }
-
-                _logger.LogInformation($"✅ UsuarioId asignado: {usuarioId}");
-
-                // Crear el pedido
-                var pedido = new Pedido
-                {
-                    MesaId = crearPedido.MesaId,
-                    UsuarioId = usuarioId,
-                    Estado = EstadoPedido.EnProceso,
-                    Fecha = DateTime.Now
-                };
-
-                // TiDB Cloud no admite triggers: marcar la mesa aquí conserva
-                // la misma regla que antes aplicaba la base de datos.
-                mesa.Estado = EstadoMesa.Ocupada;
-                _context.Pedidos.Add(pedido);
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation($"✅ Pedido {pedido.Id} creado exitosamente");
-
-                // Agregar los detalles
-                foreach (var detalle in crearPedido.Detalles)
-                {
-                    // Validar que el platillo existe
-                    var platillo = await _context.Platillos.FindAsync(detalle.PlatilloId);
-                    if (platillo == null)
-                    {
-                        _logger.LogWarning($"⚠️ Platillo {detalle.PlatilloId} no encontrado, se omite");
-                        continue;
-                    }
-
-                    var pedidoDetalle = new PedidoDetalle
-                    {
-                        PedidoId = pedido.Id,
-                        PlatilloId = detalle.PlatilloId,
-                        Cantidad = detalle.Cantidad,
-                        Nota = detalle.Nota,
-                        Estado = EstadoDetalle.Pendiente
-                    };
-                    _context.PedidoDetalles.Add(pedidoDetalle);
-                }
-
-                await _context.SaveChangesAsync();
-
-                _logger.LogInformation($"✅ Detalles del pedido {pedido.Id} guardados");
-
-                // 📦 Descontar automáticamente del inventario al registrar el pedido
-                try
-                {
-                    var resInv = await _inventarioService.DescontarStockPorPedidoAsync(pedido.Id);
-                    _logger.LogInformation($"📦 Descuento de inventario para pedido {pedido.Id}: {resInv.Mensaje}");
-                }
-                catch (Exception exInv)
-                {
-                    _logger.LogError(exInv, $"⚠️ Error no bloqueante al descontar inventario para pedido {pedido.Id}");
-                }
-
-                // Retornar el pedido completo
-                var pedidoCreado = await _context.Pedidos
-                    .Include(p => p.Mesa)
-                    .Include(p => p.Usuario)
-                    .Include(p => p.Detalles)
-                        .ThenInclude(d => d.Platillo)
-                    .FirstOrDefaultAsync(p => p.Id == pedido.Id);
-
-                if (pedidoCreado == null)
-                    return NotFound();
-
-                var resultado = new PedidoDto
-                {
-                    Id = pedidoCreado.Id,
-                    MesaId = pedidoCreado.MesaId,
-                    MesaNumero = pedidoCreado.Mesa?.Numero ?? 0,
-                    Estado = pedidoCreado.Estado.ToString(),
-                    Fecha = pedidoCreado.Fecha,
-                    UsuarioId = pedidoCreado.UsuarioId,
-                    MeseroNombre = pedidoCreado.Usuario?.Nombre ?? "Sin asignar",
-                    Detalles = pedidoCreado.Detalles.Select(d => new PedidoDetalleDto
-                    {
-                        Id = d.Id,
-                        PlatilloId = d.PlatilloId,
-                        PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
-                        Cantidad = d.Cantidad,
-                        Precio = d.Platillo?.Precio ?? 0,
-                        Nota = d.Nota,
-                        Estado = d.Estado.ToString()
-                    }).ToList()
-                };
-
-                _logger.LogInformation($"🎉 Pedido {resultado.Id} retornado exitosamente");
-
-                return CreatedAtAction(nameof(GetPedido), new { id = resultado.Id }, resultado);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "❌ Error al crear pedido");
-                return StatusCode(500, new
-                {
-                    error = "Error al crear el pedido",
-                    details = ex.Message,
-                    innerError = ex.InnerException?.Message
-                });
-            }
-        }
-
-        /// <summary>
-        /// Obtiene el ID del usuario genérico para pedidos desde QR.
-        /// Si no existe, lo crea automáticamente.
-        /// </summary>
-        private async Task<int> ObtenerUsuarioGenericoQR()
-        {
-            // ✅ CORRECCIÓN: Usar NombreUsuario en lugar de Usuario
-            var usuarioQR = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.NombreUsuario == "cliente_qr");
-
-            if (usuarioQR != null)
-            {
-                return usuarioQR.Id;
-            }
-
-            // Si no existe, crear uno nuevo
-            _logger.LogWarning("⚠️ Usuario genérico QR no encontrado, creando uno nuevo...");
-
-            // ✅ CORRECCIÓN: Usar las propiedades correctas del modelo
-            var nuevoUsuario = new Usuario
-            {
-                Nombre = "Cliente QR",
-                NombreUsuario = "cliente_qr",  // ✅ Propiedad correcta
-                ClaveHash = "$2a$11$KIX8g7qZJ5p5K1p5K1p5K1puXYZ1234567890abcdefghijklmnopqrst",
-                Rol = RolUsuario.Mesero  // ✅ Enum correcto
+                    PlatilloId = d.PlatilloId,
+                    Cantidad = d.Cantidad,
+                    Nota = d.Nota,
+                    Estado = EstadoDetalle.Pendiente
+                }).ToList()
             };
 
-            _context.Usuarios.Add(nuevoUsuario);
+            // TiDB Cloud no admite triggers: marcar la mesa aquí conserva
+            // la misma regla que antes aplicaba la base de datos.
+            mesa.Estado = EstadoMesa.Ocupada;
+            _context.Pedidos.Add(pedido);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation($"✅ Usuario genérico QR creado con ID {nuevoUsuario.Id}");
+            await SincronizarInventarioAsync(pedido.Id, cancelar: false);
 
-            return nuevoUsuario.Id;
+            var pedidoCreado = await ConsultaCompleta().FirstAsync(p => p.Id == pedido.Id);
+            var resultado = MapearPedidoADto(pedidoCreado);
+            return CreatedAtAction(nameof(GetPedido), new { id = resultado.Id }, resultado);
         }
 
         [HttpPut("{id}/estado")]
         public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
         {
-            System.Diagnostics.Debug.WriteLine("========================================");
-            System.Diagnostics.Debug.WriteLine($"🔄 ACTUALIZANDO PEDIDO {id} A ESTADO: {dto.Estado}");
-            System.Diagnostics.Debug.WriteLine("========================================");
-
             var pedido = await _context.Pedidos
                 .Include(p => p.Mesa)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (pedido == null)
-            {
-                System.Diagnostics.Debug.WriteLine($"❌ Pedido {id} no encontrado");
                 return NotFound($"Pedido con ID {id} no encontrado");
-            }
 
-            if (!Enum.TryParse<EstadoPedido>(dto.Estado, true, out var estadoEnum))
-            {
-                System.Diagnostics.Debug.WriteLine($"❌ Estado inválido: {dto.Estado}");
+            if (!Enum.TryParse<EstadoPedido>(dto.Estado, true, out var estadoEnum) || !Enum.IsDefined(estadoEnum))
                 return BadRequest($"Estado inválido: {dto.Estado}");
-            }
 
-            System.Diagnostics.Debug.WriteLine($"✅ Estado anterior: {pedido.Estado}");
-            System.Diagnostics.Debug.WriteLine($"✅ Estado nuevo: {estadoEnum}");
+            if (!EstadosPedido.PuedeCambiar(pedido.Estado, estadoEnum))
+                return Conflict(new { message = $"No se puede pasar un pedido de {pedido.Estado} a {estadoEnum}" });
 
+            var cambio = pedido.Estado != estadoEnum;
             pedido.Estado = estadoEnum;
-
-            // TiDB Cloud no admite triggers: liberar la mesa cuando el pedido
-            // queda pagado, igual que lo hacía trg_pedido_after_update.
-            if (estadoEnum == EstadoPedido.Pagado && pedido.Mesa != null)
-            {
-                pedido.Mesa.Estado = EstadoMesa.Disponible;
-            }
-
+            await ActualizarMesaAsync(pedido);
             await _context.SaveChangesAsync();
 
-            System.Diagnostics.Debug.WriteLine($"💾 Estado guardado en BD");
-
-            if (estadoEnum == EstadoPedido.Listo)
+            if (cambio && estadoEnum == EstadoPedido.Listo)
             {
-                System.Diagnostics.Debug.WriteLine($"🔔 El estado es LISTO, enviando notificación...");
                 try
                 {
                     var notificationService = new FirebaseNotificationService(_context);
-                    await notificationService.EnviarNotificacionPedidoListo(
-                        pedido.Id,
-                        pedido.Mesa?.Numero ?? pedido.MesaId
-                    );
-                    System.Diagnostics.Debug.WriteLine($"✅ Notificación enviada correctamente");
+                    await notificationService.EnviarNotificacionPedidoListo(pedido.Id, pedido.Mesa?.Numero ?? pedido.MesaId);
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"❌ ERROR enviando notificación: {ex.Message}");
-                    System.Diagnostics.Debug.WriteLine($"   Stack: {ex.StackTrace}");
-                }
-            }
-            // ==========================================
-            // GESTIÓN DE INVENTARIO SEGÚN ESTADO
-            // ==========================================
-            if (estadoEnum == EstadoPedido.Cancelado)
-            {
-                // Si el pedido se cancela, revertir y devolver los insumos al stock
-                try
-                {
-                    var resRev = await _inventarioService.RevertirStockPorPedidoAsync(pedido.Id);
-                    _logger.LogInformation($"🔄 Inventario revertido para pedido {pedido.Id}: {resRev.Mensaje}");
-                }
-                catch (Exception exRev)
-                {
-                    _logger.LogError(exRev, $"⚠️ Error al revertir inventario para pedido {pedido.Id}");
-                }
-            }
-            else if (estadoEnum == EstadoPedido.Listo || estadoEnum == EstadoPedido.Entregado || estadoEnum == EstadoPedido.Pagado)
-            {
-                // Asegurar que el inventario esté descontado (idempotente)
-                try
-                {
-                    var resInv = await _inventarioService.DescontarStockPorPedidoAsync(pedido.Id);
-                    _logger.LogInformation($"📦 Verificación de inventario para pedido {pedido.Id}: {resInv.Mensaje}");
-                }
-                catch (Exception exInv)
-                {
-                    _logger.LogError(exInv, $"⚠️ Error al descontar inventario para pedido {pedido.Id}");
+                    _logger.LogWarning(ex, "No se pudo enviar la notificación de pedido listo #{Id}", pedido.Id);
                 }
             }
 
-            System.Diagnostics.Debug.WriteLine("========================================");
+            if (cambio)
+                await SincronizarInventarioAsync(pedido.Id, cancelar: estadoEnum == EstadoPedido.Cancelado);
 
             return Ok(new PedidoDto
             {
@@ -370,6 +162,7 @@ namespace RestaurantApi.Controllers
         }
 
         // PUT: api/Pedidos/5/actualizar
+        /// <summary>Reemplaza los detalles; el inventario se ajusta solo por la diferencia.</summary>
         [HttpPut("{id}/actualizar")]
         public async Task<ActionResult<PedidoDto>> ActualizarPedidoCompleto(int id, ActualizarPedidoCompletoDto dto)
         {
@@ -380,10 +173,14 @@ namespace RestaurantApi.Controllers
             if (pedido == null)
                 return NotFound();
 
-            // Eliminar detalles anteriores
-            _context.PedidoDetalles.RemoveRange(pedido.Detalles);
+            if (!EstadosPedido.EsEditable(pedido.Estado))
+                return Conflict(new { message = $"Un pedido {pedido.Estado} no se puede modificar" });
 
-            // Agregar nuevos detalles
+            var error = await ValidarDetallesAsync(dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList());
+            if (error != null)
+                return BadRequest(error);
+
+            _context.PedidoDetalles.RemoveRange(pedido.Detalles);
             foreach (var detalle in dto.Detalles)
             {
                 _context.PedidoDetalles.Add(new PedidoDetalle
@@ -397,211 +194,209 @@ namespace RestaurantApi.Controllers
             }
 
             await _context.SaveChangesAsync();
+            await SincronizarInventarioAsync(id, cancelar: false);
 
-            // Sincronizar inventario con los detalles actualizados
-            try
-            {
-                await _inventarioService.DescontarStockPorPedidoAsync(id);
-            }
-            catch (Exception exInv)
-            {
-                _logger.LogError(exInv, $"⚠️ Error al sincronizar inventario para pedido {id}");
-            }
-
-            // Retornar pedido actualizado
-            var pedidoActualizado = await _context.Pedidos
-                .Include(p => p.Mesa)
-                .Include(p => p.Usuario)
-                .Include(p => p.Detalles)
-                .ThenInclude(d => d.Platillo)
-                .FirstOrDefaultAsync(p => p.Id == id);
-
-            if (pedidoActualizado == null)
-                return NotFound();
-
-            return new PedidoDto
-            {
-                Id = pedidoActualizado.Id,
-                MesaId = pedidoActualizado.MesaId,
-                MesaNumero = pedidoActualizado.Mesa?.Numero ?? 0,
-                UsuarioId = pedidoActualizado.UsuarioId,
-                MeseroNombre = pedidoActualizado.Usuario?.Nombre ?? "Sin asignar",
-                Estado = pedidoActualizado.Estado.ToString(),
-                Fecha = pedidoActualizado.Fecha,
-                Detalles = pedidoActualizado.Detalles.Select(d => new PedidoDetalleDto
-                {
-                    Id = d.Id,
-                    PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "",
-                    Cantidad = d.Cantidad,
-                    Precio = d.Platillo?.Precio ?? 0,
-                    Nota = d.Nota,
-                    Estado = d.Estado.ToString()
-                }).ToList()
-            };
+            var pedidoActualizado = await ConsultaCompleta().FirstAsync(p => p.Id == id);
+            return MapearPedidoADto(pedidoActualizado);
         }
 
         // PUT: api/Pedidos/5
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPedido(int id, ActualizarPedidoDto actualizarDto)
         {
-            try
+            var pedido = await _context.Pedidos
+                .Include(p => p.Detalles)
+                .Include(p => p.Mesa)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (pedido == null)
+                return NotFound($"Pedido {id} no encontrado");
+
+            var estadoAnterior = pedido.Estado;
+
+            if (!string.IsNullOrEmpty(actualizarDto.Estado))
             {
-                var pedido = await _context.Pedidos
-                    .Include(p => p.Detalles)
-                    .FirstOrDefaultAsync(p => p.Id == id);
-
-                if (pedido == null)
-                    return NotFound($"Pedido {id} no encontrado");
-
-                Console.WriteLine($"📝 Actualizando pedido {id}");
-
-                // Actualizar estado
-                if (!string.IsNullOrEmpty(actualizarDto.Estado))
-                {
-                    if (Enum.TryParse<EstadoPedido>(actualizarDto.Estado, true, out var nuevoEstado))
-                    {
-                        pedido.Estado = nuevoEstado;
-                        Console.WriteLine($"   Estado: {actualizarDto.Estado}");
-                    }
-                }
-
-                // Actualizar detalles
-                if (actualizarDto.Detalles != null && actualizarDto.Detalles.Count > 0)
-                {
-                    Console.WriteLine($"   Actualizando {actualizarDto.Detalles.Count} detalles");
-
-                    var idsAEliminar = actualizarDto.Detalles
-                        .Where(d => d.Eliminar && d.Id.HasValue)
-                        .Select(d => d.Id!.Value)
-                        .ToList();
-
-                    if (idsAEliminar.Any())
-                    {
-                        var detallesAEliminar = pedido.Detalles
-                            .Where(d => idsAEliminar.Contains(d.Id))
-                            .ToList();
-
-                        foreach (var detalle in detallesAEliminar)
-                        {
-                            _context.PedidoDetalles.Remove(detalle);
-                            Console.WriteLine($"   ❌ Eliminando item: {detalle.Id}");
-                        }
-                    }
-
-                    var detallesParaActualizar = actualizarDto.Detalles
-                        .Where(d => !d.Eliminar && d.Id.HasValue)
-                        .ToList();
-
-                    foreach (var detalleDto in detallesParaActualizar)
-                    {
-                        var detalleExistente = pedido.Detalles
-                            .FirstOrDefault(d => d.Id == detalleDto.Id!.Value);
-
-                        if (detalleExistente != null)
-                        {
-                            detalleExistente.Cantidad = detalleDto.Cantidad;
-                            detalleExistente.Nota = detalleDto.Nota;
-                            Console.WriteLine($"   🔄 Actualizando item {detalleDto.Id}: cantidad={detalleDto.Cantidad}");
-                        }
-                    }
-
-                    var detallesNuevos = actualizarDto.Detalles
-                        .Where(d => !d.Eliminar && !d.Id.HasValue)
-                        .ToList();
-
-                    foreach (var detalleDto in detallesNuevos)
-                    {
-                        var nuevoDetalle = new PedidoDetalle
-                        {
-                            PedidoId = id,
-                            PlatilloId = detalleDto.PlatilloId,
-                            Cantidad = detalleDto.Cantidad,
-                            Nota = detalleDto.Nota ?? "",
-                            Estado = EstadoDetalle.Pendiente
-                        };
-
-                        pedido.Detalles.Add(nuevoDetalle);
-                        Console.WriteLine($"   ➕ Agregando nuevo item: PlatilloId={detalleDto.PlatilloId}");
-                    }
-                }
-
-                await _context.SaveChangesAsync();
-                Console.WriteLine($"✅ Pedido {id} actualizado exitosamente");
-
-                // Sincronizar inventario
-                try
-                {
-                    if (pedido.Estado == EstadoPedido.Cancelado)
-                    {
-                        await _inventarioService.RevertirStockPorPedidoAsync(id);
-                    }
-                    else
-                    {
-                        await _inventarioService.DescontarStockPorPedidoAsync(id);
-                    }
-                }
-                catch (Exception exInv)
-                {
-                    _logger.LogError(exInv, $"⚠️ Error sincronizando inventario en PutPedido {id}");
-                }
-
-                var pedidoActualizado = await _context.Pedidos
-                    .Include(p => p.Mesa)
-                    .Include(p => p.Usuario)
-                    .Include(p => p.Detalles)
-                        .ThenInclude(d => d.Platillo)
-                    .FirstOrDefaultAsync(p => p.Id == id);
-
-                if (pedidoActualizado == null)
-                    return NotFound();
-
-                var pedidoDto = MapearPedidoADto(pedidoActualizado);
-                return Ok(pedidoDto);
+                if (!Enum.TryParse<EstadoPedido>(actualizarDto.Estado, true, out var nuevoEstado) || !Enum.IsDefined(nuevoEstado))
+                    return BadRequest($"Estado inválido: {actualizarDto.Estado}");
+                if (!EstadosPedido.PuedeCambiar(pedido.Estado, nuevoEstado))
+                    return Conflict(new { message = $"No se puede pasar un pedido de {pedido.Estado} a {nuevoEstado}" });
+                pedido.Estado = nuevoEstado;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Error actualizando pedido {id}: {ex.Message}");
-                return StatusCode(500, $"Error al actualizar pedido: {ex.Message}");
-            }
-        }
 
-        private PedidoDto MapearPedidoADto(Pedido pedido)
-        {
-            return new PedidoDto
+            var detalles = actualizarDto.Detalles ?? new List<ActualizarPedidoDetalleDto>();
+            if (detalles.Count > 0)
             {
-                Id = pedido.Id,
-                MesaId = pedido.MesaId,
-                MesaNumero = pedido.Mesa?.Numero ?? 0,
-                UsuarioId = pedido.UsuarioId,
-                MeseroNombre = pedido.Usuario?.Nombre ?? "Sin asignar",
-                Estado = pedido.Estado.ToString(),
-                Fecha = pedido.Fecha,
-                Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
+                if (!EstadosPedido.EsEditable(estadoAnterior))
+                    return Conflict(new { message = $"Un pedido {estadoAnterior} no se puede modificar" });
+
+                var activos = detalles.Where(d => !d.Eliminar).Select(d => (d.PlatilloId, d.Cantidad)).ToList();
+                if (activos.Count > 0)
                 {
-                    Id = d.Id,
-                    PlatilloId = d.PlatilloId,
-                    PlatilloNombre = d.Platillo?.Nombre ?? "Producto",
-                    Cantidad = d.Cantidad,
-                    Precio = d.Platillo?.Precio ?? 0,
-                    Nota = d.Nota,
-                    Estado = d.Estado.ToString()
-                }).ToList()
-            };
+                    var error = await ValidarDetallesAsync(activos);
+                    if (error != null) return BadRequest(error);
+                }
+
+                var idsAEliminar = detalles.Where(d => d.Eliminar && d.Id.HasValue).Select(d => d.Id!.Value).ToList();
+                foreach (var detalle in pedido.Detalles.Where(d => idsAEliminar.Contains(d.Id)).ToList())
+                    _context.PedidoDetalles.Remove(detalle);
+
+                foreach (var detalleDto in detalles.Where(d => !d.Eliminar && d.Id.HasValue))
+                {
+                    var existente = pedido.Detalles.FirstOrDefault(d => d.Id == detalleDto.Id!.Value);
+                    if (existente != null)
+                    {
+                        existente.Cantidad = detalleDto.Cantidad;
+                        existente.Nota = detalleDto.Nota;
+                    }
+                }
+
+                foreach (var detalleDto in detalles.Where(d => !d.Eliminar && !d.Id.HasValue))
+                {
+                    pedido.Detalles.Add(new PedidoDetalle
+                    {
+                        PedidoId = id,
+                        PlatilloId = detalleDto.PlatilloId,
+                        Cantidad = detalleDto.Cantidad,
+                        Nota = detalleDto.Nota ?? "",
+                        Estado = EstadoDetalle.Pendiente
+                    });
+                }
+            }
+
+            await ActualizarMesaAsync(pedido);
+            await _context.SaveChangesAsync();
+            await SincronizarInventarioAsync(id, cancelar: pedido.Estado == EstadoPedido.Cancelado);
+
+            var pedidoActualizado = await ConsultaCompleta().FirstAsync(p => p.Id == id);
+            return Ok(MapearPedidoADto(pedidoActualizado));
         }
 
         // DELETE: api/Pedidos/5
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Administrador")]
         public async Task<IActionResult> DeletePedido(int id)
         {
-            var pedido = await _context.Pedidos.FindAsync(id);
+            var pedido = await _context.Pedidos.Include(p => p.Mesa).FirstOrDefaultAsync(p => p.Id == id);
             if (pedido == null)
                 return NotFound();
 
+            // Devolver al stock lo que consumió antes de borrarlo.
+            await SincronizarInventarioAsync(id, cancelar: true);
+
+            pedido.Estado = EstadoPedido.Cancelado;
+            await ActualizarMesaAsync(pedido);
             _context.Pedidos.Remove(pedido);
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
+
+        // ──────────────────────────────────────────────────────────────────
+
+        private IQueryable<Pedido> ConsultaCompleta() => _context.Pedidos
+            .Include(p => p.Mesa)
+            .Include(p => p.Usuario)
+            .Include(p => p.Detalles)
+                .ThenInclude(d => d.Platillo);
+
+        /// <summary>Al menos un platillo, todos existentes y con cantidad entre 1 y el máximo.</summary>
+        private async Task<string?> ValidarDetallesAsync(List<(int PlatilloId, int Cantidad)> detalles)
+        {
+            if (detalles.Count == 0)
+                return "El pedido debe incluir al menos un platillo";
+
+            if (detalles.Any(d => d.Cantidad <= 0 || d.Cantidad > CantidadMaximaPorLinea))
+                return $"La cantidad de cada platillo debe estar entre 1 y {CantidadMaximaPorLinea}";
+
+            var ids = detalles.Select(d => d.PlatilloId).Distinct().ToList();
+            var existentes = await _context.Platillos.Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync();
+            var faltantes = ids.Except(existentes).ToList();
+            return faltantes.Count > 0 ? $"Platillo(s) inexistente(s): {string.Join(", ", faltantes)}" : null;
+        }
+
+        /// <summary>
+        /// La mesa queda Disponible cuando el pedido se paga o cancela y no le quedan
+        /// otros pedidos abiertos; vuelve a Ocupada si el pedido se reabre.
+        /// </summary>
+        private async Task ActualizarMesaAsync(Pedido pedido)
+        {
+            if (pedido.Mesa == null) return;
+
+            if (EstadosPedido.EsEditable(pedido.Estado))
+            {
+                pedido.Mesa.Estado = EstadoMesa.Ocupada;
+                return;
+            }
+
+            var otrosAbiertos = await _context.Pedidos.AnyAsync(p =>
+                p.MesaId == pedido.MesaId && p.Id != pedido.Id &&
+                p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
+
+            if (!otrosAbiertos)
+                pedido.Mesa.Estado = EstadoMesa.Disponible;
+        }
+
+        private async Task SincronizarInventarioAsync(int pedidoId, bool cancelar)
+        {
+            // El inventario no bloquea la operación del restaurante: si falla, se registra.
+            try
+            {
+                var res = cancelar
+                    ? await _inventarioService.RevertirStockPorPedidoAsync(pedidoId)
+                    : await _inventarioService.DescontarStockPorPedidoAsync(pedidoId);
+                if (!res.Exitoso)
+                    _logger.LogWarning("Inventario del pedido {Id}: {Mensaje}", pedidoId, res.Mensaje);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al sincronizar inventario del pedido {Id}", pedidoId);
+            }
+        }
+
+        /// <summary>
+        /// Obtiene el ID del usuario genérico para pedidos desde QR.
+        /// Si no existe, lo crea con una clave inutilizable para login.
+        /// </summary>
+        private async Task<int> ObtenerUsuarioGenericoQR()
+        {
+            var usuarioQR = await _context.Usuarios
+                .FirstOrDefaultAsync(u => u.NombreUsuario == "cliente_qr");
+
+            if (usuarioQR != null)
+                return usuarioQR.Id;
+
+            var nuevoUsuario = new Usuario
+            {
+                Nombre = "Cliente QR",
+                NombreUsuario = "cliente_qr",
+                ClaveHash = ClaveHasher.Hash(Guid.NewGuid().ToString("N")),
+                Rol = RolUsuario.Mesero
+            };
+
+            _context.Usuarios.Add(nuevoUsuario);
+            await _context.SaveChangesAsync();
+            return nuevoUsuario.Id;
+        }
+
+        private static PedidoDto MapearPedidoADto(Pedido pedido) => new()
+        {
+            Id = pedido.Id,
+            MesaId = pedido.MesaId,
+            MesaNumero = pedido.Mesa?.Numero ?? 0,
+            UsuarioId = pedido.UsuarioId,
+            MeseroNombre = pedido.Usuario?.Nombre ?? "Sin asignar",
+            Estado = pedido.Estado.ToString(),
+            Fecha = pedido.Fecha,
+            Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
+            {
+                Id = d.Id,
+                PlatilloId = d.PlatilloId,
+                PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
+                Cantidad = d.Cantidad,
+                Precio = d.Platillo?.Precio ?? 0,
+                Nota = d.Nota,
+                Estado = d.Estado.ToString()
+            }).ToList()
+        };
     }
 }

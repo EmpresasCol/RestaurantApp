@@ -1,11 +1,17 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 
 namespace RestaurantApi.Controllers
 {
+    /// <summary>
+    /// CRUD crudo de detalles (solo administración). Los clientes deben usar
+    /// api/pedidos/{id}, que valida y sincroniza el inventario.
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize(Roles = "Administrador")]
     public class PedidoDetallesController : ControllerBase
     {
         private readonly RestauranteContext _context;
@@ -41,6 +47,9 @@ namespace RestaurantApi.Controllers
         [HttpPost]
         public async Task<ActionResult<PedidoDetalle>> PostPedidoDetalle(PedidoDetalle detalle)
         {
+            if (detalle.Cantidad <= 0)
+                return BadRequest("La cantidad debe ser mayor que cero");
+
             _context.PedidoDetalles.Add(detalle);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetPedidoDetalle), new { id = detalle.Id }, detalle);
@@ -51,6 +60,8 @@ namespace RestaurantApi.Controllers
         {
             if (id != detalle.Id)
                 return BadRequest();
+            if (detalle.Cantidad <= 0)
+                return BadRequest("La cantidad debe ser mayor que cero");
 
             _context.Entry(detalle).State = EntityState.Modified;
             await _context.SaveChangesAsync();

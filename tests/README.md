@@ -24,3 +24,18 @@ Creadas durante la auditoría técnica del 27/10/2026.
 
 Las pruebas de plantilla originales (`src/App.test.js` y `test/widget_test.dart`) fallan
 porque buscan contenido del proyecto de ejemplo; se recomienda eliminarlas.
+
+## Resultados tras aplicar el plan de corrección (28/10/2026)
+
+Todas las pruebas `AUDITORIA_` / `[AUDITORÍA]` pasan; las de plantilla se eliminaron.
+
+- API: 57 pruebas, 57 pasan (44 de la auditoría + 13 en `CorreccionesTests.cs`).
+- Web: 31 pruebas, 31 pasan (24 de la auditoría + `kds.test.js` e `impuestos.test.js`).
+- App: 14 pruebas, 14 pasan.
+
+Notas:
+
+- En `AuthContext.test.js` la respuesta simulada del login ahora incluye `token`,
+  porque la API real lo devuelve (antes no existía).
+- La API exige JWT: configure `Jwt__Key` (≥ 32 caracteres) y `Cors__Origenes` en el
+  despliegue. Sin `Jwt__Key` usa una clave temporal y las sesiones caducan al reiniciar.

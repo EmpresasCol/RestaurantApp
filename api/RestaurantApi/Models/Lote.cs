@@ -45,6 +45,6 @@ namespace RestaurantApi.Models
         [StringLength(20)]
         public string Estado { get; set; } = "Activo";
 
-        public DateTime FechaCreacion { get; set; } = DateTime.Now;
+        public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     }
 }

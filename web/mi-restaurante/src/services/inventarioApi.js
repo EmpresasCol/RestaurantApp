@@ -1,22 +1,5 @@
 import axios from 'axios';
-
-// Detectar URL base óptima (Docker reverse-proxy /api, localhost:5000, o túnel ngrok configurado)
-const getApiBaseUrl = () => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
-  }
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      // Si el puerto web es 3001 (Nginx en Docker), la API se proxia en /api
-      if (window.location.port === '3001') {
-        return '/api';
-      }
-      return 'http://localhost:5000/api';
-    }
-  }
-  return '/api';
-};
+import { getApiBaseUrl, encabezadosAuth, manejarNoAutorizado } from './sesion';
 
 const API_URL = getApiBaseUrl();
 
@@ -27,6 +10,19 @@ const api = axios.create({
     'ngrok-skip-browser-warning': '69420'
   }
 });
+
+// JWT en cada petición; un 401 cierra la sesión vencida.
+api.interceptors.request.use((config) => {
+  Object.assign(config.headers, encabezadosAuth());
+  return config;
+});
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    manejarNoAutorizado(error.response?.status);
+    return Promise.reject(error);
+  }
+);
 
 // ==================== PLATILLOS (Para vinculación con recetas) ====================
 export const getPlatillos = async () => {

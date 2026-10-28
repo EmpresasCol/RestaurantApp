@@ -1,4 +1,5 @@
 ﻿// api/RestaurantApi/Controllers/MesasController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
@@ -8,6 +9,7 @@ namespace RestaurantApi.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class MesasController : ControllerBase
     {
         private readonly RestauranteContext _context;
@@ -44,24 +46,44 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Administrador")]
         public async Task<ActionResult<Mesa>> PostMesa(Mesa mesa)
         {
+            if (mesa.Numero <= 0)
+                return BadRequest("El número de mesa debe ser mayor que cero");
+            if (await _context.Mesas.AnyAsync(m => m.Numero == mesa.Numero))
+                return Conflict(new { message = $"Ya existe la mesa {mesa.Numero}" });
+
+            mesa.Id = 0;
             _context.Mesas.Add(mesa);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetMesa), new { id = mesa.Id }, mesa);
         }
 
+        /// <summary>Actualiza número y/o estado; los campos vacíos se conservan.</summary>
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutMesa(int id, Mesa mesa)
+        [Authorize(Roles = "Administrador")]
+        public async Task<IActionResult> PutMesa(int id, MesaDto dto)
         {
-            if (id != mesa.Id) return BadRequest();
-            _context.Entry(mesa).State = EntityState.Modified;
+            if (id != dto.Id) return BadRequest();
+
+            var mesa = await _context.Mesas.FindAsync(id);
+            if (mesa == null) return NotFound();
+
+            if (dto.Numero > 0) mesa.Numero = dto.Numero;
+            if (!string.IsNullOrWhiteSpace(dto.Estado))
+            {
+                if (!Enum.TryParse<EstadoMesa>(dto.Estado, true, out var estado) || !Enum.IsDefined(estado))
+                    return BadRequest($"Estado inválido: {dto.Estado}");
+                mesa.Estado = estado;
+            }
+
             await _context.SaveChangesAsync();
             return NoContent();
         }
 
-        // NUEVO ENDPOINT
         [HttpPut("{id}/estado")]
+        [Authorize(Roles = "Administrador,Caja,Mesero")]
         public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoMesaDto dto)
         {
             var mesa = await _context.Mesas.FindAsync(id);
@@ -70,7 +92,7 @@ namespace RestaurantApi.Controllers
                 return NotFound($"Mesa con ID {id} no encontrada");
 
             // Validar que el estado sea válido
-            if (!Enum.TryParse<EstadoMesa>(dto.Estado, true, out var estadoEnum))
+            if (!Enum.TryParse<EstadoMesa>(dto.Estado, true, out var estadoEnum) || !Enum.IsDefined(estadoEnum))
             {
                 return BadRequest($"Estado inválido: {dto.Estado}. Estados válidos: Disponible, Ocupada, EsperandoPago");
             }
@@ -87,6 +109,7 @@ namespace RestaurantApi.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Administrador")]
         public async Task<IActionResult> DeleteMesa(int id)
         {
             var mesa = await _context.Mesas.FindAsync(id);

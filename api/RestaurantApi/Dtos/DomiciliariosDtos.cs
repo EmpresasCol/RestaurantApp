@@ -21,6 +21,7 @@ namespace RestaurantApi.Dtos
         public string Rol { get; set; } = "Domiciliario";
         public int EntregasHoy { get; set; }
         public int EntregasTotales { get; set; }
+        public string Token { get; set; } = string.Empty;
     }
 
     /// <summary>

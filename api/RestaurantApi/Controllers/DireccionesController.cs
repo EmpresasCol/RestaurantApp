@@ -1,4 +1,5 @@
 ﻿// api/RestaurantApi/Controllers/DireccionesController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
@@ -8,6 +9,7 @@ namespace RestaurantApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Roles = "Administrador,Caja")]
     public class DireccionesController : ControllerBase
     {
         private readonly RestauranteContext _context;

@@ -4,7 +4,8 @@
     {
         Pendiente,
         EnPreparacion,
-        Listo
+        Listo,
+        Cancelado   // existe en el ENUM de la BD
     }
 
     public class PedidoDetalle
