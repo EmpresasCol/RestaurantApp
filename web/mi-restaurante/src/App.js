@@ -184,6 +184,7 @@ function AppContent() {
       mesaId={mesaId}
       numeroMesa={numeroMesa}
       onEnviarPedido={api.createPedido}
+      onRecargarCarta={cargarPlatillos}
       offsetSuperior={esClienteQR ? 0 : 64}
     />
   );

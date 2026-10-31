@@ -93,6 +93,12 @@ class _EditarPedidoScreenState extends State<EditarPedidoScreen> {
   }
 
   void _agregarProducto(Platillo platillo) {
+    if (!platillo.disponible) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${platillo.nombre}: no disponible por el momento')),
+      );
+      return;
+    }
     setState(() {
       final existe = _itemsPedido.firstWhere(
         (p) => p.platilloId == platillo.id,

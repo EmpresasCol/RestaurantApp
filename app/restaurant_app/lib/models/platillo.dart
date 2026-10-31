@@ -5,6 +5,8 @@ class Platillo {
   final double precio;
   final String? imagenUrl;
   final String categoria;
+  /// false cuando la API indica que no hay ingredientes para una porción.
+  final bool disponible;
   int cantidad;
 
   Platillo({
@@ -14,6 +16,7 @@ class Platillo {
     required this.precio,
     this.imagenUrl,
     required this.categoria,
+    this.disponible = true,
     this.cantidad = 0,
   });
 
@@ -25,6 +28,7 @@ class Platillo {
       precio: (json['precio'] as num?)?.toDouble() ?? 0.0,  // ✅ Manejo seguro
       imagenUrl: json['imagenUrl'],
       categoria: json['categoria'] ?? 'General',
+      disponible: json['disponible'] != false,
     );
   }
 }

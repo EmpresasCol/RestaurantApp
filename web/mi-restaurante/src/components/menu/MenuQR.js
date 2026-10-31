@@ -16,6 +16,14 @@ const NOTAS_RAPIDAS = ['Sin cebolla', 'Sin salsas', 'Bien cocido', 'Término med
 const formatear = (valor) =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(valor);
 
+// La API marca disponible=false cuando no hay ingredientes para una porción.
+export const agotado = (platillo) => platillo?.disponible === false;
+export const NO_DISPONIBLE = 'No disponible por el momento';
+const MAX_POR_PLATO = 50;
+// Porciones que se pueden pedir de un platillo (null en la API = sin control de inventario).
+export const topePorciones = (platillo) =>
+  agotado(platillo) ? 0 : Math.min(MAX_POR_PLATO, platillo?.porcionesDisponibles ?? MAX_POR_PLATO);
+
 const idCategoria = (nombre) => `cat-${nombre.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
 function FotoPlato({ platillo, className = '' }) {
@@ -94,6 +102,7 @@ function ControlCantidad({ cantidad, onSumar, onRestar, nombre, oscuro = false }
 }
 
 function TarjetaPlato({ platillo, cantidad, onAbrir, onSumar, onRestar }) {
+  const sinStock = agotado(platillo);
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
@@ -106,11 +115,17 @@ function TarjetaPlato({ platillo, cantidad, onAbrir, onSumar, onRestar }) {
       <div className="relative overflow-hidden rounded-[20px] bg-gray-100 shadow-card transition-shadow duration-300 group-hover:shadow-lift">
         <FotoPlato
           platillo={platillo}
-          className="aspect-[4/3] w-full transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+          className={`aspect-[4/3] w-full transition-transform duration-700 ease-out group-hover:scale-[1.04] ${sinStock ? 'opacity-50 grayscale' : ''}`}
         />
-        <div className="absolute bottom-3 right-3">
-          <ControlCantidad cantidad={cantidad} onSumar={onSumar} onRestar={onRestar} nombre={platillo.nombre} oscuro />
-        </div>
+        {sinStock ? (
+          <span className="absolute bottom-3 left-3 right-3 rounded-full bg-white/95 px-3 py-2 text-center text-[13px] font-bold text-espresso shadow-card">
+            {NO_DISPONIBLE}
+          </span>
+        ) : (
+          <div className="absolute bottom-3 right-3">
+            <ControlCantidad cantidad={cantidad} onSumar={onSumar} onRestar={onRestar} nombre={platillo.nombre} oscuro />
+          </div>
+        )}
       </div>
       <div className="px-1 pt-3">
         <h3 className="text-[16px] font-bold leading-snug text-espresso">{platillo.nombre}</h3>
@@ -175,6 +190,7 @@ function HojaInferior({ abierta, onCerrar, titulo, children, pie }) {
 function HojaPlato({ platillo, onCerrar, onAgregar }) {
   const [nota, setNota] = useState('');
   const [cantidad, setCantidad] = useState(1);
+  const tope = topePorciones(platillo);
 
   useEffect(() => {
     setNota('');
@@ -192,14 +208,18 @@ function HojaPlato({ platillo, onCerrar, onAgregar }) {
       abierta={!!platillo}
       onCerrar={onCerrar}
       titulo={platillo?.nombre ?? 'Plato'}
-      pie={platillo && (
+      pie={platillo && (tope === 0 ? (
+        <p className="flex h-14 items-center justify-center rounded-full bg-gray-100 text-[15px] font-bold text-gray-600" role="status">
+          {NO_DISPONIBLE}
+        </p>
+      ) : (
         <div className="flex items-center gap-3">
           <div className="flex h-14 items-center rounded-full border border-gray-200">
             <button type="button" className="grid h-14 w-12 place-items-center disabled:text-gray-300" onClick={() => setCantidad((c) => Math.max(1, c - 1))} disabled={cantidad <= 1} aria-label="Menos">
               <Minus size={18} strokeWidth={2.5} />
             </button>
             <span className="tabular w-6 text-center text-lg font-extrabold">{cantidad}</span>
-            <button type="button" className="grid h-14 w-12 place-items-center" onClick={() => setCantidad((c) => Math.min(20, c + 1))} aria-label="Más">
+            <button type="button" className="grid h-14 w-12 place-items-center disabled:text-gray-300" onClick={() => setCantidad((c) => Math.min(tope, c + 1))} disabled={cantidad >= tope} aria-label="Más">
               <Plus size={18} strokeWidth={2.5} />
             </button>
           </div>
@@ -212,7 +232,7 @@ function HojaPlato({ platillo, onCerrar, onAgregar }) {
             <span className="tabular">{formatear(platillo.precio * cantidad)}</span>
           </button>
         </div>
-      )}
+      ))}
     >
       {platillo && (
         <>
@@ -264,7 +284,7 @@ function HojaPlato({ platillo, onCerrar, onAgregar }) {
   );
 }
 
-export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnviarPedido, offsetSuperior = 0 }) {
+export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnviarPedido, onRecargarCarta, offsetSuperior = 0 }) {
   const [carrito, setCarrito] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState(null);
@@ -295,7 +315,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnvi
   const destacados = useMemo(() => {
     const porCategoria = new Map();
     platillos
-      .filter((p) => p.imagenUrl)
+      .filter((p) => p.imagenUrl && !agotado(p))
       .forEach((p) => {
         const cat = p.categoria || 'Otros';
         if (!porCategoria.has(cat) || p.precio > porCategoria.get(cat).precio) porCategoria.set(cat, p);
@@ -335,22 +355,29 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnvi
 
   const cantidadRapida = (id) => carrito.find((i) => i.id === id && i.nota === '')?.cantidad ?? 0;
 
+  // Lo que queda por pedir de un platillo, sumando todas sus notas en el carrito.
+  const restantes = (actual, id) =>
+    topePorciones(platillos.find((p) => p.id === id)) - actual.filter((i) => i.id === id).reduce((n, i) => n + i.cantidad, 0);
+
   const agregar = (platillo, cantidad = 1, nota = '') => {
     totalAnterior.current = total;
     setCarrito((actual) => {
+      const n = Math.min(cantidad, restantes(actual, platillo.id));
+      if (n <= 0) return actual;
       const existe = actual.find((i) => i.id === platillo.id && i.nota === nota);
-      if (existe) return actual.map((i) => (i === existe ? { ...i, cantidad: Math.min(50, i.cantidad + cantidad) } : i));
-      return [...actual, { id: platillo.id, nombre: platillo.nombre, precio: platillo.precio, imagenUrl: platillo.imagenUrl, nota, cantidad }];
+      if (existe) return actual.map((i) => (i === existe ? { ...i, cantidad: i.cantidad + n } : i));
+      return [...actual, { id: platillo.id, nombre: platillo.nombre, precio: platillo.precio, imagenUrl: platillo.imagenUrl, nota, cantidad: n }];
     });
   };
 
   const cambiarCantidad = (id, nota, delta) => {
     totalAnterior.current = total;
-    setCarrito((actual) =>
-      actual
+    setCarrito((actual) => {
+      if (delta > 0 && restantes(actual, id) < delta) return actual;
+      return actual
         .map((i) => (i.id === id && i.nota === nota ? { ...i, cantidad: i.cantidad + delta } : i))
-        .filter((i) => i.cantidad > 0)
-    );
+        .filter((i) => i.cantidad > 0);
+    });
   };
 
   const irACategoria = (cat) => {
@@ -368,6 +395,9 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnvi
       totalAnterior.current = 0;
     } catch (error) {
       setEnvio({ estado: 'error', error: error.message?.replace(/^Error al crear pedido:\s*/, '') || 'No se pudo enviar el pedido.', resumen: null });
+    } finally {
+      // El stock cambió (o alguien pidió antes): refrescar qué sigue disponible.
+      onRecargarCarta?.();
     }
   };
 

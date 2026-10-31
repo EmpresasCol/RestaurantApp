@@ -128,6 +128,12 @@ class _NuevoPedidoScreenState extends State<NuevoPedidoScreen> {
   }
 
   Future<void> _agregarProducto(Platillo platillo) async {
+    if (!platillo.disponible) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${platillo.nombre}: no disponible por el momento')),
+      );
+      return;
+    }
     final existe = _itemsPedido.firstWhere(
       (p) => p.platilloId == platillo.id,
       orElse: () => _ItemPedidoLocal(platilloId: -1, nombre: '', precio: 0),

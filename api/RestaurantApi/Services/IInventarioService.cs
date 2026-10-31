@@ -16,5 +16,11 @@ namespace RestaurantApi.Services
         Task<ResultadoInventarioDto> DescontarStockPorDomicilioAsync(int domicilioId);
         Task<ResultadoInventarioDto> RevertirStockPorDomicilioAsync(int domicilioId);
         Task InicializarRecetasPredeterminadasAsync();
+
+        /// <summary>Porciones que alcanzan para cada platillo; null = sin control de inventario.</summary>
+        Task<Dictionary<int, int?>> PorcionesDisponiblesAsync();
+        /// <summary>Mensaje de error si no hay insumos para las líneas; null si alcanza.</summary>
+        Task<string?> VerificarStockPedidoAsync(int pedidoId, IEnumerable<(int PlatilloId, int Cantidad)> lineas);
+        Task<string?> VerificarStockDomicilioAsync(int domicilioId, IEnumerable<(int PlatilloId, int Cantidad)> lineas);
     }
 }

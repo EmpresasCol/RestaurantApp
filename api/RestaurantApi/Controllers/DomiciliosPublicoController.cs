@@ -115,6 +115,11 @@ namespace RestaurantApi.Controllers
                 if (platillos.Count != platilloIds.Count)
                     return BadRequest(new { message = "Uno o más platillos no existen" });
 
+                // Al salir sin Commit se revierten el cliente y la dirección ya creados.
+                var sinStock = await _inventarioService.VerificarStockDomicilioAsync(0, dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)));
+                if (sinStock != null)
+                    return BadRequest(new { message = sinStock });
+
                 decimal subtotal = 0m;
                 var detalles = new List<DomicilioDetalle>();
                 foreach (var d in dto.Detalles)
@@ -298,6 +303,10 @@ namespace RestaurantApi.Controllers
 
             if (platillos.Count != ids.Count)
                 return BadRequest(new { message = "Uno o más platillos no existen" });
+
+            var sinStock = await _inventarioService.VerificarStockDomicilioAsync(domicilio.Id, dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)));
+            if (sinStock != null)
+                return BadRequest(new { message = sinStock });
 
             // Reemplazar detalles (más simple que intentar reconciliar; el cliente edita poco).
             _context.DomicilioDetalles.RemoveRange(domicilio.Detalles);

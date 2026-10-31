@@ -196,7 +196,15 @@ export const createPedido = async (mesaId, items) => {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Error al crear pedido: ${errorText}`);
+      // La API puede responder un texto, un string JSON o { message }.
+      let detalle = errorText;
+      try {
+        const json = JSON.parse(errorText);
+        detalle = typeof json === 'string' ? json : json.message || json.title || errorText;
+      } catch {
+        // texto plano
+      }
+      throw new Error(`Error al crear pedido: ${detalle}`);
     }
 
     const resultado = await response.json();

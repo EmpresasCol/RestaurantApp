@@ -1,4 +1,4 @@
-using Google;
+﻿using Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -983,6 +983,11 @@ namespace RestaurantApi.Controllers
                     return BadRequest(ModelState);
                 }
 
+                if (dto.TipoMovimiento != "Ajuste" && dto.Cantidad <= 0)
+                {
+                    return BadRequest("La cantidad debe ser mayor que cero");
+                }
+
                 // Verificar que el producto existe
                 var producto = await _context.ProductosInventario.FindAsync(dto.ProductoId);
                 if (producto == null)
@@ -1032,7 +1037,10 @@ namespace RestaurantApi.Controllers
                         {
                             decimal costoTotalAnterior = stock.Cantidad * stock.CostoPromedio;
                             decimal costoTotalNuevo = dto.Cantidad * dto.CostoUnitario.Value;
-                            stock.CostoPromedio = (costoTotalAnterior + costoTotalNuevo) / nuevaCantidad;
+                            // Un stock previo negativo (datos antiguos) no debe distorsionar el promedio.
+                            stock.CostoPromedio = stock.Cantidad > 0
+                                ? (costoTotalAnterior + costoTotalNuevo) / nuevaCantidad
+                                : dto.CostoUnitario.Value;
                         }
                         break;
 
@@ -1043,10 +1051,13 @@ namespace RestaurantApi.Controllers
                             return BadRequest($"Stock insuficiente. Disponible: {stock.Cantidad}, Solicitado: {dto.Cantidad}");
                         }
                         nuevaCantidad -= dto.Cantidad;
+                        await DescontarLotesAsync(dto.ProductoId, dto.AlmacenId, dto.LoteId, dto.Cantidad);
                         break;
 
                     case "Ajuste":
                         nuevaCantidad = dto.Cantidad;
+                        if (nuevaCantidad < stock.Cantidad)
+                            await DescontarLotesAsync(dto.ProductoId, dto.AlmacenId, null, stock.Cantidad - nuevaCantidad);
                         break;
 
                     default:
@@ -1082,6 +1093,29 @@ namespace RestaurantApi.Controllers
             {
                 _logger.LogError(ex, "Error al crear movimiento");
                 return StatusCode(500, new { message = "Error al crear movimiento" });
+            }
+        }
+
+        /// <summary>
+        /// Saca la cantidad de los lotes (el indicado primero, luego FIFO por vencimiento)
+        /// para que los lotes no muestren más existencias que el stock.
+        /// </summary>
+        private async Task DescontarLotesAsync(int productoId, int almacenId, int? loteId, decimal cantidad)
+        {
+            var lotes = (await _context.Lotes
+                    .Where(l => l.ProductoId == productoId && l.AlmacenId == almacenId && l.CantidadActual > 0)
+                    .ToListAsync())
+                .OrderByDescending(l => l.Id == loteId)
+                .ThenBy(l => l.FechaVencimiento == null)
+                .ThenBy(l => l.FechaVencimiento)
+                .ThenBy(l => l.FechaIngreso);
+
+            foreach (var lote in lotes)
+            {
+                if (cantidad <= 0) break;
+                var tomar = Math.Min(cantidad, lote.CantidadActual);
+                lote.CantidadActual -= tomar;
+                cantidad -= tomar;
             }
         }
 

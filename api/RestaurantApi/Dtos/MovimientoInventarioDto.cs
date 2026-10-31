@@ -14,10 +14,12 @@ namespace RestaurantApi.Dtos
         [Required]
         public string TipoMovimiento { get; set; }
 
+        // Ajuste admite 0 (contar y no encontrar nada); el controlador exige > 0 en los demás tipos.
         [Required]
-        [Range(0.01, double.MaxValue)]
+        [Range(0, 9999999)]
         public decimal Cantidad { get; set; }
 
+        [Range(0, 99999999)]
         public decimal? CostoUnitario { get; set; }
 
         public string? Motivo { get; set; }

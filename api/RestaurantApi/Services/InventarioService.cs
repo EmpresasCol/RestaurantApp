@@ -91,13 +91,7 @@ namespace RestaurantApi.Services
             {
                 var deseado = await ConsumoDeseadoAsync(lineas);
 
-                var movimientos = await _context.MovimientosInventario
-                    .Where(m => m.Referencia != null &&
-                                (m.Referencia == origen.ReferenciaLegacy
-                                 || m.Referencia.StartsWith(origen.PrefijoVenta)
-                                 || m.Referencia.StartsWith(origen.PrefijoAjuste)
-                                 || m.Referencia.StartsWith(origen.PrefijoCancelacionLegacy)))
-                    .ToListAsync();
+                var movimientos = await MovimientosDeAsync(origen);
 
                 if (exigirDetalles && lineas.Count == 0 && movimientos.Count == 0)
                 {
@@ -163,7 +157,7 @@ namespace RestaurantApi.Services
         /// Un platillo sin receta solo descuenta un producto cuyo nombre sea EXACTAMENTE igual
         /// (p. ej. bebidas embotelladas); nunca por coincidencia parcial ("Pan" ≠ "Panna Cotta").
         /// </summary>
-        private async Task<Dictionary<int, decimal>> ConsumoDeseadoAsync(List<(int PlatilloId, int Cantidad)> lineas)
+        private async Task<Dictionary<int, decimal>> ConsumoDeseadoAsync(List<(int PlatilloId, int Cantidad)> lineas, bool soloObligatorios = false)
         {
             var porPlatillo = lineas
                 .Where(l => l.PlatilloId > 0 && l.Cantidad > 0)
@@ -173,32 +167,126 @@ namespace RestaurantApi.Services
             var resultado = new Dictionary<int, decimal>();
             if (porPlatillo.Count == 0) return resultado;
 
-            var ids = porPlatillo.Keys.ToList();
-            var recetas = await _context.Recetas.Where(r => ids.Contains(r.PlatilloId)).ToListAsync();
-
-            foreach (var r in recetas)
-                resultado[r.ProductoId] = resultado.GetValueOrDefault(r.ProductoId) + r.CantidadRequerida * porPlatillo[r.PlatilloId];
-
-            var sinReceta = ids.Except(recetas.Select(r => r.PlatilloId)).ToList();
-            if (sinReceta.Count > 0)
-            {
-                var platillos = await _context.Platillos.Where(p => sinReceta.Contains(p.Id)).ToListAsync();
-                var productos = await _context.ProductosInventario.ToListAsync();
-                foreach (var platillo in platillos)
-                {
-                    var nombre = NormalizarTexto(platillo.Nombre);
-                    var producto = productos.FirstOrDefault(p => NormalizarTexto(p.Nombre) == nombre);
-                    if (producto != null)
-                        resultado[producto.Id] = resultado.GetValueOrDefault(producto.Id) + porPlatillo[platillo.Id];
-                    else
-                        _logger.LogInformation("ℹ️ Platillo '{Platillo}' no tiene receta configurada.", platillo.Nombre);
-                }
-            }
+            var insumos = await InsumosPorPlatilloAsync(porPlatillo.Keys.ToList(), soloObligatorios);
+            foreach (var (platilloId, lista) in insumos)
+                foreach (var (productoId, cantidad) in lista)
+                    resultado[productoId] = resultado.GetValueOrDefault(productoId) + cantidad * porPlatillo[platilloId];
 
             foreach (var k in resultado.Keys.ToList())
                 resultado[k] = Math.Round(resultado[k], 2);
             return resultado;
         }
+
+        /// <summary>
+        /// Insumos que gasta UNA porción de cada platillo: su receta o, si no tiene, el producto
+        /// de nombre idéntico (1 unidad). Un platillo sin receta ni producto queda sin entrada.
+        /// </summary>
+        private async Task<Dictionary<int, List<(int ProductoId, decimal Cantidad)>>> InsumosPorPlatilloAsync(
+            List<int>? platilloIds, bool soloObligatorios)
+        {
+            var recetas = await _context.Recetas
+                .Where(r => (platilloIds == null || platilloIds.Contains(r.PlatilloId)) && (!soloObligatorios || !r.Opcional))
+                .ToListAsync();
+
+            var resultado = recetas
+                .GroupBy(r => r.PlatilloId)
+                .ToDictionary(g => g.Key, g => g.Select(r => (r.ProductoId, r.CantidadRequerida)).ToList());
+
+            // Con receta (aunque solo tenga insumos opcionales) no se busca producto homónimo.
+            var conReceta = soloObligatorios
+                ? (await _context.Recetas.Where(r => platilloIds == null || platilloIds.Contains(r.PlatilloId))
+                      .Select(r => r.PlatilloId).Distinct().ToListAsync()).ToHashSet()
+                : resultado.Keys.ToHashSet();
+
+            var sinReceta = await _context.Platillos
+                .Where(p => (platilloIds == null || platilloIds.Contains(p.Id)))
+                .ToListAsync();
+            sinReceta = sinReceta.Where(p => !conReceta.Contains(p.Id)).ToList();
+
+            if (sinReceta.Count > 0)
+            {
+                var productos = await _context.ProductosInventario.ToListAsync();
+                foreach (var platillo in sinReceta)
+                {
+                    var nombre = NormalizarTexto(platillo.Nombre);
+                    var producto = productos.FirstOrDefault(p => NormalizarTexto(p.Nombre) == nombre);
+                    if (producto != null)
+                        resultado[platillo.Id] = new List<(int, decimal)> { (producto.Id, 1m) };
+                    else
+                        _logger.LogDebug("ℹ️ Platillo '{Platillo}' no tiene receta configurada.", platillo.Nombre);
+                }
+            }
+
+            return resultado;
+        }
+
+        /// <summary>Existencias totales (todos los almacenes) por producto; un producto inactivo cuenta como 0.</summary>
+        private async Task<Dictionary<int, decimal>> ExistenciasAsync()
+        {
+            var activos = await _context.ProductosInventario.Where(p => p.Activo).Select(p => p.Id).ToListAsync();
+            var stock = await _context.Stock
+                .Where(s => activos.Contains(s.ProductoId) && s.Cantidad > 0)
+                .GroupBy(s => s.ProductoId)
+                .Select(g => new { g.Key, Total = g.Sum(s => s.Cantidad) })
+                .ToListAsync();
+            return stock.ToDictionary(s => s.Key, s => s.Total);
+        }
+
+        public async Task<Dictionary<int, int?>> PorcionesDisponiblesAsync()
+        {
+            var insumos = await InsumosPorPlatilloAsync(null, soloObligatorios: true);
+            var existencias = await ExistenciasAsync();
+            var ids = await _context.Platillos.Select(p => p.Id).ToListAsync();
+
+            return ids.ToDictionary(id => id, id => insumos.TryGetValue(id, out var lista) && lista.Count > 0
+                ? (int?)lista.Min(i => i.Cantidad > 0 ? (int)Math.Floor(existencias.GetValueOrDefault(i.ProductoId) / i.Cantidad) : int.MaxValue)
+                : null);
+        }
+
+        public Task<string?> VerificarStockPedidoAsync(int pedidoId, IEnumerable<(int PlatilloId, int Cantidad)> lineas)
+            => VerificarStockAsync(new Origen("Pedido", pedidoId, 0), lineas.ToList());
+
+        public Task<string?> VerificarStockDomicilioAsync(int domicilioId, IEnumerable<(int PlatilloId, int Cantidad)> lineas)
+            => VerificarStockAsync(new Origen("Domicilio", domicilioId, 0), lineas.ToList());
+
+        /// <summary>
+        /// Comprueba que haya insumos para las líneas antes de guardarlas. Lo que ese mismo
+        /// pedido ya consumió cuenta como disponible (al editar solo se pide la diferencia).
+        /// Devuelve el mensaje de error o null si alcanza.
+        /// </summary>
+        private async Task<string?> VerificarStockAsync(Origen origen, List<(int PlatilloId, int Cantidad)> lineas)
+        {
+            var deseado = await ConsumoDeseadoAsync(lineas, soloObligatorios: true);
+            if (deseado.Count == 0) return null;
+
+            var yaConsumido = origen.Id > 0
+                ? (await MovimientosDeAsync(origen))
+                    .GroupBy(m => m.ProductoId)
+                    .ToDictionary(g => g.Key, g => g.Sum(m => m.TipoMovimiento == "Salida" ? m.Cantidad : -m.Cantidad))
+                : new Dictionary<int, decimal>();
+            var existencias = await ExistenciasAsync();
+
+            var faltan = deseado
+                .Where(kv => kv.Value - Math.Max(0, yaConsumido.GetValueOrDefault(kv.Key)) > existencias.GetValueOrDefault(kv.Key))
+                .Select(kv => kv.Key)
+                .ToHashSet();
+            if (faltan.Count == 0) return null;
+
+            var ids = lineas.Select(l => l.PlatilloId).Distinct().ToList();
+            var insumos = await InsumosPorPlatilloAsync(ids, soloObligatorios: true);
+            var afectados = insumos.Where(kv => kv.Value.Any(i => faltan.Contains(i.ProductoId))).Select(kv => kv.Key).ToList();
+            var nombres = await _context.Platillos.Where(p => afectados.Contains(p.Id)).Select(p => p.Nombre).ToListAsync();
+
+            return $"Platillo no disponible por el momento: {string.Join(", ", nombres)}. No hay ingredientes suficientes.";
+        }
+
+        private Task<List<MovimientoInventario>> MovimientosDeAsync(Origen origen) => _context.MovimientosInventario
+            .Where(m => m.Referencia != null &&
+                        (m.Referencia == origen.ReferenciaLegacy
+                         || m.Referencia.StartsWith(origen.PrefijoVenta)
+                         || m.Referencia.StartsWith(origen.PrefijoAjuste)
+                         || m.Referencia.StartsWith(origen.PrefijoCancelacionLegacy)))
+            .ToListAsync();
 
         /// <summary>
         /// Saca la cantidad del stock existente (primero el almacén de consumo, luego el resto)

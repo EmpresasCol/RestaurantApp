@@ -106,6 +106,10 @@ namespace RestaurantApi.Controllers
             if (faltantes.Count > 0)
                 return BadRequest(new { message = $"Platillo(s) no encontrado(s): {string.Join(", ", faltantes)}" });
 
+            var sinStock = await _inventarioService.VerificarStockDomicilioAsync(0, dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)));
+            if (sinStock != null)
+                return BadRequest(new { message = sinStock });
+
             var detalles = dto.Detalles.Select(d => new DomicilioDetalle
             {
                 PlatilloId = d.PlatilloId,

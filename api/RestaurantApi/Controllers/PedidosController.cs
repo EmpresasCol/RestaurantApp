@@ -79,7 +79,9 @@ namespace RestaurantApi.Controllers
             if (mesa == null)
                 return BadRequest($"Mesa {crearPedido.MesaId} no existe");
 
-            var error = await ValidarDetallesAsync(crearPedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList());
+            var lineas = crearPedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
+            var error = await ValidarDetallesAsync(lineas)
+                        ?? await _inventarioService.VerificarStockPedidoAsync(0, lineas);
             if (error != null)
                 return BadRequest(error);
 
@@ -176,7 +178,9 @@ namespace RestaurantApi.Controllers
             if (!EstadosPedido.EsEditable(pedido.Estado))
                 return Conflict(new { message = $"Un pedido {pedido.Estado} no se puede modificar" });
 
-            var error = await ValidarDetallesAsync(dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList());
+            var lineas = dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
+            var error = await ValidarDetallesAsync(lineas)
+                        ?? await _inventarioService.VerificarStockPedidoAsync(id, lineas);
             if (error != null)
                 return BadRequest(error);
 
@@ -260,6 +264,14 @@ namespace RestaurantApi.Controllers
                         Nota = detalleDto.Nota ?? "",
                         Estado = EstadoDetalle.Pendiente
                     });
+                }
+
+                // Lo que quedará en el pedido tras la edición (los eliminados siguen en la colección hasta guardar).
+                var finales = pedido.Detalles.Where(d => !idsAEliminar.Contains(d.Id)).Select(d => (d.PlatilloId, d.Cantidad)).ToList();
+                if (pedido.Estado != EstadoPedido.Cancelado)
+                {
+                    var sinStock = await _inventarioService.VerificarStockPedidoAsync(id, finales);
+                    if (sinStock != null) return BadRequest(sinStock);
                 }
             }
 

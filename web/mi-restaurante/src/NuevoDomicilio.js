@@ -12,6 +12,7 @@ import {
   User
 } from 'lucide-react';
 import { getPlatillos } from './services/api';
+import { NO_DISPONIBLE, agotado, topePorciones } from './components/menu/MenuQR';
 import {
   buscarClientePorTelefono,
   createClienteConDireccion,
@@ -168,7 +169,7 @@ function NuevoDomicilio({ onVolver, onDomicilioCreado }) {
       setCarrito(carrito.filter(item => item.id !== platilloId));
     } else {
       setCarrito(carrito.map(item =>
-        item.id === platilloId ? { ...item, cantidad } : item
+        item.id === platilloId ? { ...item, cantidad: Math.min(cantidad, topePorciones(platillos.find(p => p.id === platilloId) ?? item)) } : item
       ));
     }
   };
@@ -517,10 +518,10 @@ function NuevoDomicilio({ onVolver, onDomicilioCreado }) {
                     </div>
                     <button
                       onClick={() => agregarAlCarrito(platillo)}
-                      className="w-full bg-orange-600 hover:bg-orange-700 text-white py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                      disabled={topePorciones(platillo) <= (carrito.find(item => item.id === platillo.id)?.cantidad ?? 0)}
+                      className="w-full bg-orange-600 hover:bg-orange-700 text-white py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Plus className="w-4 h-4" />
-                      Agregar
+                      {agotado(platillo) ? NO_DISPONIBLE : <><Plus className="w-4 h-4" /> Agregar</>}
                     </button>
                   </div>
                 ))}

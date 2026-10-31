@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 using RestaurantApi.Dtos;
+using RestaurantApi.Services;
 
 namespace RestaurantApi.Controllers
 {
@@ -12,11 +13,13 @@ namespace RestaurantApi.Controllers
     public class PlatillosController : ControllerBase
     {
         private readonly RestauranteContext _context;
+        private readonly IInventarioService _inventario;
         private readonly ILogger<PlatillosController>? _logger;
 
-        public PlatillosController(RestauranteContext context, ILogger<PlatillosController>? logger = null)
+        public PlatillosController(RestauranteContext context, IInventarioService inventario, ILogger<PlatillosController>? logger = null)
         {
             _context = context;
+            _inventario = inventario;
             _logger = logger;
         }
 
@@ -26,15 +29,8 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<IEnumerable<PlatilloDto>>> GetPlatillos()
         {
             var platillos = await _context.Platillos.ToListAsync();
-            return platillos.Select(p => new PlatilloDto
-            {
-                Id = p.Id,
-                Nombre = p.Nombre,
-                Descripcion = p.Descripcion ?? "",
-                Precio = p.Precio,
-                ImagenUrl = p.ImagenUrl ?? "",
-                Categoria = p.Categoria ?? "General"
-            }).ToList();
+            var porciones = await _inventario.PorcionesDisponiblesAsync();
+            return platillos.Select(p => ADto(p, porciones.GetValueOrDefault(p.Id))).ToList();
         }
 
         [HttpGet("{id}")]
@@ -44,16 +40,21 @@ namespace RestaurantApi.Controllers
             var platillo = await _context.Platillos.FindAsync(id);
             if (platillo == null) return NotFound();
 
-            return new PlatilloDto
-            {
-                Id = platillo.Id,
-                Nombre = platillo.Nombre,
-                Descripcion = platillo.Descripcion ?? "",
-                Precio = platillo.Precio,
-                ImagenUrl = platillo.ImagenUrl ?? "",
-                Categoria = platillo.Categoria ?? "General"
-            };
+            var porciones = await _inventario.PorcionesDisponiblesAsync();
+            return ADto(platillo, porciones.GetValueOrDefault(id));
         }
+
+        private static PlatilloDto ADto(Platillo p, int? porciones) => new()
+        {
+            Id = p.Id,
+            Nombre = p.Nombre,
+            Descripcion = p.Descripcion ?? "",
+            Precio = p.Precio,
+            ImagenUrl = p.ImagenUrl ?? "",
+            Categoria = p.Categoria ?? "General",
+            Disponible = porciones is null or > 0,
+            PorcionesDisponibles = porciones
+        };
 
         [HttpPost]
         public async Task<ActionResult<Platillo>> PostPlatillo(Platillo platillo)

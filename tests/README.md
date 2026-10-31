@@ -39,3 +39,10 @@ Notas:
   porque la API real lo devuelve (antes no existía).
 - La API exige JWT: configure `Jwt__Key` (≥ 32 caracteres) y `Cors__Origenes` en el
   despliegue. Sin `Jwt__Key` usa una clave temporal y las sesiones caducan al reiniciar.
+
+## Inventario y disponibilidad (30/10/2026)
+
+Plan de pruebas de funcionamiento y fallos encontrados: `tests/PLAN_PRUEBAS_INVENTARIO.md`.
+
+- API: 85 pruebas, 85 pasan (`DisponibilidadTests.cs` y `TemaRealtimeTests.cs` incluidas).
+- Web: 36 pruebas, 36 pasan (`disponibilidad.test.js` y `realtime.test.js` incluidas).
