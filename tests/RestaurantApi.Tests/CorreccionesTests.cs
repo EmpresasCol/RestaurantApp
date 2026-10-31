@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -60,8 +60,8 @@ public class CorreccionesTests
     public async Task Las_facturas_usan_un_consecutivo()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 1);
-        TestDb.CrearPedidoDirecto(ctx, 2, 1, TestDb.MesaDosId);
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
+        TestDb.CrearPedidoDirecto(ctx, 2, 1, TestDb.MesaDosId, estado: EstadoPedido.Entregado);
         var pagos = new PagosController(ctx);
         var facturas = new FacturasController(ctx);
 
@@ -81,7 +81,7 @@ public class CorreccionesTests
     public async Task Pagar_cierra_el_pedido_pero_la_mesa_sigue_ocupada_si_tiene_otro_pedido_abierto()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 1);
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
         TestDb.CrearPedidoDirecto(ctx, 2, 1);
         ctx.Mesas.Single(m => m.Id == TestDb.MesaUnoId).Estado = EstadoMesa.Ocupada;
         ctx.SaveChanges();

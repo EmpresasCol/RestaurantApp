@@ -8,6 +8,36 @@ namespace RestaurantApi
     {
         public RestauranteContext(DbContextOptions<RestauranteContext> options) : base(options) { }
 
+        public override int SaveChanges(bool acceptAllChangesOnSuccess)
+        {
+            CongelarPrecios();
+            return base.SaveChanges(acceptAllChangesOnSuccess);
+        }
+
+        public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+        {
+            CongelarPrecios();
+            return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        /// <summary>
+        /// Un plato nuevo en un pedido toma el precio vigente de la carta. Así, si el administrador
+        /// cambia el precio después, la cuenta abierta, el cobro y los reportes no cambian.
+        /// </summary>
+        private void CongelarPrecios()
+        {
+            var sinPrecio = ChangeTracker.Entries<PedidoDetalle>()
+                .Where(e => e.State == EntityState.Added && e.Entity.PrecioUnitario == null)
+                .Select(e => e.Entity)
+                .ToList();
+            if (sinPrecio.Count == 0) return;
+
+            var ids = sinPrecio.Select(d => d.PlatilloId).Distinct().ToList();
+            var precios = Platillos.Where(p => ids.Contains(p.Id)).ToDictionary(p => p.Id, p => p.Precio);
+            foreach (var d in sinPrecio)
+                if (precios.TryGetValue(d.PlatilloId, out var precio)) d.PrecioUnitario = precio;
+        }
+
         public DbSet<Usuario> Usuarios { get; set; }
         public DbSet<Mesa> Mesas { get; set; }
         public DbSet<Platillo> Platillos { get; set; }
@@ -88,6 +118,27 @@ namespace RestaurantApi
             modelBuilder.Entity<Pedido>()
                 .Property(p => p.Estado)
                 .HasConversion<string>();
+
+            modelBuilder.Entity<PedidoDetalle>()
+                .Property(pd => pd.PrecioUnitario)
+                .HasColumnType("decimal(10,2)");
+
+            modelBuilder.Entity<Pago>()
+                .HasIndex(p => p.FacturaId);
+
+            // Factura.PagoId (pago principal) y Pago.FacturaId (todos los pagos de la cuenta) son dos
+            // relaciones distintas; sin declararlas, EF las confunde e inventa una columna PagoId1.
+            modelBuilder.Entity<Factura>()
+                .HasOne(f => f.Pago)
+                .WithMany()
+                .HasForeignKey(f => f.PagoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Pago>()
+                .HasOne<Factura>()
+                .WithMany()
+                .HasForeignKey(p => p.FacturaId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<PedidoDetalle>()
                 .Property(pd => pd.Estado)

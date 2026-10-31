@@ -39,6 +39,8 @@ describe('Códigos QR', () => {
     render(<GeneradorQR />);
 
     const tarjeta = await screen.findByRole('article');
+    // La insignia del centro es un <image> dentro del SVG del QR: no tiene rol accesible propio.
+    // eslint-disable-next-line testing-library/no-node-access
     const imagen = tarjeta.querySelector('svg image');
     expect(decodeURIComponent(imagen.getAttribute('href'))).toContain('>1</text>');
   });
@@ -83,7 +85,7 @@ describe('Usuarios', () => {
     api.getUsuarios.mockResolvedValue(usuarios);
     render(<GestionUsuarios />);
 
-    const fila = (await screen.findByText('Luis Mesa')).closest('button');
+    const fila = await screen.findByRole('button', { name: /Luis Mesa/ });
     expect(within(fila).getByText('App móvil')).toBeInTheDocument();
     expect(screen.getByText('Tú')).toBeInTheDocument();
   });
@@ -92,7 +94,7 @@ describe('Usuarios', () => {
     api.getUsuarios.mockResolvedValue(usuarios);
     render(<GestionUsuarios />);
 
-    fireEvent.click((await screen.findByText('Admin Qpro')).closest('button'));
+    fireEvent.click(await screen.findByRole('button', { name: /Admin Qpro/ }));
 
     const dialogo = await screen.findByRole('dialog');
     expect(within(dialogo).queryByRole('button', { name: /eliminar/i })).not.toBeInTheDocument();
@@ -224,7 +226,7 @@ describe('Seguridad del QR y acceso', () => {
     api.cambiarActivoUsuario.mockResolvedValue({ success: true });
     render(<GestionUsuarios />);
 
-    fireEvent.click((await screen.findByText('Luis Mesa')).closest('button'));
+    fireEvent.click(await screen.findByRole('button', { name: /Luis Mesa/ }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Desactivar/ }));
     await waitFor(() => expect(api.cambiarActivoUsuario).toHaveBeenCalledWith(2, false));
   });

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 using RestaurantApi.Dtos;
+using RestaurantApi.Services;
 
 namespace RestaurantApi.Controllers
 {
@@ -11,10 +12,6 @@ namespace RestaurantApi.Controllers
     [Authorize(Roles = "Administrador,Caja")]
     public class FacturasController : ControllerBase
     {
-        // Consecutivo propio: FV-00000001, FV-00000002… (las facturas antiguas "FAC-…" se conservan).
-        private const string PrefijoConsecutivo = "FV-";
-        private const string NitConsumidorFinal = "222222222222";
-
         private readonly RestauranteContext _context;
 
         public FacturasController(RestauranteContext context)
@@ -22,82 +19,66 @@ namespace RestaurantApi.Controllers
             _context = context;
         }
 
-        // GET: api/Facturas
+        // GET: api/Facturas?fecha=2026-11-02
+        /// <summary>Facturas con su detalle. Con fecha, solo las emitidas ese día (hora de Colombia).</summary>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<FacturaDto>>> GetFacturas()
+        public async Task<ActionResult<IEnumerable<FacturaDto>>> GetFacturas([FromQuery] DateTime? fecha = null)
         {
-            var facturas = await _context.Facturas
-                .OrderByDescending(f => f.FechaEmision)
-                .ToListAsync();
+            var consulta = _context.Facturas.AsNoTracking();
+            if (fecha != null)
+            {
+                var desde = HoraLocal.AUtc(fecha.Value.Date);
+                var hasta = desde.AddDays(1);
+                consulta = consulta.Where(f => f.FechaEmision >= desde && f.FechaEmision < hasta);
+            }
 
-            return facturas.Select(ADto).ToList();
+            var facturas = await consulta.OrderByDescending(f => f.FechaEmision).ToListAsync();
+            return await Facturacion.ConDetalleAsync(_context, facturas);
         }
 
         // GET: api/Facturas/5
         [HttpGet("{id}")]
         public async Task<ActionResult<FacturaDto>> GetFactura(int id)
         {
-            var factura = await _context.Facturas.FindAsync(id);
+            var factura = await _context.Facturas.AsNoTracking().FirstOrDefaultAsync(f => f.Id == id);
             if (factura == null)
                 return NotFound();
 
-            return ADto(factura);
+            return (await Facturacion.ConDetalleAsync(_context, new List<Factura> { factura }))[0];
         }
 
         // POST: api/Facturas
-        /// <summary>Emite la factura de un pago (una sola por pago) con número consecutivo.</summary>
+        /// <summary>Emite la factura de un pago suelto (una sola por pago) con número consecutivo.</summary>
         [HttpPost]
         public async Task<ActionResult<FacturaDto>> PostFactura(CrearFacturaDto crearFactura)
         {
+            var errorCliente = Facturacion.ValidarCliente(crearFactura.NitCliente, crearFactura.NombreCliente);
+            if (errorCliente != null)
+                return BadRequest(new { message = errorCliente });
+
             var pago = await _context.Pagos.FirstOrDefaultAsync(p => p.Id == crearFactura.PagoId);
             if (pago == null)
                 return NotFound("Pago no encontrado");
 
-            var existente = await _context.Facturas.FirstOrDefaultAsync(f => f.PagoId == pago.Id);
+            var existente = await _context.Facturas.FirstOrDefaultAsync(f => f.PagoId == pago.Id || f.Id == pago.FacturaId);
             if (existente != null)
                 return Conflict(new { message = $"El pago ya tiene la factura {existente.NumeroFactura}", factura = ADto(existente) });
 
             var factura = new Factura
             {
                 PagoId = pago.Id,
-                NitCliente = string.IsNullOrWhiteSpace(crearFactura.NitCliente) ? NitConsumidorFinal : crearFactura.NitCliente.Trim(),
-                NombreCliente = string.IsNullOrWhiteSpace(crearFactura.NombreCliente) ? "Consumidor final" : crearFactura.NombreCliente.Trim(),
                 Subtotal = pago.Monto,
                 Propina = pago.MontoPropina,
                 Total = pago.Monto + pago.MontoPropina,
                 FechaEmision = DateTime.UtcNow
             };
+            Facturacion.AsignarCliente(factura, crearFactura.NitCliente, crearFactura.NombreCliente);
+            await Facturacion.EmitirAsync(_context, factura);
 
-            // NumeroFactura es UNIQUE: si dos cajas emiten a la vez, se reintenta con el siguiente.
-            for (var intento = 0; ; intento++)
-            {
-                factura.NumeroFactura = await SiguienteNumeroAsync();
-                _context.Facturas.Add(factura);
-                try
-                {
-                    await _context.SaveChangesAsync();
-                    break;
-                }
-                catch (DbUpdateException) when (intento < 2)
-                {
-                    _context.Entry(factura).State = EntityState.Detached;
-                }
-            }
+            pago.FacturaId = factura.Id;
+            await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetFactura), new { id = factura.Id }, ADto(factura));
-        }
-
-        private async Task<string> SiguienteNumeroAsync()
-        {
-            // Ancho fijo: el orden alfabético coincide con el numérico.
-            var ultimo = await _context.Facturas
-                .Where(f => f.NumeroFactura.StartsWith(PrefijoConsecutivo))
-                .OrderByDescending(f => f.NumeroFactura)
-                .Select(f => f.NumeroFactura)
-                .FirstOrDefaultAsync();
-
-            var n = ultimo != null && int.TryParse(ultimo[PrefijoConsecutivo.Length..], out var actual) ? actual + 1 : 1;
-            return $"{PrefijoConsecutivo}{n:D8}";
         }
 
         private static FacturaDto ADto(Factura f) => new()

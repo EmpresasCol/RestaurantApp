@@ -125,16 +125,16 @@ describe('[AUDITORÍA] Persistencia y seguridad de la sesión', () => {
   // localStorage: al recargar la página (F5) el usuario pierde la sesión.
   test('[AUDITORÍA] la sesión sobrevive a una recarga de la página', async () => {
     api.login.mockResolvedValue(respuestaLoginApi('Caja'));
-    const primera = renderConAuth();
-    await waitFor(() => expect(primera.ref.current.cargando).toBe(false));
-    await act(() => primera.ref.current.login({ username: 'pedro', password: '123' }));
-    primera.unmount();
+    const { ref: antes, unmount } = renderConAuth();
+    await waitFor(() => expect(antes.current.cargando).toBe(false));
+    await act(() => antes.current.login({ username: 'pedro', password: '123' }));
+    unmount();
 
     // Simula F5: el proveedor se monta de nuevo y lee localStorage
-    const segunda = renderConAuth();
-    await waitFor(() => expect(segunda.ref.current.cargando).toBe(false));
+    const { ref: despues } = renderConAuth();
+    await waitFor(() => expect(despues.current.cargando).toBe(false));
 
-    expect(segunda.ref.current.estaAutenticado).toBe(true);
+    expect(despues.current.estaAutenticado).toBe(true);
   });
 
   // El rol se toma de localStorage sin verificarlo con el servidor: basta editarlo

@@ -217,7 +217,7 @@ export const Lista = ({ children, className = '' }) => (
 );
 
 /** Botón de dos toques para acciones que no se deshacen (sin modal). */
-export function BotonConfirmar({ children, confirmar = 'Toca otra vez para confirmar', onConfirmar, ...props }) {
+export function BotonConfirmar({ children, confirmar = 'Toca otra vez para confirmar', onConfirmar, varianteInicial = 'peligro', ...props }) {
   const [armado, setArmado] = useState(false);
   useEffect(() => {
     if (!armado) return undefined;
@@ -226,7 +226,7 @@ export function BotonConfirmar({ children, confirmar = 'Toca otra vez para confi
   }, [armado]);
   return (
     <Boton
-      variante={armado ? 'primario' : 'peligro'}
+      variante={armado ? 'primario' : varianteInicial}
       tamano="sm"
       {...props}
       onClick={() => (armado ? (setArmado(false), onConfirmar()) : setArmado(true))}

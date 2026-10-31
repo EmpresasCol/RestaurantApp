@@ -321,15 +321,38 @@ export const getPagos = async () => {
 };
 
 // ==================== FACTURAS ====================
-export const getFacturas = async () => {
-  try {
-    const response = await fetchWithHeaders(`${API_URL}/facturas`);
-    if (!response.ok) throw new Error('Error al obtener facturas');
-    return await response.json();
-  } catch (error) {
-    console.error('Error en getFacturas:', error);
-    throw error;
-  }
+/** Facturas con su detalle; con fecha (yyyy-mm-dd), solo las de ese día en hora de Colombia. */
+export const getFacturas = async (fecha) => {
+  const response = await fetchWithHeaders(`${API_URL}/facturas${fecha ? `?fecha=${fecha}` : ''}`);
+  if (!response.ok) throw await errorDe(response, 'No se pudieron cargar las facturas');
+  return await response.json();
+};
+
+/**
+ * Cobra la cuenta de una mesa (uno o varios pedidos) con una sola factura.
+ * cobro: { pedidoIds, metodoPago, propina, recibido?, nitCliente?, nombreCliente? }
+ * Responde { factura, recibido, cambio }.
+ */
+export const cobrarCuenta = async (cobro) => {
+  const response = await fetchWithHeaders(`${API_URL}/pagos/cobro`, {
+    method: 'POST',
+    body: JSON.stringify(cobro)
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo registrar el cobro');
+  return await response.json();
+};
+
+// ==================== CIERRE Y REPORTES ====================
+export const getCierreCaja = async (fecha) => {
+  const response = await fetchWithHeaders(`${API_URL}/reportes/cierre${fecha ? `?fecha=${fecha}` : ''}`);
+  if (!response.ok) throw await errorDe(response, 'No se pudo cargar el cierre de caja');
+  return await response.json();
+};
+
+export const getReporteVentas = async (desde, hasta) => {
+  const response = await fetchWithHeaders(`${API_URL}/reportes/ventas?desde=${desde}&hasta=${hasta}`);
+  if (!response.ok) throw await errorDe(response, 'No se pudo cargar el reporte');
+  return await response.json();
 };
 
 export const createFactura = async (pagoId, nitCliente = null, nombreCliente = null) => {

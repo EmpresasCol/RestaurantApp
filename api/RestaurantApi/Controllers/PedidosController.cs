@@ -202,6 +202,11 @@ namespace RestaurantApi.Controllers
             if (error != null)
                 return BadRequest(error);
 
+            // Los platos que ya estaban conservan el precio con que se pidieron.
+            var preciosPrevios = pedido.Detalles
+                .GroupBy(d => d.PlatilloId)
+                .ToDictionary(g => g.Key, g => g.First().PrecioUnitario);
+
             _context.PedidoDetalles.RemoveRange(pedido.Detalles);
             foreach (var detalle in dto.Detalles)
             {
@@ -211,7 +216,8 @@ namespace RestaurantApi.Controllers
                     PlatilloId = detalle.PlatilloId,
                     Cantidad = detalle.Cantidad,
                     Nota = detalle.Nota,
-                    Estado = EstadoDetalle.Pendiente
+                    Estado = EstadoDetalle.Pendiente,
+                    PrecioUnitario = preciosPrevios.GetValueOrDefault(detalle.PlatilloId)
                 });
             }
 
@@ -428,7 +434,7 @@ namespace RestaurantApi.Controllers
                 PlatilloId = d.PlatilloId,
                 PlatilloNombre = d.Platillo?.Nombre ?? "Sin nombre",
                 Cantidad = d.Cantidad,
-                Precio = d.Platillo?.Precio ?? 0,
+                Precio = Cuentas.Precio(d),
                 Nota = d.Nota,
                 Estado = d.Estado.ToString()
             }).ToList()

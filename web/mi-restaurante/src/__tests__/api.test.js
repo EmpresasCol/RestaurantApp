@@ -189,3 +189,31 @@ describe('Seguridad del QR y acceso', () => {
     expect(ultimaPeticion()).toMatchObject({ url: expect.stringMatching(/\/usuarios\/7\/activo$/), cuerpo: { activo: true } });
   });
 });
+
+describe('Caja y reportes', () => {
+  test('cobrarCuenta envía la cuenta completa a /pagos/cobro', async () => {
+    global.fetch.mockReturnValue(ok({ factura: { numeroFactura: 'FV-1' }, cambio: 0 }));
+
+    await api.cobrarCuenta({ pedidoIds: [1, 2], metodoPago: 'Tarjeta', propina: 0 });
+
+    const { url, opciones, cuerpo } = ultimaPeticion();
+    expect(url).toMatch(/\/pagos\/cobro$/);
+    expect(opciones.method).toBe('POST');
+    expect(cuerpo).toEqual({ pedidoIds: [1, 2], metodoPago: 'Tarjeta', propina: 0 });
+  });
+
+  test('un cobro rechazado muestra el motivo de la API', async () => {
+    global.fetch.mockReturnValue(fallo(409, { message: 'El pedido #3 sigue en cocina. Cóbralo cuando esté listo.' }));
+    await expect(api.cobrarCuenta({ pedidoIds: [3] })).rejects.toThrow('sigue en cocina');
+  });
+
+  test('facturas, cierre y reportes van por día y rango', async () => {
+    global.fetch.mockReturnValue(ok([]));
+    await api.getFacturas('2026-11-02');
+    expect(ultimaPeticion().url).toMatch(/\/facturas\?fecha=2026-11-02$/);
+    await api.getCierreCaja('2026-11-02');
+    expect(ultimaPeticion().url).toMatch(/\/reportes\/cierre\?fecha=2026-11-02$/);
+    await api.getReporteVentas('2026-11-01', '2026-11-30');
+    expect(ultimaPeticion().url).toMatch(/\/reportes\/ventas\?desde=2026-11-01&hasta=2026-11-30$/);
+  });
+});

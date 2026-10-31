@@ -16,6 +16,8 @@
         public int Cantidad { get; set; }
         public string? Nota { get; set; }  
         public EstadoDetalle Estado { get; set; }
+        /// <summary>Precio de la carta cuando se pidió el plato; lo fija el contexto al guardar.</summary>
+        public decimal? PrecioUnitario { get; set; }
 
         // Relaciones
         public Pedido? Pedido { get; set; }

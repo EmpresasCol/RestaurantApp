@@ -16,6 +16,8 @@
         public decimal MontoPropina { get; set; } = 0;  
         public MetodoPago MetodoPago { get; set; }
         public DateTime Fecha { get; set; } = DateTime.UtcNow;
+        /// <summary>Factura que cubre este pago. Una factura puede cubrir varios pedidos de la misma mesa.</summary>
+        public int? FacturaId { get; set; }
 
         // Relación
         public Pedido? Pedido { get; set; }

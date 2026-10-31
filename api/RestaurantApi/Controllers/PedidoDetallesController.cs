@@ -68,6 +68,7 @@ namespace RestaurantApi.Controllers
             if (sinStock != null)
                 return BadRequest(sinStock);
 
+            detalle.PrecioUnitario = null; // el precio lo fija el servidor con la carta, no el cliente
             _context.PedidoDetalles.Add(detalle);
             await _context.SaveChangesAsync();
             await _inventario.DescontarStockPorPedidoAsync(detalle.PedidoId);
@@ -85,6 +86,9 @@ namespace RestaurantApi.Controllers
             if (sinStock != null)
                 return BadRequest(sinStock);
 
+            // El precio con que se pidió no se edita desde aquí.
+            detalle.PrecioUnitario = await _context.PedidoDetalles.AsNoTracking()
+                .Where(d => d.Id == id).Select(d => d.PrecioUnitario).FirstOrDefaultAsync();
             _context.Entry(detalle).State = EntityState.Modified;
             await _context.SaveChangesAsync();
             await _inventario.DescontarStockPorPedidoAsync(detalle.PedidoId);

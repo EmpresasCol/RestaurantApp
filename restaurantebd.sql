@@ -62,6 +62,7 @@ CREATE TABLE PedidoDetalles (
     Cantidad INT NOT NULL,
     Nota TEXT,
     Estado ENUM('Pendiente','EnPreparacion','Listo','Cancelado') DEFAULT 'Pendiente',
+    PrecioUnitario DECIMAL(10,2) NULL,
     FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id) ON DELETE CASCADE,
     FOREIGN KEY (PlatilloId) REFERENCES Platillos(Id) ON DELETE RESTRICT,
     CONSTRAINT chk_pedidodetalles_cantidad_positive CHECK (Cantidad > 0)
@@ -74,6 +75,8 @@ CREATE TABLE Pagos (
     MontoPropina DECIMAL(10,2) DEFAULT 0.00,
     MetodoPago ENUM('Efectivo','Tarjeta','QR','Otro') NOT NULL,
     Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FacturaId INT NULL,
+    INDEX idx_pagos_factura (FacturaId),
     FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 

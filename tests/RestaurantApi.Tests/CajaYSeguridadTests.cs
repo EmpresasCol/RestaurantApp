@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,7 +16,7 @@ public class PagosYFacturasTests
     public async Task Pago_con_metodo_valido_retorna_201()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 2); // 2 x 25.000 = 50.000
+        TestDb.CrearPedidoDirecto(ctx, 1, 2, estado: EstadoPedido.Entregado); // 2 x 25.000 = 50.000
 
         var r = await new PagosController(ctx).PostPago(new CrearPagoDto { PedidoId = 1, Monto = 50000m, MetodoPago = "Tarjeta" });
 
@@ -28,7 +28,7 @@ public class PagosYFacturasTests
     public async Task Pago_con_metodo_invalido_retorna_400()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 1);
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
 
         var r = await new PagosController(ctx).PostPago(new CrearPagoDto { PedidoId = 1, Monto = 25000m, MetodoPago = "Bitcoin" });
 
@@ -39,7 +39,7 @@ public class PagosYFacturasTests
     public async Task Factura_suma_subtotal_y_propina()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 2);
+        TestDb.CrearPedidoDirecto(ctx, 1, 2, estado: EstadoPedido.Entregado);
         var pago = (PagoDto)((CreatedAtActionResult)(await new PagosController(ctx)
             .PostPago(new CrearPagoDto { PedidoId = 1, Monto = 50000m, MontoPropina = 5000m, MetodoPago = "Efectivo" })).Result!).Value!;
 
@@ -54,7 +54,7 @@ public class PagosYFacturasTests
     public async Task AUDITORIA_pago_negativo_debe_rechazarse()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 1);
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
 
         var r = await new PagosController(ctx).PostPago(new CrearPagoDto { PedidoId = 1, Monto = -25000m, MetodoPago = "Efectivo" });
 
@@ -66,7 +66,7 @@ public class PagosYFacturasTests
     public async Task AUDITORIA_pago_inferior_al_consumo_debe_rechazarse()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 4); // consumo 100.000
+        TestDb.CrearPedidoDirecto(ctx, 1, 4, estado: EstadoPedido.Entregado); // consumo 100.000
 
         var r = await new PagosController(ctx).PostPago(new CrearPagoDto { PedidoId = 1, Monto = 1000m, MetodoPago = "Efectivo" });
 
@@ -78,7 +78,7 @@ public class PagosYFacturasTests
     public async Task AUDITORIA_no_se_puede_pagar_dos_veces_el_mismo_pedido()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 1);
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
         var c = new PagosController(ctx);
         await c.PostPago(new CrearPagoDto { PedidoId = 1, Monto = 25000m, MetodoPago = "Efectivo" });
 
@@ -92,7 +92,7 @@ public class PagosYFacturasTests
     public async Task AUDITORIA_un_pago_solo_genera_una_factura()
     {
         using var ctx = TestDb.Crear();
-        TestDb.CrearPedidoDirecto(ctx, 1, 1);
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
         var pago = (PagoDto)((CreatedAtActionResult)(await new PagosController(ctx)
             .PostPago(new CrearPagoDto { PedidoId = 1, Monto = 25000m, MetodoPago = "Efectivo" })).Result!).Value!;
         var f = new FacturasController(ctx);

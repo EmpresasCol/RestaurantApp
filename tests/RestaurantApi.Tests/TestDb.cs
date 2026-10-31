@@ -114,12 +114,12 @@ internal static class TestDb
         => ctx.Stock.AsNoTracking().Where(s => s.ProductoId == ProductoCarneId).Sum(s => s.Cantidad);
 
     /// <summary>Inserta un pedido directamente en BD con un detalle de hamburguesas.</summary>
-    public static Pedido CrearPedidoDirecto(RestauranteContext ctx, int pedidoId, int cantidad, int mesaId = MesaUnoId)
+    public static Pedido CrearPedidoDirecto(RestauranteContext ctx, int pedidoId, int cantidad, int mesaId = MesaUnoId, EstadoPedido estado = EstadoPedido.EnProceso)
     {
         var pedido = new Pedido
         {
             Id = pedidoId, MesaId = mesaId, UsuarioId = MeseroId,
-            Estado = EstadoPedido.EnProceso, Fecha = DateTime.Now,
+            Estado = estado, Fecha = DateTime.Now,
             Detalles = { new PedidoDetalle { PlatilloId = PlatilloHamburguesaId, Cantidad = cantidad, Estado = EstadoDetalle.Pendiente } }
         };
         ctx.Pedidos.Add(pedido);
