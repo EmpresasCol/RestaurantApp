@@ -60,6 +60,8 @@ internal static class TestDb
             Descripcion = "-", Ubicacion = "-", Tipo = "Cocina"
         });
 
+        ctx.CategoriasInventario.Add(new CategoriaInventario { Id = 1, Nombre = "Carnes", Descripcion = "-", Tipo = "Ingrediente" });
+
         ctx.ProductosInventario.Add(new ProductoInventario
         {
             Id = ProductoCarneId, Codigo = "PROD-001", Nombre = "Carne de res",

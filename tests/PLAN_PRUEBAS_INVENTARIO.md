@@ -119,3 +119,36 @@ WHERE s.Cantidad < 0;
 SELECT l.Id, l.NumeroLote, l.ProductoId, l.CantidadActual
 FROM Lotes l WHERE l.CantidadActual < 0;
 ```
+
+## 6. Operación diaria del inventario (31/10/2026)
+
+Antes de probar: ejecutar `migraciones/2026-10-31_presentaciones_compra.sql` una vez en la
+base (local y TiDB). Crea `PresentacionesCompra` y convierte los `CodigoBarras` existentes en
+presentaciones "por unidad". Es idempotente.
+
+Modelo: el **insumo** (lo que gasta la receta, en su unidad) está separado del **producto de
+compra** (`PresentacionCompra`: "Caja 10 kg" = 10 kg del insumo, con su código de barras). Un
+insumo admite varias presentaciones, así que varios códigos llevan al mismo insumo.
+
+Automáticas: `ComprasTests.cs` (11 casos) y `src/__tests__/inventario.test.js`.
+
+| ID | Caso | Pasos | Resultado esperado |
+| --- | --- | --- | --- |
+| OPE-01 | Hoy | Abrir Inventario | Indicadores de agotados, por pedir, por vencer, vencidos y pedidos por llegar; cada uno lleva a su pantalla |
+| OPE-02 | Ficha | Tocar un insumo en cualquier lista | Stock, cobertura, niveles, lotes con vencimiento, presentaciones, platillos que lo usan y movimientos |
+| OPE-03 | Niveles | En la ficha, Ajustar → punto 20, máximo 50 | Se guardan sin borrar la imagen ni el código del insumo |
+| OPE-04 | Código nuevo | Recibir → escanear un código desconocido | Panel "Código nuevo": elegir insumo y "Caja de 12"; la línea entra con 12 unidades por caja |
+| OPE-05 | Multi-código | Asociar al mismo insumo el código de la unidad y el de la caja | Ambos se reconocen; la caja suma 12, la unidad 1 |
+| OPE-06 | Lector de mano | Con una pistola USB, escanear en el campo de Recibir | Agrega la línea al leer (Enter automático); escanear otra vez la misma caja suma 1 |
+| OPE-07 | Cámara | En el celular (https), Recibir → Cámara | Abre la cámara trasera; al leer el código agrega la línea y vibra |
+| OPE-08 | Perecedero | Recibir un insumo marcado perecedero sin fecha | No deja registrar; con "dura N días" sugiere la fecha |
+| OPE-09 | Fecha vencida | Recibir con fecha de ayer | 400 "la fecha de vencimiento ya pasó" |
+| OPE-10 | Entrada | Registrar 2 cajas a $300.000 | Stock +20 kg, lote con vencimiento, movimiento Entrada, costo promedio ponderado y precio de la caja actualizado |
+| OPE-11 | Qué pedir | Insumo con 8 kg, punto 20, máximo 50, caja de 10 | Sugiere 5 cajas; tras pedir 40 kg sugiere 1 caja |
+| OPE-12 | Orden y WhatsApp | Crear orden → Enviar por WhatsApp | Abre WhatsApp con el pedido en cajas; la orden pasa a "Enviada" |
+| OPE-13 | Recibir orden | Órdenes → Recibir | Precarga lo pendiente; parcial queda "Llegó una parte", completa "Recibida" |
+| OPE-14 | Orden manual | Pedidos → Orden manual | Proveedor, insumos y precios libres |
+| OPE-15 | Vencidos | Lote vencido → Dar de baja (dos toques) | Sale del stock como Merma, el lote queda "Vencido" y se informa la pérdida |
+| OPE-16 | Conteo | Contar 92 kg donde el sistema dice 100 | Ajuste de 8 kg, lotes descontados, diferencia valorizada; contar lo mismo otra vez no genera ajuste |
+| OPE-17 | Conteo escaneando | Escanear 3 veces la caja de 10 kg | El conteo de ese insumo sube a 30 |
+| OPE-18 | Celular | Repetir OPE-04, 10 y 16 a 390 px | Todo cabe sin desplazamiento horizontal; botones de 44 px o más |

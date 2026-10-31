@@ -395,5 +395,6 @@ React Bits Carousel sin marco, 24px de radio, 12px entre diapositivas, asomo de 
 - **Don't** usar etiquetas pequeñas en mayúsculas sobre los títulos. Las mayúsculas solo van en el chip de estado de la comanda.
 
 ### Brechas conocidas
-- Domicilios, NuevoDomicilio, Inventario, Reportes, GestionPlatillos, GestionUsuarios y GeneradorQR no se rediseñaron: solo heredan la paleta por el remapeo de Tailwind y conservan su estructura anterior (`rounded-lg`, `shadow-lg`, botones `orange-600` rellenos, spinners con borde). No son referencia de este sistema.
+- Inventario sigue este sistema en sus tareas diarias (Hoy, Recibir, Pedidos, Vencimientos, Conteo, Insumos y la ficha lateral, con piezas en `components/inventario/ui.js`); sus pantallas de Configuración (catálogo, recetas, categorías, almacenes, proveedores) y Movimientos conservan el estilo anterior.
+- Domicilios, NuevoDomicilio, Reportes, GestionPlatillos, GestionUsuarios y GeneradorQR no se rediseñaron: solo heredan la paleta por el remapeo de Tailwind y conservan su estructura anterior (`rounded-lg`, `shadow-lg`, botones `orange-600` rellenos, spinners con borde). No son referencia de este sistema.
 - En Caja, el menú de estados (`shadow-xl`) y los avisos arriba a la derecha con animación `ease-out` propia siguen el estilo anterior. El detalle expandido de la factura ya sigue este sistema.

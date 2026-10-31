@@ -11,6 +11,8 @@
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "axios": "^1.13.2",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.544.0",

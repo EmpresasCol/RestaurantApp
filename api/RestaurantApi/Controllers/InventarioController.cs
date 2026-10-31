@@ -1051,13 +1051,13 @@ namespace RestaurantApi.Controllers
                             return BadRequest($"Stock insuficiente. Disponible: {stock.Cantidad}, Solicitado: {dto.Cantidad}");
                         }
                         nuevaCantidad -= dto.Cantidad;
-                        await DescontarLotesAsync(dto.ProductoId, dto.AlmacenId, dto.LoteId, dto.Cantidad);
+                        await LotesInventario.DescontarAsync(_context, dto.ProductoId, dto.AlmacenId, dto.LoteId, dto.Cantidad);
                         break;
 
                     case "Ajuste":
                         nuevaCantidad = dto.Cantidad;
                         if (nuevaCantidad < stock.Cantidad)
-                            await DescontarLotesAsync(dto.ProductoId, dto.AlmacenId, null, stock.Cantidad - nuevaCantidad);
+                            await LotesInventario.DescontarAsync(_context, dto.ProductoId, dto.AlmacenId, null, stock.Cantidad - nuevaCantidad);
                         break;
 
                     default:
@@ -1093,29 +1093,6 @@ namespace RestaurantApi.Controllers
             {
                 _logger.LogError(ex, "Error al crear movimiento");
                 return StatusCode(500, new { message = "Error al crear movimiento" });
-            }
-        }
-
-        /// <summary>
-        /// Saca la cantidad de los lotes (el indicado primero, luego FIFO por vencimiento)
-        /// para que los lotes no muestren más existencias que el stock.
-        /// </summary>
-        private async Task DescontarLotesAsync(int productoId, int almacenId, int? loteId, decimal cantidad)
-        {
-            var lotes = (await _context.Lotes
-                    .Where(l => l.ProductoId == productoId && l.AlmacenId == almacenId && l.CantidadActual > 0)
-                    .ToListAsync())
-                .OrderByDescending(l => l.Id == loteId)
-                .ThenBy(l => l.FechaVencimiento == null)
-                .ThenBy(l => l.FechaVencimiento)
-                .ThenBy(l => l.FechaIngreso);
-
-            foreach (var lote in lotes)
-            {
-                if (cantidad <= 0) break;
-                var tomar = Math.Min(cantidad, lote.CantidadActual);
-                lote.CantidadActual -= tomar;
-                cantidad -= tomar;
             }
         }
 

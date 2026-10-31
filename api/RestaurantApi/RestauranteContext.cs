@@ -32,6 +32,9 @@ namespace RestaurantApi
         public DbSet<Lote> Lotes { get; set; }
         public DbSet<MovimientoInventario> MovimientosInventario { get; set; }
         public DbSet<Receta> Recetas { get; set; }
+        public DbSet<PresentacionCompra> PresentacionesCompra { get; set; }
+        public DbSet<OrdenCompra> OrdenesCompra { get; set; }
+        public DbSet<DetalleOrdenCompra> DetallesOrdenCompra { get; set; }
         public DbSet<AlertaInventario> AlertasInventario { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -345,6 +348,35 @@ namespace RestaurantApi
                     .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
                 entity.Property(e => e.CostoTotal)
                     .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+            });
+
+            modelBuilder.Entity<PresentacionCompra>(entity =>
+            {
+                entity.ToTable("PresentacionesCompra");
+                entity.Property(e => e.Nombre).HasMaxLength(150).IsRequired();
+                entity.Property(e => e.Codigo).HasMaxLength(100);
+                entity.HasIndex(e => e.Codigo).IsUnique();
+                entity.Property(e => e.Factor).HasColumnType("decimal(10,3)");
+                entity.Property(e => e.CostoReferencia).HasColumnType("decimal(12,2)");
+                entity.HasOne(e => e.Producto).WithMany().HasForeignKey(e => e.ProductoId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Proveedor).WithMany().HasForeignKey(e => e.ProveedorId).OnDelete(DeleteBehavior.SetNull);
+            });
+
+            modelBuilder.Entity<OrdenCompra>(entity =>
+            {
+                entity.ToTable("OrdenesCompra");
+                entity.Property(e => e.Estado).HasConversion<string>();
+                entity.HasOne(e => e.Proveedor).WithMany().HasForeignKey(e => e.ProveedorId);
+                entity.HasOne(e => e.AlmacenDestino).WithMany().HasForeignKey(e => e.AlmacenDestinoId);
+                entity.HasOne(e => e.UsuarioCreador).WithMany().HasForeignKey(e => e.UsuarioCreadorId);
+                entity.HasMany(e => e.Detalles).WithOne(d => d.OrdenCompra!).HasForeignKey(d => d.OrdenCompraId);
+            });
+
+            modelBuilder.Entity<DetalleOrdenCompra>(entity =>
+            {
+                // Subtotal es columna GENERADA en MySQL; el modelo no la mapea.
+                entity.ToTable("DetallesOrdenCompra");
+                entity.HasOne(e => e.Producto).WithMany().HasForeignKey(e => e.ProductoId);
             });
 
             modelBuilder.Entity<AlertaInventario>(entity =>

@@ -201,4 +201,36 @@ export const getAlertasStock = async () => {
   return response.data;
 };
 
+// ==================== COMPRAS (trabajo diario del encargado) ====================
+const datos = (promesa) => promesa.then((r) => r.data);
+
+/** Mensaje legible de un error de la API ({ message }, texto o ModelState). */
+export const mensajeError = (error, respaldo = 'No se pudo completar la operación') => {
+  const d = error?.response?.data;
+  if (typeof d === 'string' && d) return d;
+  if (d?.message) return d.message;
+  if (d?.errors) return Object.values(d.errors).flat()[0] || respaldo;
+  return respaldo;
+};
+
+export const compras = {
+  resumen: () => datos(api.get('/compras/resumen')),
+  insumos: () => datos(api.get('/compras/insumos')),
+  ficha: (id) => datos(api.get(`/compras/insumos/${id}/ficha`)),
+  resolverCodigo: (codigo) => datos(api.get(`/compras/codigo/${encodeURIComponent(codigo)}`)),
+  presentaciones: (productoId) => datos(api.get('/compras/presentaciones', { params: { productoId } })),
+  crearPresentacion: (p) => datos(api.post('/compras/presentaciones', p)),
+  editarPresentacion: (id, p) => datos(api.put(`/compras/presentaciones/${id}`, p)),
+  eliminarPresentacion: (id) => datos(api.delete(`/compras/presentaciones/${id}`)),
+  recibir: (recepcion) => datos(api.post('/compras/recepciones', recepcion)),
+  reposicion: () => datos(api.get('/compras/reposicion')),
+  ordenes: (soloAbiertas = false) => datos(api.get('/compras/ordenes', { params: { soloAbiertas } })),
+  orden: (id) => datos(api.get(`/compras/ordenes/${id}`)),
+  crearOrden: (orden) => datos(api.post('/compras/ordenes', orden)),
+  estadoOrden: (id, estado) => datos(api.put(`/compras/ordenes/${id}/estado`, { estado })),
+  vencimientos: (dias = 30) => datos(api.get('/compras/vencimientos', { params: { dias } })),
+  darDeBaja: (loteId, motivo) => datos(api.post(`/compras/lotes/${loteId}/baja`, { motivo })),
+  conteo: (conteo) => datos(api.post('/compras/conteos', conteo)),
+};
+
 export default api;

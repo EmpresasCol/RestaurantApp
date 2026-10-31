@@ -46,3 +46,11 @@ Plan de pruebas de funcionamiento y fallos encontrados: `tests/PLAN_PRUEBAS_INVE
 
 - API: 85 pruebas, 85 pasan (`DisponibilidadTests.cs` y `TemaRealtimeTests.cs` incluidas).
 - Web: 36 pruebas, 36 pasan (`disponibilidad.test.js` y `realtime.test.js` incluidas).
+
+## Operación diaria del inventario (31/10/2026)
+
+Recepción con escáner, presentaciones de compra, órdenes, vencimientos y conteo: sección 6 de
+`tests/PLAN_PRUEBAS_INVENTARIO.md`. Requiere `migraciones/2026-10-31_presentaciones_compra.sql`.
+
+- API: 96 pruebas, 96 pasan (`ComprasTests.cs` incluida).
+- Web: 42 pruebas, 42 pasan (`inventario.test.js` incluida).

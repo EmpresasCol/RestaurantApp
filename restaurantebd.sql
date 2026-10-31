@@ -276,6 +276,23 @@ CREATE TABLE DetallesOrdenCompra (
     FOREIGN KEY (ProductoId) REFERENCES ProductosInventario(Id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
+-- Producto de compra (ver migraciones/2026-10-31_presentaciones_compra.sql).
+CREATE TABLE PresentacionesCompra (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    ProductoId INT NOT NULL,
+    Nombre VARCHAR(150) NOT NULL,
+    Factor DECIMAL(10,3) NOT NULL DEFAULT 1,
+    Codigo VARCHAR(100) NULL,
+    ProveedorId INT NULL,
+    CostoReferencia DECIMAL(12,2) NULL,
+    Activo BOOLEAN DEFAULT TRUE,
+    FechaCreacion DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_presentacion_codigo (Codigo),
+    CONSTRAINT chk_presentacion_factor CHECK (Factor > 0),
+    FOREIGN KEY (ProductoId) REFERENCES ProductosInventario(Id) ON DELETE CASCADE,
+    FOREIGN KEY (ProveedorId) REFERENCES Proveedores(Id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 -- =====================================================
 -- SECCIÓN 3: MÓDULO DE DOMICILIOS
 -- =====================================================
