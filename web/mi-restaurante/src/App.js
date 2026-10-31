@@ -111,9 +111,27 @@ function AppContent() {
   const [platillos, setPlatillos] = useState([]);
   const [cargandoPlatillos, setCargandoPlatillos] = useState(true);
 
-  // El QR trae el Id de la mesa (lo que espera la API) y su número visible.
-  const mesaId = esClienteQR ? usuario?.mesa ?? null : null;
-  const numeroMesa = usuario?.numeroMesa ?? mesaId;
+  // El QR trae el código secreto de la mesa; la API responde a qué número corresponde.
+  const codigoMesa = esClienteQR ? usuario?.codigoMesa ?? null : null;
+  const [mesaQR, setMesaQR] = useState({ numero: null, estado: 'sin-codigo' });
+
+  useEffect(() => {
+    if (!codigoMesa) {
+      setMesaQR({ numero: null, estado: 'sin-codigo' });
+      return;
+    }
+    setMesaQR({ numero: null, estado: 'cargando' });
+    api.getMesaPorCodigo(codigoMesa)
+      .then((m) => setMesaQR(m ? { numero: m.numero, estado: 'lista' } : { numero: null, estado: 'invalida' }))
+      .catch(() => setMesaQR({ numero: null, estado: 'error' }));
+  }, [codigoMesa]);
+
+  const AVISOS_QR = {
+    'sin-codigo': esClienteQR ? 'Este código QR ya no sirve para pedir. Pide al mesero el código nuevo de tu mesa.' : undefined,
+    cargando: 'Confirmando tu mesa…',
+    invalida: 'Este código QR ya no es válido. Pide al mesero el código nuevo de tu mesa.',
+    error: 'No pudimos confirmar tu mesa. Revisa tu conexión y vuelve a escanear el código.',
+  };
 
   useEffect(() => {
     cargarPlatillos();
@@ -181,9 +199,10 @@ function AppContent() {
     <MenuQR
       platillos={platillos}
       cargando={cargandoPlatillos}
-      mesaId={mesaId}
-      numeroMesa={numeroMesa}
-      onEnviarPedido={api.createPedido}
+      mesaId={mesaQR.estado === 'lista' ? codigoMesa : null}
+      numeroMesa={mesaQR.numero}
+      aviso={AVISOS_QR[mesaQR.estado]}
+      onEnviarPedido={api.createPedidoQR}
       onRecargarCarta={cargarPlatillos}
       offsetSuperior={esClienteQR ? 0 : 64}
     />

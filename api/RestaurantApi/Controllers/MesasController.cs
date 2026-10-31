@@ -1,9 +1,12 @@
 ﻿// api/RestaurantApi/Controllers/MesasController.cs
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 using RestaurantApi.Dtos;
+using RestaurantApi.Services;
 
 namespace RestaurantApi.Controllers
 {
@@ -19,16 +22,60 @@ namespace RestaurantApi.Controllers
             _context = context;
         }
 
+        /// <summary>96 bits al azar en hexadecimal: imposible de adivinar a partir de otra mesa.</summary>
+        public static string NuevoCodigo() => Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+
+        private bool EsAdmin => QproClaims.EsAdministrador(HttpContext?.User);
+
+        // Solo el administrador recibe el código del QR (lo necesita para imprimirlo).
+        private MesaDto ADto(Mesa m) => new()
+        {
+            Id = m.Id,
+            Numero = m.Numero,
+            Estado = m.Estado.ToString(),
+            CodigoQR = EsAdmin ? m.CodigoQR : null
+        };
+
         [HttpGet]
         public async Task<ActionResult<IEnumerable<MesaDto>>> GetMesas()
         {
-            var mesas = await _context.Mesas.ToListAsync();
-            return mesas.Select(m => new MesaDto
+            var mesas = await _context.Mesas.OrderBy(m => m.Numero).ToListAsync();
+
+            // Las mesas creadas antes de existir el código lo reciben la primera vez que el admin las ve.
+            if (EsAdmin && mesas.Any(m => string.IsNullOrEmpty(m.CodigoQR)))
             {
-                Id = m.Id,
-                Numero = m.Numero,
-                Estado = m.Estado.ToString()
-            }).ToList();
+                foreach (var m in mesas.Where(m => string.IsNullOrEmpty(m.CodigoQR)))
+                    m.CodigoQR = NuevoCodigo();
+                await _context.SaveChangesAsync();
+            }
+
+            return mesas.Select(ADto).ToList();
+        }
+
+        /// <summary>Lo único que el comensal sabe de su mesa: el número, a partir del código de su QR.</summary>
+        [HttpGet("qr/{codigo}")]
+        [AllowAnonymous]
+        [EnableRateLimiting("publico")]
+        public async Task<ActionResult<MesaPublicaDto>> GetMesaPorCodigo(string codigo)
+        {
+            var mesa = await _context.Mesas.FirstOrDefaultAsync(m => m.CodigoQR == codigo);
+            if (mesa == null)
+                return NotFound(new { message = "Este código QR ya no es válido. Pide al mesero el código de tu mesa." });
+            return new MesaPublicaDto { Numero = mesa.Numero };
+        }
+
+        /// <summary>
+        /// Cambia el código de todas las mesas (por ejemplo, si alguien se llevó la foto de un QR).
+        /// Los QR impresos antes dejan de servir.
+        /// </summary>
+        [HttpPost("codigos")]
+        [Authorize(Roles = "Administrador")]
+        public async Task<ActionResult<IEnumerable<MesaDto>>> RegenerarCodigos()
+        {
+            var mesas = await _context.Mesas.OrderBy(m => m.Numero).ToListAsync();
+            foreach (var m in mesas) m.CodigoQR = NuevoCodigo();
+            await _context.SaveChangesAsync();
+            return mesas.Select(ADto).ToList();
         }
 
         [HttpGet("{id}")]
@@ -55,6 +102,7 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = $"Ya existe la mesa {mesa.Numero}" });
 
             mesa.Id = 0;
+            mesa.CodigoQR = NuevoCodigo();
             _context.Mesas.Add(mesa);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetMesa), new { id = mesa.Id }, mesa);
@@ -144,12 +192,14 @@ namespace RestaurantApi.Controllers
             var existentes = mesas.Select(m => m.Numero).ToHashSet();
             for (var n = 1; n <= dto.Cantidad; n++)
                 if (!existentes.Contains(n))
-                    _context.Mesas.Add(new Mesa { Numero = n, Estado = EstadoMesa.Disponible });
+                    _context.Mesas.Add(new Mesa { Numero = n, Estado = EstadoMesa.Disponible, CodigoQR = NuevoCodigo() });
 
             await _context.SaveChangesAsync();
-            return (await _context.Mesas.OrderBy(m => m.Numero).ToListAsync())
-                .Select(m => new MesaDto { Id = m.Id, Numero = m.Numero, Estado = m.Estado.ToString() })
-                .ToList();
+            var resultado = await _context.Mesas.OrderBy(m => m.Numero).ToListAsync();
+            foreach (var m in resultado.Where(m => string.IsNullOrEmpty(m.CodigoQR)))
+                m.CodigoQR = NuevoCodigo();
+            await _context.SaveChangesAsync();
+            return resultado.Select(ADto).ToList();
         }
 
         [HttpDelete("{id}")]

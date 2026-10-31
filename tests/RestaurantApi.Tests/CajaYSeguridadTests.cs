@@ -162,6 +162,7 @@ public class SeguridadTests
             "DomiciliariosController.Login",
             "PlatillosController.GetPlatillos", "PlatillosController.GetPlatillo",
             "PedidosController.PostPedido", // menú QR del comensal
+            "MesasController.GetMesaPorCodigo", // el comensal ve el número de su mesa
         };
 
         var controllers = typeof(UsuariosController).Assembly.GetTypes()

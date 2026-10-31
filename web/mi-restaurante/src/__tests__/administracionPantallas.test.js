@@ -21,7 +21,7 @@ jest.mock('../context/AuthContext', () => ({ useAuth: () => ({ usuario: { id: 1,
 beforeEach(() => jest.clearAllMocks());
 
 describe('Códigos QR', () => {
-  const mesas = [{ id: 11, numero: 2, estado: 'Disponible' }, { id: 10, numero: 1, estado: 'Disponible' }];
+  const mesas = [{ id: 11, numero: 2, estado: 'Disponible', codigoQR: 'bbbbbbbbbbbbbbbbbbbbbbbb' }, { id: 10, numero: 1, estado: 'Disponible', codigoQR: 'aaaaaaaaaaaaaaaaaaaaaaaa' }];
 
   test('muestra un solo diseño: una tarjeta por mesa, en orden, sin selector de estilos', async () => {
     api.getMesas.mockResolvedValue(mesas);
@@ -45,7 +45,7 @@ describe('Códigos QR', () => {
 
   test('el administrador fija el número de mesas y se guarda en la API', async () => {
     api.getMesas.mockResolvedValue(mesas);
-    api.fijarCantidadMesas.mockResolvedValue([...mesas, { id: 12, numero: 3, estado: 'Disponible' }]);
+    api.fijarCantidadMesas.mockResolvedValue([...mesas, { id: 12, numero: 3, estado: 'Disponible', codigoQR: 'cccccccccccccccccccccccc' }]);
     render(<GeneradorQR />);
 
     const campo = await screen.findByLabelText('Mesas del salón');
@@ -171,3 +171,62 @@ describe('Platillos', () => {
     expect(within(dialogo).getByText('Carne')).toBeInTheDocument();
   });
 });
+
+describe('Seguridad del QR y acceso', () => {
+  const mesas = [{ id: 10, numero: 1, estado: 'Disponible', codigoQR: 'aaaaaaaaaaaaaaaaaaaaaaaa' }];
+
+  test('el enlace del QR lleva el código secreto, no el id de la mesa', async () => {
+    api.getMesas.mockResolvedValue(mesas);
+    const abrir = jest.spyOn(window, 'open').mockImplementation(() => null);
+    render(<GeneradorQR />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Probar/ }));
+
+    expect(abrir.mock.calls[0][0]).toMatch(/\?m=aaaaaaaaaaaaaaaaaaaaaaaa$/);
+    expect(abrir.mock.calls[0][0]).not.toMatch(/mesa=10/);
+    abrir.mockRestore();
+  });
+
+  test('cambiar los códigos pide un segundo toque y luego llama a la API', async () => {
+    api.getMesas.mockResolvedValue(mesas);
+    api.regenerarCodigosMesas.mockResolvedValue([{ ...mesas[0], codigoQR: 'dddddddddddddddddddddddd' }]);
+    render(<GeneradorQR />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Cambiar códigos/ }));
+    expect(api.regenerarCodigosMesas).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /hay que reimprimir/ }));
+
+    await waitFor(() => expect(api.regenerarCodigosMesas).toHaveBeenCalled());
+  });
+
+  test('un platillo oculto se marca y se puede volver a mostrar', async () => {
+    api.getPlatillos.mockResolvedValue([{ id: 5, nombre: 'Sopa', categoria: 'Sopas', precio: 9000, imagenUrl: '', disponible: false, porcionesDisponibles: null, activo: false }]);
+    inventarioApi.getRecetas.mockResolvedValue([]);
+    inventarioApi.compras.insumos.mockResolvedValue([]);
+    api.cambiarActivoPlatillo.mockResolvedValue({ success: true });
+    render(<GestionPlatillos />);
+
+    const tarjeta = await screen.findByRole('button', { name: 'Editar Sopa' });
+    expect(api.getPlatillos).toHaveBeenCalledWith(true);
+    expect(within(tarjeta).getByText('Oculto')).toBeInTheDocument();
+
+    fireEvent.click(tarjeta);
+    fireEvent.click(await screen.findByRole('button', { name: /Mostrar en la carta/ }));
+
+    await waitFor(() => expect(api.cambiarActivoPlatillo).toHaveBeenCalledWith(5, true));
+  });
+
+  test('desactivar a otro usuario conserva su ficha; a uno mismo no se le ofrece', async () => {
+    api.getUsuarios.mockResolvedValue([
+      { id: 1, nombre: 'Admin Qpro', nombreUsuario: 'admin', rol: 'Administrador', activo: true },
+      { id: 2, nombre: 'Luis Mesa', nombreUsuario: 'luis', rol: 'Mesero', activo: true },
+    ]);
+    api.cambiarActivoUsuario.mockResolvedValue({ success: true });
+    render(<GestionUsuarios />);
+
+    fireEvent.click((await screen.findByText('Luis Mesa')).closest('button'));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Desactivar/ }));
+    await waitFor(() => expect(api.cambiarActivoUsuario).toHaveBeenCalledWith(2, false));
+  });
+});
+

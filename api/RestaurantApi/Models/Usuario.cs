@@ -22,5 +22,7 @@ namespace RestaurantApi.Models
 
         public string ClaveHash { get; set; } = null!;
         public RolUsuario Rol { get; set; }
+        /// <summary>False = no puede iniciar sesión. Se usa en vez de borrar si tiene historial.</summary>
+        public bool Activo { get; set; } = true;
     }
 }

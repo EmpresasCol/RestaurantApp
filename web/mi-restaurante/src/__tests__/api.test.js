@@ -155,3 +155,37 @@ describe('Platillos y mesas (administrador)', () => {
     await expect(api.createUsuario({ nombreUsuario: 'ana', nombre: '', clave: '1234', rol: 'Caja' })).rejects.toThrow('El nombre es obligatorio');
   });
 });
+
+describe('Seguridad del QR y acceso', () => {
+  test('el pedido del comensal envía el código del QR y nunca un id de mesa', async () => {
+    global.fetch.mockReturnValue(ok({ id: 1 }, 201));
+
+    await api.createPedidoQR('a1b2c3d4e5f6a1b2c3d4e5f6', [{ id: 1, cantidad: 2 }]);
+
+    const { cuerpo } = ultimaPeticion();
+    expect(cuerpo).toEqual({ codigoMesa: 'a1b2c3d4e5f6a1b2c3d4e5f6', detalles: [{ platilloId: 1, cantidad: 2, nota: '' }] });
+    expect(cuerpo).not.toHaveProperty('mesaId');
+  });
+
+  test('un código de mesa que no existe devuelve null', async () => {
+    global.fetch.mockReturnValue(fallo(404, { message: 'no válido' }));
+    await expect(api.getMesaPorCodigo('zzzzzzzz')).resolves.toBeNull();
+    expect(ultimaPeticion().url).toMatch(/\/mesas\/qr\/zzzzzzzz$/);
+  });
+
+  test('el administrador pide la carta completa con ?todos=true', async () => {
+    global.fetch.mockReturnValue(ok([]));
+    await api.getPlatillos(true);
+    expect(ultimaPeticion().url).toMatch(/\/platillos\?todos=true$/);
+  });
+
+  test('ocultar un platillo y desactivar un usuario usan PUT …/activo', async () => {
+    global.fetch.mockReturnValue(ok({}, 204));
+
+    await api.cambiarActivoPlatillo(4, false);
+    expect(ultimaPeticion()).toMatchObject({ url: expect.stringMatching(/\/platillos\/4\/activo$/), cuerpo: { activo: false } });
+
+    await api.cambiarActivoUsuario(7, true);
+    expect(ultimaPeticion()).toMatchObject({ url: expect.stringMatching(/\/usuarios\/7\/activo$/), cuerpo: { activo: true } });
+  });
+});

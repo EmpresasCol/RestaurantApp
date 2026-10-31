@@ -12,5 +12,6 @@
         public bool Disponible { get; set; } = true;
         /// <summary>Porciones que alcanzan con el stock actual; null = sin control de inventario.</summary>
         public int? PorcionesDisponibles { get; set; }
+        public bool Activo { get; set; } = true;
     }
 }

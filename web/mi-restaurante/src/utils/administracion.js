@@ -32,10 +32,11 @@ export const validarPlatillo = (form, platillos = [], idActual = null) => {
 };
 
 /**
- * Cómo está el platillo frente al inventario, con el tono del chip.
+ * Cómo está el platillo frente a la carta y al inventario, con el tono del chip.
  * porcionesDisponibles null = la API no lo controla (no tiene receta).
  */
 export const estadoPlatillo = (platillo) => {
+  if (platillo?.activo === false) return { clave: 'oculto', tono: 'neutro', texto: 'Oculto' };
   const n = platillo?.porcionesDisponibles;
   if (platillo?.disponible === false || n === 0) return { clave: 'agotado', tono: 'peligro', texto: 'Agotado' };
   if (n == null) return { clave: 'sin-receta', tono: 'aviso', texto: 'Sin receta' };
@@ -75,8 +76,11 @@ export const validarUsuario = (form, { edicion = false } = {}) => {
 
 export const MAXIMO_MESAS = 200; // igual que MesasController.MaximoMesas
 
-/** El QR lleva el Id de la mesa (lo que espera POST /pedidos) y su número visible. */
-export const urlMesa = (base, mesa) => `${base}?mesa=${mesa.id}&numero=${mesa.numero}`;
+/**
+ * El QR lleva solo el código secreto de la mesa. Con el Id o el número en el enlace, el
+ * comensal podría editarlo y pedir a nombre de otra mesa.
+ */
+export const urlMesa = (base, mesa) => `${base}?m=${encodeURIComponent(mesa.codigoQR ?? '')}`;
 
 /** Lleva un número escrito a mano al rango permitido; lo que no es número cuenta como 1. */
 export const limitarMesas = (valor) => {

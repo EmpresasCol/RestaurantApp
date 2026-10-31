@@ -23,13 +23,15 @@ export function useAuth() {
 // Roles permitidos en la web. Mesero está bloqueado: usa la app móvil.
 const ROLES_WEB_PERMITIDOS = ['administrador', 'caja', 'cocina'];
 
-// ?mesa=<id de la mesa>&numero=<número visible>; solo enteros positivos.
-const leerMesaDeUrl = () => {
+// El QR trae ?m=<código secreto de la mesa>. El número lo da la API a partir del código,
+// así el comensal no puede cambiar el enlace para pedir a nombre de otra mesa.
+// Un QR viejo (?mesa=<id>) abre la carta en modo consulta, sin poder pedir.
+export const leerMesaDeUrl = () => {
   const params = new URLSearchParams(window.location.search);
-  const entero = (valor) => (/^\d+$/.test(valor ?? '') && Number(valor) > 0 ? Number(valor) : null);
-  const mesa = entero(params.get('mesa'));
-  if (!mesa) return null;
-  return { mesa, numero: entero(params.get('numero')) ?? mesa };
+  const codigo = params.get('m');
+  if (codigo && /^[a-z0-9]{8,64}$/i.test(codigo)) return { codigoMesa: codigo };
+  if (codigo || params.has('mesa')) return { codigoMesa: null };
+  return null;
 };
 
 export function AuthProvider({ children }) {
@@ -53,7 +55,7 @@ export function AuthProvider({ children }) {
       const mesaQR = leerMesaDeUrl();
       if (mesaQR) {
         setEsClienteQR(true);
-        setUsuario({ rol: 'cliente', nombre: 'Cliente', mesa: mesaQR.mesa, numeroMesa: mesaQR.numero });
+        setUsuario({ rol: 'cliente', nombre: 'Cliente', codigoMesa: mesaQR.codigoMesa });
         return;
       }
 

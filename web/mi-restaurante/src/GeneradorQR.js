@@ -1,10 +1,11 @@
 // Códigos QR de las mesas: el administrador fija cuántas mesas tiene el salón y obtiene un
-// código por mesa, con el número dentro del QR. El código lleva ?mesa=<id>&numero=<n>.
+// código por mesa, con el número dentro del QR. El enlace lleva solo ?m=<código secreto>:
+// sin el Id ni el número a la vista, el comensal no puede editarlo para pedir a otra mesa.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Download, ExternalLink, Minus, Plus, Printer, QrCode } from 'lucide-react';
-import { fijarCantidadMesas, getMesas } from './services/api';
-import { Boton, Cargando, useAviso, Vacio } from './components/inventario/ui';
+import { Download, ExternalLink, KeyRound, Minus, Plus, Printer, QrCode } from 'lucide-react';
+import { fijarCantidadMesas, getMesas, regenerarCodigosMesas } from './services/api';
+import { Boton, BotonConfirmar, Cargando, useAviso, Vacio } from './components/inventario/ui';
 import { cambioMesas, insigniaMesa, limitarMesas, MAXIMO_MESAS, urlMesa } from './utils/administracion';
 import logo from './components/logo.jpg';
 
@@ -133,6 +134,15 @@ function GeneradorQR() {
     }
   };
 
+  const cambiarCodigos = async () => {
+    try {
+      setMesas(porNumero(await regenerarCodigosMesas()));
+      mostrar('Códigos nuevos listos. Imprime y cambia todos los QR de las mesas');
+    } catch (err) {
+      mostrar(err.message, 'error');
+    }
+  };
+
   const descargar = async (mesa) => {
     try {
       await descargarPNG(tarjetas.current[mesa.id], `qpro-mesa-${mesa.numero}.png`);
@@ -176,8 +186,18 @@ function GeneradorQR() {
           <Cargando filas={2} />
         ) : (
           <>
-            <div className="qp-no-print mb-6">
+            <div className="qp-no-print mb-6 space-y-3">
               <ControlMesas mesas={mesas} onGuardar={guardar} guardando={guardando} />
+              {mesas.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
+                  <p className="text-[13px] text-gray-500">
+                    Cada QR lleva un código secreto de su mesa. Si una foto del código salió del restaurante, cámbialos: los impresos dejan de servir.
+                  </p>
+                  <BotonConfirmar confirmar="Toca otra vez: hay que reimprimir todos" onConfirmar={cambiarCodigos}>
+                    <KeyRound size={15} aria-hidden="true" />Cambiar códigos
+                  </BotonConfirmar>
+                </div>
+              )}
             </div>
 
             {mesas.length === 0 ? (

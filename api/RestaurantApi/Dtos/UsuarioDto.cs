@@ -9,6 +9,12 @@ namespace RestaurantApi.Dtos
         public string Nombre { get; set; } = string.Empty;
         public string NombreUsuario { get; set; } = string.Empty;
         public string Rol { get; set; } = string.Empty;
+        public bool Activo { get; set; } = true;
+    }
+
+    public class CambiarActivoDto
+    {
+        public bool Activo { get; set; }
     }
 
     /// <summary>Edición de usuario: ClaveHash es opcional (texto plano, se re-hashea si viene).</summary>

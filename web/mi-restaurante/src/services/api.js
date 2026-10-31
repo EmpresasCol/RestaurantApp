@@ -53,9 +53,10 @@ export const login = async (usuario, clave) => {
 };
 
 // ==================== PLATILLOS ====================
-export const getPlatillos = async () => {
+/** La carta. Con todos=true el administrador recibe también los platillos ocultos. */
+export const getPlatillos = async (todos = false) => {
   try {
-    const response = await fetchWithHeaders(`${API_URL}/platillos`);
+    const response = await fetchWithHeaders(`${API_URL}/platillos${todos ? '?todos=true' : ''}`);
     if (!response.ok) throw new Error('Error al obtener platillos');
     return await response.json();
   } catch (error) {
@@ -93,6 +94,15 @@ export const updatePlatillo = async (id, platilloData) => {
   return { success: true };
 };
 
+export const cambiarActivoPlatillo = async (id, activo) => {
+  const response = await fetchWithHeaders(`${API_URL}/platillos/${id}/activo`, {
+    method: 'PUT',
+    body: JSON.stringify({ activo })
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo cambiar el platillo');
+  return { success: true };
+};
+
 export const deletePlatillo = async (id) => {
   const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, { method: 'DELETE' });
   if (!response.ok) throw await errorDe(response, 'No se pudo eliminar el platillo');
@@ -125,6 +135,21 @@ export const updateEstadoMesa = async (id, estado) => {
   }
 };
 
+/** Número de la mesa a partir del código de su QR (público); null si el código no existe. */
+export const getMesaPorCodigo = async (codigo) => {
+  const response = await fetchWithHeaders(`${API_URL}/mesas/qr/${encodeURIComponent(codigo)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await errorDe(response, 'No se pudo leer el código de la mesa');
+  return await response.json();
+};
+
+/** Cambia el código de todas las mesas: los QR impresos antes dejan de servir. */
+export const regenerarCodigosMesas = async () => {
+  const response = await fetchWithHeaders(`${API_URL}/mesas/codigos`, { method: 'POST' });
+  if (!response.ok) throw await errorDe(response, 'No se pudieron cambiar los códigos');
+  return await response.json();
+};
+
 /** Deja el salón con las mesas 1..cantidad y devuelve la lista resultante. */
 export const fijarCantidadMesas = async (cantidad) => {
   const response = await fetchWithHeaders(`${API_URL}/mesas/cantidad`, {
@@ -154,45 +179,29 @@ export const getPedidosActivos = async () => {
   return await response.json();
 };
 
-export const createPedido = async (mesaId, items) => {
-  try {
-    const pedidoData = {
-      mesaId: mesaId,
-      detalles: items.map(item => ({
-        platilloId: item.id,
-        cantidad: item.cantidad,
-        nota: item.nota || item.notas || ""
-      }))
-    };
+const detallesPedido = (items) => items.map((item) => ({
+  platilloId: item.id,
+  cantidad: item.cantidad,
+  nota: item.nota || item.notas || ''
+}));
 
-    console.log('📤 Enviando pedido:', pedidoData);
-
-    const response = await fetchWithHeaders(`${API_URL}/pedidos`, {
-      method: 'POST',
-      body: JSON.stringify(pedidoData)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      // La API puede responder un texto, un string JSON o { message }.
-      let detalle = errorText;
-      try {
-        const json = JSON.parse(errorText);
-        detalle = typeof json === 'string' ? json : json.message || json.title || errorText;
-      } catch {
-        // texto plano
-      }
-      throw new Error(`Error al crear pedido: ${detalle}`);
-    }
-
-    const resultado = await response.json();
-    console.log('✅ Pedido creado:', resultado);
-    return resultado;
-  } catch (error) {
-    console.error('❌ Error en createPedido:', error);
-    throw error;
+const enviarPedido = async (cuerpo) => {
+  const response = await fetchWithHeaders(`${API_URL}/pedidos`, {
+    method: 'POST',
+    body: JSON.stringify(cuerpo)
+  });
+  if (!response.ok) {
+    const error = await errorDe(response, 'No se pudo enviar el pedido');
+    throw new Error(`Error al crear pedido: ${error.message}`);
   }
+  return await response.json();
 };
+
+/** Pedido del personal (con sesión): la mesa va por su Id. */
+export const createPedido = (mesaId, items) => enviarPedido({ mesaId, detalles: detallesPedido(items) });
+
+/** Pedido del comensal: la mesa va por el código secreto de su QR; la API ignora cualquier Id. */
+export const createPedidoQR = (codigoMesa, items) => enviarPedido({ codigoMesa, detalles: detallesPedido(items) });
 
 /**
  * Actualiza el estado de un pedido
@@ -411,6 +420,15 @@ export const updateUsuario = async (id, usuarioData) => {
     body: JSON.stringify(dataBackend)
   });
   if (!response.ok) throw await errorDe(response, 'No se pudo actualizar el usuario');
+  return { success: true };
+};
+
+export const cambiarActivoUsuario = async (id, activo) => {
+  const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}/activo`, {
+    method: 'PUT',
+    body: JSON.stringify({ activo })
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo cambiar el acceso del usuario');
   return { success: true };
 };
 

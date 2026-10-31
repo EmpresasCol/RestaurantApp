@@ -1,7 +1,7 @@
 // Usuarios: quién entra a Qpro, con qué rol y por dónde (web o app móvil).
 // Los domiciliarios creados aquí aparecen en Domicilios; los meseros entran por la app.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Monitor, Plus, Search, Smartphone, Trash2, Users } from 'lucide-react';
+import { Eye, EyeOff, Monitor, Plus, Search, Smartphone, Trash2, UserCheck, UserX, Users } from 'lucide-react';
 import * as api from './services/api';
 import { useAuth } from './context/AuthContext';
 import { Boton, BotonConfirmar, Campo, Cargando, Chip, Lista, Panel, useAviso, Vacio } from './components/inventario/ui';
@@ -155,6 +155,17 @@ function GestionUsuarios() {
   const esPropio = seleccionado?.id === sesion?.id;
   const cerrar = useCallback(() => setEditando(null), []);
 
+  const cambiarAcceso = async () => {
+    const activar = seleccionado.activo === false;
+    try {
+      await api.cambiarActivoUsuario(seleccionado.id, activar);
+      mostrar(activar ? `${seleccionado.nombre} puede entrar de nuevo` : `${seleccionado.nombre} ya no puede entrar; su historial se conserva`);
+      await cargar();
+    } catch (err) {
+      mostrar(err.message, 'error');
+    }
+  };
+
   const eliminar = async () => {
     try {
       await api.deleteUsuario(seleccionado.id);
@@ -209,15 +220,16 @@ function GestionUsuarios() {
             {visibles.map((u) => (
               <button
                 key={u.id} type="button" onClick={() => setEditando(u.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${u.activo === false ? 'bg-gray-50' : ''}`}
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-100 text-[13px] font-bold text-espresso" aria-hidden="true">
+                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-[13px] font-bold ${u.activo === false ? 'bg-gray-200 text-gray-500' : 'bg-orange-100 text-espresso'}`} aria-hidden="true">
                   {iniciales(u.nombre)}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate text-[15px] font-bold text-espresso">{u.nombre}</span>
                     {u.id === sesion?.id && <Chip tono="info">Tú</Chip>}
+                    {u.activo === false && <Chip>Desactivado</Chip>}
                   </span>
                   <span className="block truncate text-[13px] text-gray-500">@{u.nombreUsuario}</span>
                 </span>
@@ -233,14 +245,21 @@ function GestionUsuarios() {
         abierto={editando !== null}
         onCerrar={cerrar}
         titulo={seleccionado ? seleccionado.nombre : 'Nuevo usuario'}
-        subtitulo={seleccionado ? `@${seleccionado.nombreUsuario} · ${seleccionado.rol}` : 'Elige su rol: define qué ve y por dónde entra.'}
+        subtitulo={seleccionado ? `@${seleccionado.nombreUsuario} · ${seleccionado.rol}${seleccionado.activo === false ? ' · Desactivado: no puede entrar' : ''}` : 'Elige su rol: define qué ve y por dónde entra.'}
         ancho="md:w-[620px]"
         pie={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {seleccionado && !esPropio && (
-              <BotonConfirmar confirmar="Toca otra vez para eliminar" onConfirmar={eliminar}>
-                <Trash2 size={16} aria-hidden="true" />Eliminar
-              </BotonConfirmar>
+              <>
+                <BotonConfirmar confirmar="Toca otra vez para eliminar" onConfirmar={eliminar}>
+                  <Trash2 size={16} aria-hidden="true" />Eliminar
+                </BotonConfirmar>
+                <Boton variante="secundario" tamano="sm" onClick={cambiarAcceso}>
+                  {seleccionado.activo === false
+                    ? <><UserCheck size={16} aria-hidden="true" />Activar</>
+                    : <><UserX size={16} aria-hidden="true" />Desactivar</>}
+                </Boton>
+              </>
             )}
             <Boton variante="secundario" className="ml-auto" onClick={cerrar}>Cerrar</Boton>
             <Boton type="submit" form="form-usuario">{seleccionado ? 'Guardar cambios' : 'Crear usuario'}</Boton>

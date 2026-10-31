@@ -4,6 +4,8 @@
     {
         public int UsuarioId { get; set; }
         public int MesaId { get; set; }
+        /// <summary>Código secreto del QR. Obligatorio en el pedido anónimo del comensal; ahí MesaId se ignora.</summary>
+        public string? CodigoMesa { get; set; }
         public List<CrearDetalleDto> Detalles { get; set; } = new();
     }
 

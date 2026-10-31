@@ -1,4 +1,4 @@
-using System.Threading.RateLimiting;
+﻿using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
@@ -40,6 +40,15 @@ builder.Services
         // El navegador no envía cabeceras en WebSocket: SignalR manda el JWT por query string.
         options.Events = new JwtBearerEvents
         {
+            // Un usuario desactivado pierde el acceso aunque su token siga vigente.
+            OnTokenValidated = async ctx =>
+            {
+                var id = QproClaims.IdUsuario(ctx.Principal);
+                if (id == null) return;
+                var db = ctx.HttpContext.RequestServices.GetRequiredService<RestauranteContext>();
+                if (!await db.Usuarios.AnyAsync(u => u.Id == id && u.Activo))
+                    ctx.Fail("Usuario desactivado");
+            },
             OnMessageReceived = ctx =>
             {
                 var token = ctx.Request.Query["access_token"];

@@ -19,7 +19,7 @@ public class DisponibilidadTests
     private const decimal CarneParaCinco = 1m;
 
     private static PedidosController Pedidos(RestauranteContext ctx)
-        => new(ctx, NullLogger<PedidosController>.Instance, TestDb.Inventario(ctx));
+        => TestDb.ComoMesero(new PedidosController(ctx, NullLogger<PedidosController>.Instance, TestDb.Inventario(ctx)));
 
     private static PlatillosController Platillos(RestauranteContext ctx) => new(ctx, TestDb.Inventario(ctx));
 

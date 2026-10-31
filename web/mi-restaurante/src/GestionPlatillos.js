@@ -1,7 +1,7 @@
 // Platillos: la carta que ve el comensal. Cada platillo muestra si el inventario alcanza para
 // venderlo y cuánto cuesta prepararlo; su ficha permite editarlo y armar su receta ahí mismo.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ImagePlus, Plus, Search, Trash2, UtensilsCrossed } from 'lucide-react';
+import { Eye, EyeOff, ImagePlus, Plus, Search, Trash2, UtensilsCrossed } from 'lucide-react';
 import * as api from './services/api';
 import { compras, getRecetas } from './services/inventarioApi';
 import { EditorReceta, tonoCosto } from './components/inventario/RecetasConfig';
@@ -16,6 +16,7 @@ const FILTROS = [
   { id: 'todos', label: 'Todos' },
   { id: 'agotado', label: 'Agotados' },
   { id: 'sin-receta', label: 'Sin receta' },
+  { id: 'oculto', label: 'Ocultos' },
 ];
 
 /** Reduce la foto a 1000 px como máximo antes de guardarla en Base64: la carta carga más rápido. */
@@ -62,7 +63,7 @@ function TarjetaPlatillo({ platillo, costo, onAbrir }) {
     <li>
       <button type="button" onClick={onAbrir} className="group block w-full text-left" aria-label={`Editar ${platillo.nombre}`}>
         <div className="relative overflow-hidden rounded-[20px] bg-gray-100 shadow-card transition-shadow duration-300 group-hover:shadow-lift">
-          <Foto src={platillo.imagenUrl} alt="" className="aspect-[4/3] w-full transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]" />
+          <Foto src={platillo.imagenUrl} alt="" className={`aspect-[4/3] w-full transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04] ${platillo.activo === false ? 'opacity-50 grayscale' : ''}`} />
           <span className="absolute left-2.5 top-2.5"><Chip tono={estado.tono} className="shadow-card">{estado.texto}</Chip></span>
         </div>
         <div className="px-1 pt-2.5">
@@ -235,7 +236,7 @@ function GestionPlatillos() {
 
   const cargarPlatillos = useCallback(async () => {
     try {
-      setPlatillos(await api.getPlatillos());
+      setPlatillos(await api.getPlatillos(true)); // incluye los ocultos para poder mostrarlos de nuevo
     } catch {
       setPlatillos((p) => p ?? []);
       mostrar('No se pudieron cargar los platillos', 'error');
@@ -263,7 +264,7 @@ function GestionPlatillos() {
 
   const lista = useMemo(() => platillos ?? [], [platillos]);
   const conteo = useMemo(() => {
-    const c = { todos: lista.length, agotado: 0, 'sin-receta': 0 };
+    const c = { todos: lista.length, agotado: 0, 'sin-receta': 0, oculto: 0 };
     lista.forEach((p) => { const k = estadoPlatillo(p).clave; if (k in c) c[k] += 1; });
     return c;
   }, [lista]);
@@ -277,6 +278,17 @@ function GestionPlatillos() {
 
   const seleccionado = typeof editando === 'number' ? lista.find((p) => p.id === editando) : null;
   const cerrar = useCallback(() => setEditando(null), []);
+
+  const cambiarVisibilidad = async () => {
+    const mostrarlo = seleccionado.activo === false;
+    try {
+      await api.cambiarActivoPlatillo(seleccionado.id, mostrarlo);
+      mostrar(mostrarlo ? `${seleccionado.nombre} volvió a la carta` : `${seleccionado.nombre} quedó oculto: no sale en la carta ni se puede pedir`);
+      await cargarPlatillos();
+    } catch (err) {
+      mostrar(err.message, 'error');
+    }
+  };
 
   const eliminar = async () => {
     try {
@@ -310,11 +322,11 @@ function GestionPlatillos() {
                 className="h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-3.5 text-[15px] text-espresso placeholder:text-gray-500 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
               />
             </label>
-            <div className="flex gap-1 rounded-full bg-white p-1 ring-1 ring-gray-200" role="group" aria-label="Filtrar por disponibilidad">
+            <div className="qp-rail flex max-w-full gap-1 overflow-x-auto rounded-full bg-white p-1 ring-1 ring-gray-200" role="group" aria-label="Filtrar por disponibilidad">
               {FILTROS.map((f) => (
                 <button
                   key={f.id} type="button" onClick={() => setFiltro(f.id)} aria-pressed={filtro === f.id}
-                  className={`tabular h-9 rounded-full px-3.5 text-[14px] font-bold transition-colors ${filtro === f.id ? 'bg-espresso text-white' : 'text-gray-600 hover:text-espresso'}`}
+                  className={`tabular h-9 shrink-0 rounded-full px-3.5 text-[14px] font-bold transition-colors ${filtro === f.id ? 'bg-espresso text-white' : 'text-gray-600 hover:text-espresso'}`}
                 >
                   {f.label} <span className={filtro === f.id ? 'text-white/70' : 'text-gray-400'}>{conteo[f.id]}</span>
                 </button>
@@ -366,11 +378,18 @@ function GestionPlatillos() {
         subtitulo={seleccionado ? `${seleccionado.categoria} · ${estadoPlatillo(seleccionado).texto}` : 'Aparece en la carta del QR apenas lo guardes.'}
         ancho="md:w-[640px]"
         pie={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {seleccionado && (
-              <BotonConfirmar confirmar="Toca otra vez para eliminar" onConfirmar={eliminar}>
-                <Trash2 size={16} aria-hidden="true" />Eliminar
-              </BotonConfirmar>
+              <>
+                <BotonConfirmar confirmar="Toca otra vez para eliminar" onConfirmar={eliminar}>
+                  <Trash2 size={16} aria-hidden="true" />Eliminar
+                </BotonConfirmar>
+                <Boton variante="secundario" tamano="sm" onClick={cambiarVisibilidad}>
+                  {seleccionado.activo === false
+                    ? <><Eye size={16} aria-hidden="true" />Mostrar en la carta</>
+                    : <><EyeOff size={16} aria-hidden="true" />Ocultar de la carta</>}
+                </Boton>
+              </>
             )}
             <Boton variante="secundario" className="ml-auto" onClick={cerrar}>Cerrar</Boton>
             <Boton type="submit" form="form-platillo">{seleccionado ? 'Guardar cambios' : 'Crear platillo'}</Boton>

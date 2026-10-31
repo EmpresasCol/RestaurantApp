@@ -42,7 +42,7 @@ namespace RestaurantApi.Services
 
                 // ✅ OBTENER TOKENS DE TODOS LOS MESEROS (no solo el que creó el pedido)
                 var meseros = await _context.Usuarios
-                    .Where(u => u.Rol == RolUsuario.Mesero)
+                    .Where(u => u.Rol == RolUsuario.Mesero && u.Activo)
                     .Select(u => u.Id)
                     .ToListAsync();
 

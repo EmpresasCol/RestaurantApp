@@ -15,6 +15,7 @@ namespace RestaurantApi.Controllers
     {
         // Mismo mensaje para usuario inexistente y clave incorrecta: no permite enumerar usuarios.
         private static readonly object CredencialesInvalidas = new { message = "Credenciales inválidas" };
+        public const string MensajeDesactivado = "Tu usuario está desactivado. Habla con el administrador.";
 
         private readonly RestauranteContext _context;
         private readonly JwtTokenService _jwt;
@@ -33,6 +34,8 @@ namespace RestaurantApi.Controllers
             var usuario = await AutenticarAsync(request);
             if (usuario == null)
                 return Unauthorized(CredencialesInvalidas);
+            if (!usuario.Activo)
+                return Unauthorized(new { message = MensajeDesactivado });
 
             if (usuario.Rol == RolUsuario.Mesero)
             {
@@ -61,6 +64,8 @@ namespace RestaurantApi.Controllers
             var usuario = await AutenticarAsync(request);
             if (usuario == null)
                 return Unauthorized(CredencialesInvalidas);
+            if (!usuario.Activo)
+                return Unauthorized(new { message = MensajeDesactivado });
 
             if (usuario.Rol != RolUsuario.Mesero)
             {
@@ -141,6 +146,7 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = "El nombre de usuario ya existe" });
 
             usuario.Id = 0;
+            usuario.Activo = true;
             usuario.ClaveHash = ClaveHasher.Hash(usuario.ClaveHash);
             _context.Usuarios.Add(usuario);
             await _context.SaveChangesAsync();
@@ -202,10 +208,31 @@ namespace RestaurantApi.Controllers
             var tieneHistorial = await _context.Pedidos.AnyAsync(p => p.UsuarioId == id)
                 || await _context.Domicilios.AnyAsync(d => d.UsuarioCreadorId == id || d.DomiciliarioId == id);
             if (tieneHistorial)
-                return Conflict(new { message = $"{usuario.Nombre} tiene pedidos o domicilios en el historial y no se puede eliminar. Cámbiale la clave para quitarle el acceso." });
+                return Conflict(new { message = $"{usuario.Nombre} tiene pedidos o domicilios en el historial y no se puede eliminar. Desactívalo en su lugar." });
 
             _context.UsuariosFCM.RemoveRange(_context.UsuariosFCM.Where(t => t.UsuarioId == id));
             _context.Usuarios.Remove(usuario);
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        /// <summary>Activa o desactiva el acceso sin borrar el historial del usuario.</summary>
+        [HttpPut("{id}/activo")]
+        [Authorize(Roles = "Administrador")]
+        public async Task<IActionResult> CambiarActivo(int id, CambiarActivoDto dto)
+        {
+            var usuario = await _context.Usuarios.FindAsync(id);
+            if (usuario == null) return NotFound();
+
+            if (!dto.Activo)
+            {
+                if (QproClaims.IdUsuario(User) == id)
+                    return BadRequest(new { message = "No puedes desactivar tu propio usuario" });
+                if (usuario.Rol == RolUsuario.Administrador && await EsUltimoAdministradorAsync(id))
+                    return BadRequest(new { message = "Debe quedar al menos un Administrador activo" });
+            }
+
+            usuario.Activo = dto.Activo;
             await _context.SaveChangesAsync();
             return NoContent();
         }
@@ -223,7 +250,7 @@ namespace RestaurantApi.Controllers
             => clave.Length < 4 ? "La clave debe tener al menos 4 caracteres" : null;
 
         private Task<bool> EsUltimoAdministradorAsync(int id)
-            => _context.Usuarios.AllAsync(u => u.Id == id || u.Rol != RolUsuario.Administrador);
+            => _context.Usuarios.AllAsync(u => u.Id == id || u.Rol != RolUsuario.Administrador || !u.Activo);
 
         /// <summary>Valida credenciales y migra a BCrypt las claves heredadas en texto plano.</summary>
         private async Task<Usuario?> AutenticarAsync(LoginRequestDto request)
@@ -262,7 +289,8 @@ namespace RestaurantApi.Controllers
             Id = u.Id,
             Nombre = u.Nombre,
             NombreUsuario = u.NombreUsuario,
-            Rol = u.Rol.ToString()
+            Rol = u.Rol.ToString(),
+            Activo = u.Activo
         };
     }
 }

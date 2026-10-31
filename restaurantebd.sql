@@ -18,6 +18,7 @@ CREATE TABLE Usuarios (
     Usuario VARCHAR(50) UNIQUE NOT NULL,
     ClaveHash CHAR(60) NOT NULL,
     Rol ENUM('Administrador','Mesero','Cocina','Caja','Domiciliario') NOT NULL,
+    Activo BOOLEAN NOT NULL DEFAULT TRUE,
     INDEX idx_usuario (Usuario),
     INDEX idx_rol (Rol)
 ) ENGINE=InnoDB;
@@ -26,6 +27,8 @@ CREATE TABLE Mesas (
     Id INT AUTO_INCREMENT PRIMARY KEY,
     Numero INT NOT NULL UNIQUE,
     Estado ENUM('Disponible','Ocupada','EsperandoPago') DEFAULT 'Disponible',
+    CodigoQR VARCHAR(32) NULL,
+    UNIQUE INDEX uq_mesas_codigoqr (CodigoQR),
     INDEX idx_estado (Estado)
 ) ENGINE=InnoDB;
 
@@ -36,6 +39,7 @@ CREATE TABLE Platillos (
     Precio DECIMAL(10,2) NOT NULL,
     ImagenUrl LONGTEXT,
     Categoria VARCHAR(50) NOT NULL DEFAULT 'Platos Principales',
+    Activo BOOLEAN NOT NULL DEFAULT TRUE,
     INDEX idx_categoria (Categoria),
     CONSTRAINT chk_platillos_precio_nonneg CHECK (Precio >= 0)
 ) ENGINE=InnoDB;

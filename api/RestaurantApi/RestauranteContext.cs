@@ -1,4 +1,4 @@
-// api/RestaurantApi/RestauranteContext.cs
+﻿// api/RestaurantApi/RestauranteContext.cs
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 
@@ -80,6 +80,10 @@ namespace RestaurantApi
             modelBuilder.Entity<Mesa>()
                 .Property(m => m.Estado)
                 .HasConversion<string>();
+
+            modelBuilder.Entity<Mesa>()
+                .HasIndex(m => m.CodigoQR)
+                .IsUnique();
 
             modelBuilder.Entity<Pedido>()
                 .Property(p => p.Estado)

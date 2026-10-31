@@ -31,6 +31,7 @@ describe('platillos', () => {
     expect(estadoPlatillo({ disponible: true, porcionesDisponibles: null }).clave).toBe('sin-receta');
     expect(estadoPlatillo({ disponible: true, porcionesDisponibles: 3 }).texto).toBe('Quedan 3');
     expect(estadoPlatillo({ disponible: true, porcionesDisponibles: 40 }).tono).toBe('ok');
+    expect(estadoPlatillo({ activo: false, disponible: false, porcionesDisponibles: 40 }).clave).toBe('oculto');
   });
 });
 
@@ -66,8 +67,10 @@ describe('usuarios', () => {
 });
 
 describe('mesas y QR', () => {
-  test('el QR lleva el id y el número de la mesa', () => {
-    expect(urlMesa('https://qpro.co/', { id: 7, numero: 3 })).toBe('https://qpro.co/?mesa=7&numero=3');
+  test('el QR lleva solo el código secreto, no el id ni el número que se podrían cambiar', () => {
+    const url = urlMesa('https://qpro.co/', { id: 7, numero: 3, codigoQR: 'a1b2c3d4e5f6a1b2c3d4e5f6' });
+    expect(url).toBe('https://qpro.co/?m=a1b2c3d4e5f6a1b2c3d4e5f6');
+    expect(url).not.toMatch(/mesa=|numero=/);
   });
 
   test('el número de mesas se mantiene en el rango permitido', () => {

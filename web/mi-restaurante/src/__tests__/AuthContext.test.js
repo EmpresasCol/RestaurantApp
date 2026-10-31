@@ -98,15 +98,25 @@ describe('Control de acceso por rol (tienePermiso)', () => {
     expect(ref.current.tienePermiso(permisos)).toBe(esperado);
   });
 
-  test('el comensal que entra por QR (?mesa=5) solo ve el menú', async () => {
-    window.history.replaceState({}, '', '/?mesa=5');
+  test('el comensal que entra por QR (?m=<código>) solo ve el menú', async () => {
+    window.history.replaceState({}, '', '/?m=a1b2c3d4e5f6a1b2c3d4e5f6');
     const { ref } = renderConAuth();
     await waitFor(() => expect(ref.current.cargando).toBe(false));
 
     expect(ref.current.esClienteQR).toBe(true);
-    expect(ref.current.usuario.mesa).toBe(5);
+    expect(ref.current.usuario.codigoMesa).toBe('a1b2c3d4e5f6a1b2c3d4e5f6');
     expect(ref.current.tienePermiso(['cliente'])).toBe(true);
     expect(ref.current.tienePermiso(['caja'])).toBe(false);
+  });
+
+  test('un QR viejo con ?mesa=<id> abre la carta pero no lleva mesa para pedir', async () => {
+    window.history.replaceState({}, '', '/?mesa=5&numero=5');
+    const { ref } = renderConAuth();
+    await waitFor(() => expect(ref.current.cargando).toBe(false));
+
+    expect(ref.current.esClienteQR).toBe(true);
+    expect(ref.current.usuario.codigoMesa).toBeNull();
+    expect(ref.current.usuario.mesa).toBeUndefined();
   });
 });
 
@@ -139,12 +149,11 @@ describe('[AUDITORÍA] Persistencia y seguridad de la sesión', () => {
     expect(ref.current.tienePermiso(['administrador'])).toBe(false);
   });
 
-  test('[AUDITORÍA] ?mesa= con valor no numérico no crea una sesión de comensal inválida', async () => {
-    window.history.replaceState({}, '', '/?mesa=abc');
+  test('[AUDITORÍA] un código con caracteres raros no se acepta como mesa', async () => {
+    window.history.replaceState({}, '', '/?m=%3Cscript%3E');
     const { ref } = renderConAuth();
     await waitFor(() => expect(ref.current.cargando).toBe(false));
 
-    // Hoy queda usuario.mesa = NaN con esClienteQR = true
-    expect(Number.isInteger(ref.current.usuario?.mesa ?? 0)).toBe(true);
+    expect(ref.current.usuario.codigoMesa).toBeNull();
   });
 });

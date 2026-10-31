@@ -23,12 +23,14 @@ namespace RestaurantApi.Controllers
             _logger = logger;
         }
 
-        // La carta es pública: la consulta el menú QR del comensal.
+        // La carta es pública: la consulta el menú QR del comensal. Los ocultos solo los ve
+        // el administrador y solo si los pide (?todos=true), para poder volver a mostrarlos.
         [HttpGet]
         [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<PlatilloDto>>> GetPlatillos()
+        public async Task<ActionResult<IEnumerable<PlatilloDto>>> GetPlatillos([FromQuery] bool todos = false)
         {
-            var platillos = await _context.Platillos.ToListAsync();
+            var verOcultos = todos && QproClaims.EsAdministrador(HttpContext?.User);
+            var platillos = await _context.Platillos.Where(p => verOcultos || p.Activo).ToListAsync();
             var porciones = await _inventario.PorcionesDisponiblesAsync();
             return platillos.Select(p => ADto(p, porciones.GetValueOrDefault(p.Id))).ToList();
         }
@@ -52,8 +54,9 @@ namespace RestaurantApi.Controllers
             Precio = p.Precio,
             ImagenUrl = p.ImagenUrl ?? "",
             Categoria = p.Categoria ?? "General",
-            Disponible = porciones is null or > 0,
-            PorcionesDisponibles = porciones
+            Disponible = p.Activo && (porciones is null or > 0),
+            PorcionesDisponibles = porciones,
+            Activo = p.Activo
         };
 
         [HttpPost]
@@ -63,6 +66,7 @@ namespace RestaurantApi.Controllers
             if (error != null) return error;
 
             platillo.Id = 0;
+            platillo.Activo = true;
             _context.Platillos.Add(platillo);
             await _context.SaveChangesAsync();
             return CreatedAtAction(nameof(GetPlatillo), new { id = platillo.Id }, platillo);
@@ -113,6 +117,18 @@ namespace RestaurantApi.Controllers
             }
         }
 
+        /// <summary>Muestra u oculta el platillo en la carta sin perder su historial de ventas.</summary>
+        [HttpPut("{id}/activo")]
+        public async Task<IActionResult> CambiarActivo(int id, CambiarActivoDto dto)
+        {
+            var platillo = await _context.Platillos.FindAsync(id);
+            if (platillo == null) return NotFound(new { message = $"Platillo con ID {id} no encontrado" });
+
+            platillo.Activo = dto.Activo;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePlatillo(int id)
         {
@@ -128,7 +144,7 @@ namespace RestaurantApi.Controllers
 
             if (tieneVentas)
             {
-                return Conflict(new { message = $"\"{platillo.Nombre}\" ya tiene ventas registradas en pedidos o domicilios y no se puede eliminar." });
+                return Conflict(new { message = $"\"{platillo.Nombre}\" ya tiene ventas y no se puede eliminar. Ocúltalo de la carta en su lugar." });
             }
 
             try

@@ -1,4 +1,4 @@
-// api/RestaurantApi/Controllers/DomiciliosController.cs
+﻿// api/RestaurantApi/Controllers/DomiciliosController.cs
 using System.Linq.Expressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -99,12 +99,12 @@ namespace RestaurantApi.Controllers
 
             var platilloIds = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
             var platillos = await _context.Platillos
-                .Where(p => platilloIds.Contains(p.Id))
+                .Where(p => platilloIds.Contains(p.Id) && p.Activo)
                 .ToDictionaryAsync(p => p.Id);
 
             var faltantes = platilloIds.Except(platillos.Keys).ToList();
             if (faltantes.Count > 0)
-                return BadRequest(new { message = $"Platillo(s) no encontrado(s): {string.Join(", ", faltantes)}" });
+                return BadRequest(new { message = $"Platillo(s) que no existen o ya no están en la carta: {string.Join(", ", faltantes)}" });
 
             var sinStock = await _inventarioService.VerificarStockDomicilioAsync(0, dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)));
             if (sinStock != null)

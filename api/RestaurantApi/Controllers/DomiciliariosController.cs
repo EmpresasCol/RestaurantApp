@@ -1,4 +1,4 @@
-// api/RestaurantApi/Controllers/DomiciliariosController.cs
+﻿// api/RestaurantApi/Controllers/DomiciliariosController.cs
 // Endpoints específicos para el rol Domiciliario (app móvil).
 // No expone información más allá de lo necesario: el domiciliario solo ve
 // pedidos 'Listo' sin asignar y los suyos asignados en curso.
@@ -67,6 +67,9 @@ namespace RestaurantApi.Controllers
                 usuario.ClaveHash = ClaveHasher.Hash(req.Clave);
                 await _context.SaveChangesAsync();
             }
+
+            if (!usuario.Activo)
+                return Unauthorized(new { message = UsuariosController.MensajeDesactivado });
 
             if (usuario.Rol != RolUsuario.Domiciliario)
             {
@@ -295,7 +298,7 @@ namespace RestaurantApi.Controllers
                 return Forbid();
 
             var esDomiciliario = await _context.Usuarios
-                .AnyAsync(u => u.Id == domiciliarioId && u.Rol == RolUsuario.Domiciliario);
+                .AnyAsync(u => u.Id == domiciliarioId && u.Rol == RolUsuario.Domiciliario && u.Activo);
 
             return esDomiciliario ? null : Forbid();
         }

@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -69,15 +69,31 @@ namespace RestaurantApi.Controllers
         /// <summary>
         /// Crea un pedido de mesa. Anónimo para el menú QR del comensal; si llega con token,
         /// el pedido queda a nombre del usuario autenticado (el UsuarioId del cuerpo se ignora).
+        /// El comensal identifica la mesa con el código secreto de su QR, nunca con el Id:
+        /// así no puede cambiar el enlace y pedir a nombre de otra mesa.
         /// </summary>
         [HttpPost]
         [AllowAnonymous]
         [EnableRateLimiting("publico")]
         public async Task<ActionResult<PedidoDto>> PostPedido(CrearPedidoDto crearPedido)
         {
-            var mesa = await _context.Mesas.FindAsync(crearPedido.MesaId);
-            if (mesa == null)
-                return BadRequest($"Mesa {crearPedido.MesaId} no existe");
+            var usuarioSesion = QproClaims.IdUsuario(HttpContext?.User);
+            Mesa? mesa;
+            if (usuarioSesion == null)
+            {
+                var codigo = crearPedido.CodigoMesa?.Trim();
+                if (string.IsNullOrEmpty(codigo))
+                    return BadRequest("Escanea el código QR de tu mesa para pedir");
+                mesa = await _context.Mesas.FirstOrDefaultAsync(m => m.CodigoQR == codigo);
+                if (mesa == null)
+                    return BadRequest("Este código QR ya no es válido. Pide al mesero el código de tu mesa.");
+            }
+            else
+            {
+                mesa = await _context.Mesas.FindAsync(crearPedido.MesaId);
+                if (mesa == null)
+                    return BadRequest($"Mesa {crearPedido.MesaId} no existe");
+            }
 
             var lineas = crearPedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
             var error = await ValidarDetallesAsync(lineas)
@@ -85,12 +101,12 @@ namespace RestaurantApi.Controllers
             if (error != null)
                 return BadRequest(error);
 
-            var usuarioId = QproClaims.IdUsuario(HttpContext?.User) ?? await ObtenerUsuarioGenericoQR();
+            var usuarioId = usuarioSesion ?? await ObtenerUsuarioGenericoQR();
 
             // Pedido y detalles en un solo SaveChanges: o se crea todo o nada.
             var pedido = new Pedido
             {
-                MesaId = crearPedido.MesaId,
+                MesaId = mesa.Id,
                 UsuarioId = usuarioId,
                 Estado = EstadoPedido.EnProceso,
                 Fecha = DateTime.UtcNow,
@@ -179,7 +195,9 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = $"Un pedido {pedido.Estado} no se puede modificar" });
 
             var lineas = dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
-            var error = await ValidarDetallesAsync(lineas)
+            // Un platillo que se ocultó después de pedirlo puede seguir en el pedido que se edita.
+            var yaPedidos = pedido.Detalles.Select(d => d.PlatilloId).ToHashSet();
+            var error = await ValidarDetallesAsync(lineas, yaPedidos)
                         ?? await _inventarioService.VerificarStockPedidoAsync(id, lineas);
             if (error != null)
                 return BadRequest(error);
@@ -312,7 +330,7 @@ namespace RestaurantApi.Controllers
                 .ThenInclude(d => d.Platillo);
 
         /// <summary>Al menos un platillo, todos existentes y con cantidad entre 1 y el máximo.</summary>
-        private async Task<string?> ValidarDetallesAsync(List<(int PlatilloId, int Cantidad)> detalles)
+        private async Task<string?> ValidarDetallesAsync(List<(int PlatilloId, int Cantidad)> detalles, ISet<int>? permitidosOcultos = null)
         {
             if (detalles.Count == 0)
                 return "El pedido debe incluir al menos un platillo";
@@ -321,9 +339,14 @@ namespace RestaurantApi.Controllers
                 return $"La cantidad de cada platillo debe estar entre 1 y {CantidadMaximaPorLinea}";
 
             var ids = detalles.Select(d => d.PlatilloId).Distinct().ToList();
-            var existentes = await _context.Platillos.Where(p => ids.Contains(p.Id)).Select(p => p.Id).ToListAsync();
-            var faltantes = ids.Except(existentes).ToList();
-            return faltantes.Count > 0 ? $"Platillo(s) inexistente(s): {string.Join(", ", faltantes)}" : null;
+            var existentes = await _context.Platillos.Where(p => ids.Contains(p.Id))
+                .Select(p => new { p.Id, p.Nombre, p.Activo }).ToListAsync();
+            var faltantes = ids.Except(existentes.Select(p => p.Id)).ToList();
+            if (faltantes.Count > 0)
+                return $"Platillo(s) inexistente(s): {string.Join(", ", faltantes)}";
+
+            var ocultos = existentes.Where(p => !p.Activo && permitidosOcultos?.Contains(p.Id) != true).Select(p => p.Nombre).ToList();
+            return ocultos.Count > 0 ? $"Ya no está en la carta: {string.Join(", ", ocultos)}" : null;
         }
 
         /// <summary>

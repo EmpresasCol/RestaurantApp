@@ -1,3 +1,6 @@
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,6 +25,8 @@ internal static class TestDb
 
     public const int MesaUnoId = 1;
     public const int MesaDosId = 2;
+    public const string CodigoMesaUno = "a1b2c3d4e5f6a1b2c3d4e5f6";
+    public const string CodigoMesaDos = "f6e5d4c3b2a1f6e5d4c3b2a1";
 
     public const int AdminId = 1;
     public const int MeseroId = 2;
@@ -40,6 +45,22 @@ internal static class TestDb
         return ctx;
     }
 
+    /// <summary>Simula una petición con JWT del usuario y rol dados.</summary>
+    public static T Sesion<T>(T controlador, int usuarioId, RolUsuario rol) where T : ControllerBase
+    {
+        var identidad = new ClaimsIdentity(new[]
+        {
+            new Claim(QproClaims.Id, usuarioId.ToString()),
+            new Claim(QproClaims.Rol, rol.ToString())
+        }, "test", QproClaims.Usuario, QproClaims.Rol);
+        controlador.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identidad) } };
+        return controlador;
+    }
+
+    public static T ComoMesero<T>(T controlador) where T : ControllerBase => Sesion(controlador, MeseroId, RolUsuario.Mesero);
+
+    public static T ComoAdmin<T>(T controlador) where T : ControllerBase => Sesion(controlador, AdminId, RolUsuario.Administrador);
+
     public static InventarioService Inventario(RestauranteContext ctx)
         => new(ctx, NullLogger<InventarioService>.Instance);
 
@@ -51,8 +72,8 @@ internal static class TestDb
             new Usuario { Id = DomiciliarioId, Nombre = "Domi", NombreUsuario = "domi", ClaveHash = "123", Rol = RolUsuario.Domiciliario });
 
         ctx.Mesas.AddRange(
-            new Mesa { Id = MesaUnoId, Numero = 1, Estado = EstadoMesa.Disponible },
-            new Mesa { Id = MesaDosId, Numero = 2, Estado = EstadoMesa.Disponible });
+            new Mesa { Id = MesaUnoId, Numero = 1, Estado = EstadoMesa.Disponible, CodigoQR = CodigoMesaUno },
+            new Mesa { Id = MesaDosId, Numero = 2, Estado = EstadoMesa.Disponible, CodigoQR = CodigoMesaDos });
 
         ctx.Almacenes.Add(new Almacen
         {

@@ -12,7 +12,7 @@ namespace RestaurantApi.Tests;
 public class PedidosControllerTests
 {
     private static PedidosController Controller(RestauranteContext ctx)
-        => new(ctx, NullLogger<PedidosController>.Instance, TestDb.Inventario(ctx));
+        => TestDb.ComoMesero(new PedidosController(ctx, NullLogger<PedidosController>.Instance, TestDb.Inventario(ctx)));
 
     private static CrearPedidoDto PedidoValido(int cantidad = 2) => new()
     {

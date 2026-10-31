@@ -284,7 +284,7 @@ function HojaPlato({ platillo, onCerrar, onAgregar }) {
   );
 }
 
-export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnviarPedido, onRecargarCarta, offsetSuperior = 0 }) {
+export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso, onEnviarPedido, onRecargarCarta, offsetSuperior = 0 }) {
   const [carrito, setCarrito] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState(null);
@@ -484,7 +484,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, onEnvi
       <main className="mx-auto max-w-6xl">
         {!mesaId && (
           <p className="mx-4 mt-4 rounded-2xl bg-orange-50 px-4 py-3 text-[14px] font-medium text-orange-900">
-            Esta es una vista previa. Para enviar pedidos, abre el menú desde el QR de una mesa.
+            {aviso ?? 'Esta es una vista previa. Para enviar pedidos, abre el menú desde el QR de una mesa.'}
           </p>
         )}
 

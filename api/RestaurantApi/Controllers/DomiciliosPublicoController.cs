@@ -1,4 +1,4 @@
-// api/RestaurantApi/Controllers/DomiciliosPublicoController.cs
+﻿// api/RestaurantApi/Controllers/DomiciliosPublicoController.cs
 // Endpoints públicos (sin autenticación) para:
 //   · Crear un pedido desde la página abierta del cliente final.
 //   · Consultar el seguimiento del pedido por token.
@@ -109,7 +109,7 @@ namespace RestaurantApi.Controllers
 
                 var platilloIds = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
                 var platillos = await _context.Platillos
-                    .Where(p => platilloIds.Contains(p.Id))
+                    .Where(p => platilloIds.Contains(p.Id) && p.Activo)
                     .ToDictionaryAsync(p => p.Id);
 
                 if (platillos.Count != platilloIds.Count)
@@ -298,7 +298,7 @@ namespace RestaurantApi.Controllers
             // Validar platillos
             var ids = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
             var platillos = await _context.Platillos
-                .Where(p => ids.Contains(p.Id))
+                .Where(p => ids.Contains(p.Id) && p.Activo)
                 .ToDictionaryAsync(p => p.Id);
 
             if (platillos.Count != ids.Count)
