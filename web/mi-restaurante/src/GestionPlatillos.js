@@ -1,600 +1,396 @@
-// src/GestionPlatillos.js
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, ChefHat, DollarSign, Image as ImageIcon, Tag, Upload } from 'lucide-react';
+// Platillos: la carta que ve el comensal. Cada platillo muestra si el inventario alcanza para
+// venderlo y cuánto cuesta prepararlo; su ficha permite editarlo y armar su receta ahí mismo.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ImagePlus, Plus, Search, Trash2, UtensilsCrossed } from 'lucide-react';
 import * as api from './services/api';
+import { compras, getRecetas } from './services/inventarioApi';
+import { EditorReceta, tonoCosto } from './components/inventario/RecetasConfig';
+import { Boton, BotonConfirmar, Campo, Cargando, Chip, Panel, useAviso, Vacio } from './components/inventario/ui';
+import { categoriasDisponibles, coincide, estadoPlatillo, validarPlatillo } from './utils/administracion';
+import { etiquetaImpuesto, impuestoIncluido } from './utils/impuestos';
+import { formatearCOP } from './utils/inventario';
 
-function GestionPlatillos() {
-  const [platillos, setPlatillos] = useState([]);
-  const [cargando, setCargando] = useState(false);
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [modoEdicion, setModoEdicion] = useState(false);
-  const [platilloEditando, setPlatilloEditando] = useState(null);
-  const [modalAlerta, setModalAlerta] = useState(null);
-  const [modalConfirmacion, setModalConfirmacion] = useState(null);
-  const [imagenPreview, setImagenPreview] = useState(null);
-  const [archivoImagen, setArchivoImagen] = useState(null);
+const FORM_VACIO = { nombre: '', descripcion: '', precio: '', categoria: 'Platos Principales', imagenUrl: '' };
 
-  const [formData, setFormData] = useState({
-    nombre: '',
-    descripcion: '',
-    precio: '',
-    imagenUrl: '',
-    categoria: 'Platos Principales'
+const FILTROS = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'agotado', label: 'Agotados' },
+  { id: 'sin-receta', label: 'Sin receta' },
+];
+
+/** Reduce la foto a 1000 px como máximo antes de guardarla en Base64: la carta carga más rápido. */
+const reducirImagen = (archivo, maximo = 1000) =>
+  new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onerror = reject;
+    lector.onload = () => {
+      const img = new Image();
+      img.onerror = () => resolve(lector.result);
+      img.onload = () => {
+        const escala = Math.min(1, maximo / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; // una PNG transparente no queda con fondo negro en JPEG
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = lector.result;
+    };
+    lector.readAsDataURL(archivo);
   });
 
-  const categorias = [
-    'Entradas',
-    'Platos Principales', 
-    'Postres',
-    'Bebidas',
-    'Ensaladas',
-    'Sopas'
-  ];
+function Foto({ src, alt, className = '' }) {
+  const [fallo, setFallo] = useState(false);
+  useEffect(() => setFallo(false), [src]);
+  if (!src || fallo) {
+    return (
+      <div className={`grid place-items-center bg-orange-50 ${className}`}>
+        <UtensilsCrossed className="text-orange-300" size={32} strokeWidth={1.5} aria-hidden="true" />
+      </div>
+    );
+  }
+  return <img src={src} alt={alt} loading="lazy" onError={() => setFallo(true)} className={`object-cover ${className}`} />;
+}
+
+function TarjetaPlatillo({ platillo, costo, onAbrir }) {
+  const estado = estadoPlatillo(platillo);
+  const porcentaje = costo != null && platillo.precio > 0 ? Math.round((costo / platillo.precio) * 100) : null;
+  return (
+    <li>
+      <button type="button" onClick={onAbrir} className="group block w-full text-left" aria-label={`Editar ${platillo.nombre}`}>
+        <div className="relative overflow-hidden rounded-[20px] bg-gray-100 shadow-card transition-shadow duration-300 group-hover:shadow-lift">
+          <Foto src={platillo.imagenUrl} alt="" className="aspect-[4/3] w-full transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.04]" />
+          <span className="absolute left-2.5 top-2.5"><Chip tono={estado.tono} className="shadow-card">{estado.texto}</Chip></span>
+        </div>
+        <div className="px-1 pt-2.5">
+          <p className="truncate text-[16px] font-bold text-espresso">{platillo.nombre}</p>
+          <p className="truncate text-[13px] text-gray-500">{platillo.categoria}</p>
+          <p className="mt-1 flex items-center justify-between gap-2">
+            <span className="tabular text-[15px] font-extrabold text-espresso">{formatearCOP(platillo.precio)}</span>
+            {porcentaje != null && <Chip tono={tonoCosto(porcentaje)}>Costo {porcentaje} %</Chip>}
+          </p>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function FichaPlatillo({ platillo, platillos, recetas, insumos, mostrar, onGuardado, onRecetaCambio }) {
+  const [form, setForm] = useState(FORM_VACIO);
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    setForm(platillo
+      ? { nombre: platillo.nombre, descripcion: platillo.descripcion ?? '', precio: String(platillo.precio), categoria: platillo.categoria ?? '', imagenUrl: platillo.imagenUrl ?? '' }
+      : FORM_VACIO);
+  }, [platillo]);
+
+  const cambiar = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+  const precio = Number(form.precio) || 0;
+
+  const elegirFoto = async (e) => {
+    const archivo = e.target.files?.[0];
+    e.target.value = '';
+    if (!archivo) return;
+    if (!archivo.type.startsWith('image/')) return mostrar('Elige un archivo de imagen (JPG, PNG o WEBP)', 'error');
+    if (archivo.size > 8 * 1024 * 1024) return mostrar('La foto no debe pasar de 8 MB', 'error');
+    try {
+      const imagenUrl = await reducirImagen(archivo);
+      setForm((f) => ({ ...f, imagenUrl }));
+    } catch {
+      mostrar('No se pudo leer la foto', 'error');
+    }
+  };
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    const error = validarPlatillo(form, platillos, platillo?.id ?? null);
+    if (error) return mostrar(error, 'error');
+
+    const datos = {
+      nombre: form.nombre.trim(),
+      descripcion: form.descripcion.trim(),
+      precio,
+      categoria: form.categoria.trim() || 'General',
+      imagenUrl: form.imagenUrl.trim(),
+    };
+    setGuardando(true);
+    try {
+      if (platillo) {
+        await api.updatePlatillo(platillo.id, datos);
+        mostrar('Platillo actualizado');
+        onGuardado(platillo.id);
+      } else {
+        const creado = await api.createPlatillo(datos);
+        mostrar('Platillo creado. Ahora arma su receta');
+        onGuardado(creado.id);
+      }
+    } catch (err) {
+      mostrar(err.message, 'error');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const actuarReceta = async (promesa, ok) => {
+    try {
+      await promesa;
+      if (ok) mostrar(ok);
+      await onRecetaCambio();
+    } catch (err) {
+      mostrar(err?.response?.data?.message ?? 'No se pudo guardar la receta', 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-6 p-5">
+      <form id="form-platillo" onSubmit={guardar} className="space-y-4" noValidate>
+        <div className="flex items-start gap-4">
+          <Foto src={form.imagenUrl} alt={form.nombre ? `Foto de ${form.nombre}` : 'Sin foto'} className="aspect-[4/3] w-36 shrink-0 rounded-[16px] bg-gray-100 sm:w-44" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 text-[14px] font-bold text-espresso transition-colors hover:border-gray-400 hover:bg-gray-50 focus-within:ring-4 focus-within:ring-orange-100">
+              <ImagePlus size={17} aria-hidden="true" />
+              {form.imagenUrl ? 'Cambiar foto' : 'Subir foto'}
+              <input type="file" accept="image/*" onChange={elegirFoto} className="sr-only" />
+            </label>
+            {form.imagenUrl && (
+              <Boton variante="fantasma" tamano="sm" onClick={() => setForm((f) => ({ ...f, imagenUrl: '' }))}>Quitar foto</Boton>
+            )}
+            <p className="text-[12px] text-gray-500">Sin foto, la carta muestra el ícono de cubiertos.</p>
+          </div>
+        </div>
+
+        <Campo label="Nombre" value={form.nombre} onChange={cambiar('nombre')} maxLength={100} placeholder="Hamburguesa clásica" autoFocus={!platillo} />
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo
+            label="Precio de venta (COP)"
+            type="number" min="0" step="100" inputMode="numeric"
+            value={form.precio} onChange={cambiar('precio')} placeholder="25000"
+            ayuda={precio > 0 ? `${etiquetaImpuesto()}: ${formatearCOP(impuestoIncluido(precio))}` : etiquetaImpuesto()}
+          />
+          <Campo
+            label="Categoría" list="categorias-platillo" maxLength={50}
+            value={form.categoria} onChange={cambiar('categoria')} placeholder="Platos Principales"
+            ayuda="Agrupa el platillo en la carta del QR"
+          />
+          <datalist id="categorias-platillo">
+            {categoriasDisponibles(platillos).map((c) => <option key={c} value={c} />)}
+          </datalist>
+        </div>
+
+        <label className="block">
+          <span className="mb-1.5 block text-[13px] font-semibold text-gray-600">Descripción</span>
+          <textarea
+            value={form.descripcion} onChange={cambiar('descripcion')} rows={3}
+            placeholder="Lo que lleva y cómo se sirve"
+            className="w-full resize-none rounded-xl border border-gray-300 bg-white px-3.5 py-2.5 text-[15px] leading-relaxed text-espresso placeholder:text-gray-500 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
+          />
+        </label>
+
+        <details className="group">
+          <summary className="cursor-pointer text-[13px] font-semibold text-orange-700 hover:text-espresso">Usar una foto desde internet</summary>
+          <Campo className="mt-2" type="url" value={form.imagenUrl.startsWith('data:') ? '' : form.imagenUrl} onChange={cambiar('imagenUrl')} placeholder="https://…/foto.jpg" aria-label="Dirección de la foto" />
+        </details>
+
+        {guardando && <p className="text-[13px] text-gray-500" role="status">Guardando…</p>}
+      </form>
+
+      {platillo ? (
+        <section aria-label="Receta">
+          <EditorReceta
+            key={platillo.id}
+            platillo={{ ...platillo, precio: precio || platillo.precio }}
+            recetas={recetas}
+            insumos={insumos}
+            actuar={actuarReceta}
+            mostrar={mostrar}
+            titulo="Receta por porción"
+          />
+          <p className="mt-2 text-[13px] text-gray-500">
+            Cada venta descuenta estos insumos del inventario. Si alguno se acaba, la carta marca el platillo como no disponible.
+          </p>
+        </section>
+      ) : (
+        <p className="rounded-2xl bg-gray-100 px-4 py-3 text-[14px] text-gray-600">
+          Al crear el platillo podrás armar su receta aquí mismo para que descuente inventario.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function GestionPlatillos() {
+  const [platillos, setPlatillos] = useState(null);
+  const [recetas, setRecetas] = useState([]);
+  const [insumos, setInsumos] = useState([]);
+  const [q, setQ] = useState('');
+  const [categoria, setCategoria] = useState(null);
+  const [filtro, setFiltro] = useState('todos');
+  const [editando, setEditando] = useState(null); // null, 'nuevo' o el id del platillo
+  const [aviso, mostrar] = useAviso();
+
+  const cargarPlatillos = useCallback(async () => {
+    try {
+      setPlatillos(await api.getPlatillos());
+    } catch {
+      setPlatillos((p) => p ?? []);
+      mostrar('No se pudieron cargar los platillos', 'error');
+    }
+  }, [mostrar]);
+
+  const cargarRecetas = useCallback(async () => {
+    const [r, i] = await Promise.all([getRecetas().catch(() => []), compras.insumos().catch(() => [])]);
+    setRecetas(r);
+    setInsumos(i);
+  }, []);
 
   useEffect(() => {
     cargarPlatillos();
-  }, []);
+    cargarRecetas();
+  }, [cargarPlatillos, cargarRecetas]);
 
-  const cargarPlatillos = async () => {
-    setCargando(true);
+  // Costo por porción de cada platillo según su receta y el costo de los insumos.
+  const costos = useMemo(() => {
+    const precio = Object.fromEntries(insumos.map((i) => [i.id, i.precioCosto ?? 0]));
+    const r = {};
+    recetas.forEach((x) => { r[x.platilloId] = (r[x.platilloId] ?? 0) + x.cantidadRequerida * (precio[x.productoId] ?? 0); });
+    return r;
+  }, [recetas, insumos]);
+
+  const lista = useMemo(() => platillos ?? [], [platillos]);
+  const conteo = useMemo(() => {
+    const c = { todos: lista.length, agotado: 0, 'sin-receta': 0 };
+    lista.forEach((p) => { const k = estadoPlatillo(p).clave; if (k in c) c[k] += 1; });
+    return c;
+  }, [lista]);
+  const categorias = useMemo(() => [...new Set(lista.map((p) => p.categoria || 'General'))].sort((a, b) => a.localeCompare(b, 'es')), [lista]);
+
+  const visibles = lista
+    .filter((p) => !categoria || (p.categoria || 'General') === categoria)
+    .filter((p) => filtro === 'todos' || estadoPlatillo(p).clave === filtro)
+    .filter((p) => !q.trim() || coincide(p.nombre, q) || coincide(p.descripcion, q))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+  const seleccionado = typeof editando === 'number' ? lista.find((p) => p.id === editando) : null;
+  const cerrar = useCallback(() => setEditando(null), []);
+
+  const eliminar = async () => {
     try {
-      const data = await api.getPlatillos();
-      setPlatillos(data);
-    } catch (error) {
-      console.error('Error al cargar platillos:', error);
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'No se pudieron cargar los platillos'
-      });
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const abrirModalNuevo = () => {
-    setModoEdicion(false);
-    setPlatilloEditando(null);
-    setImagenPreview(null);
-    setArchivoImagen(null);
-    setFormData({
-      nombre: '',
-      descripcion: '',
-      precio: '',
-      imagenUrl: '',
-      categoria: 'Platos Principales'
-    });
-    setModalAbierto(true);
-  };
-
-  const abrirModalEditar = (platillo) => {
-    setModoEdicion(true);
-    setPlatilloEditando(platillo);
-    setImagenPreview(platillo.imagenUrl);
-    setArchivoImagen(null);
-    setFormData({
-      nombre: platillo.nombre,
-      descripcion: platillo.descripcion,
-      precio: platillo.precio.toString(),
-      imagenUrl: platillo.imagenUrl || '',
-      categoria: platillo.categoria || 'Platos Principales'
-    });
-    setModalAbierto(true);
-  };
-
-  const cerrarModal = () => {
-    setModalAbierto(false);
-    setModoEdicion(false);
-    setPlatilloEditando(null);
-    setImagenPreview(null);
-    setArchivoImagen(null);
-    setFormData({
-      nombre: '',
-      descripcion: '',
-      precio: '',
-      imagenUrl: '',
-      categoria: 'Platos Principales'
-    });
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleImagenChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      // Validar que sea una imagen
-      if (!file.type.startsWith('image/')) {
-        setModalAlerta({
-          tipo: 'error',
-          titulo: 'Error',
-          mensaje: 'Por favor selecciona un archivo de imagen válido'
-        });
-        return;
-      }
-
-      // Validar tamaño (máximo 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setModalAlerta({
-          tipo: 'error',
-          titulo: 'Error',
-          mensaje: 'La imagen no debe superar los 5MB'
-        });
-        return;
-      }
-
-      setArchivoImagen(file);
-
-      // Crear preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagenPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const validarFormulario = () => {
-    if (!formData.nombre.trim()) {
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'El nombre es obligatorio'
-      });
-      return false;
-    }
-    if (!formData.precio || parseFloat(formData.precio) <= 0) {
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'El precio debe ser mayor a 0'
-      });
-      return false;
-    }
-    return true;
-  };
-
-  const convertirImagenABase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validarFormulario()) return;
-
-    setCargando(true);
-    try {
-      let imagenUrl = formData.imagenUrl;
-
-      // Si se seleccionó una nueva imagen, convertirla a base64
-      if (archivoImagen) {
-        imagenUrl = await convertirImagenABase64(archivoImagen);
-      }
-
-      // Si no hay imagen, usar una por defecto
-      if (!imagenUrl) {
-        imagenUrl = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
-      }
-
-      const platilloData = {
-        nombre: formData.nombre.trim(),
-        descripcion: formData.descripcion.trim(),
-        precio: parseFloat(formData.precio),
-        imagenUrl: imagenUrl,
-        categoria: formData.categoria
-      };
-
-      if (modoEdicion && platilloEditando) {
-        await api.updatePlatillo(platilloEditando.id, platilloData);
-        setModalAlerta({
-          tipo: 'exito',
-          titulo: '¡Actualizado!',
-          mensaje: 'Platillo actualizado exitosamente'
-        });
-      } else {
-        await api.createPlatillo(platilloData);
-        setModalAlerta({
-          tipo: 'exito',
-          titulo: '¡Creado!',
-          mensaje: 'Platillo creado exitosamente'
-        });
-      }
-
-      cerrarModal();
+      await api.deletePlatillo(seleccionado.id);
+      mostrar(`${seleccionado.nombre} salió de la carta`);
+      setEditando(null);
       await cargarPlatillos();
-    } catch (error) {
-      console.error('Error al guardar platillo:', error);
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: error.message || 'Error al guardar el platillo'
-      });
-    } finally {
-      setCargando(false);
+    } catch (err) {
+      mostrar(err.message, 'error');
     }
-  };
-
-  const confirmarEliminar = (platillo) => {
-    setModalConfirmacion({
-      titulo: '¿Eliminar platillo?',
-      mensaje: `¿Estás seguro de eliminar "${platillo.nombre}"? Esta acción no se puede deshacer.`,
-      onConfirmar: () => eliminarPlatillo(platillo.id),
-      onCancelar: () => setModalConfirmacion(null)
-    });
-  };
-
-  const eliminarPlatillo = async (id) => {
-    setModalConfirmacion(null);
-    setCargando(true);
-    try {
-      await api.deletePlatillo(id);
-      setModalAlerta({
-        tipo: 'exito',
-        titulo: '¡Eliminado!',
-        mensaje: 'Platillo eliminado exitosamente'
-      });
-      await cargarPlatillos();
-    } catch (error) {
-      console.error('Error al eliminar platillo:', error);
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: error.message || 'Error al eliminar el platillo'
-      });
-    } finally {
-      setCargando(false);
-    }
-  };
-
-  const formatearPrecio = (precio) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(precio);
-  };
-
-  const getColorCategoria = (categoria) => {
-    const colores = {
-      'Entradas': 'bg-green-100 text-green-700',
-      'Platos Principales': 'bg-orange-100 text-orange-700',
-      'Postres': 'bg-pink-100 text-pink-700',
-      'Bebidas': 'bg-blue-100 text-blue-700',
-      'Ensaladas': 'bg-lime-100 text-lime-700',
-      'Sopas': 'bg-amber-100 text-amber-700'
-    };
-    return colores[categoria] || 'bg-gray-100 text-gray-700';
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <ChefHat className="text-orange-600" size={32} />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">Gestión de Platillos</h1>
-                <p className="text-gray-600">Administra el menú del restaurante</p>
-              </div>
-            </div>
-            <button
-              onClick={abrirModalNuevo}
-              disabled={cargando}
-              className="flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-lg hover:bg-orange-600 transition-colors font-semibold disabled:opacity-50"
-            >
-              <Plus size={20} />
-              Nuevo Platillo
-            </button>
+      <main className="mx-auto max-w-[1440px] px-4 py-6 lg:px-6 lg:py-8">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.02em] text-espresso">Platillos</h1>
+            <p className="mt-1 text-[15px] text-gray-500">La carta del QR, con la disponibilidad que calcula el inventario y el costo de cada receta.</p>
           </div>
-        </div>
-      </header>
+          <Boton tamano="lg" onClick={() => setEditando('nuevo')}><Plus size={18} aria-hidden="true" />Nuevo platillo</Boton>
+        </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        {cargando && platillos.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-600">Cargando platillos...</p>
+        <div className="mb-5 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="relative block min-w-[220px] flex-1 sm:max-w-sm">
+              <span className="sr-only">Buscar platillo</span>
+              <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+              <input
+                value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar platillo"
+                className="h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-3.5 text-[15px] text-espresso placeholder:text-gray-500 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
+              />
+            </label>
+            <div className="flex gap-1 rounded-full bg-white p-1 ring-1 ring-gray-200" role="group" aria-label="Filtrar por disponibilidad">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.id} type="button" onClick={() => setFiltro(f.id)} aria-pressed={filtro === f.id}
+                  className={`tabular h-9 rounded-full px-3.5 text-[14px] font-bold transition-colors ${filtro === f.id ? 'bg-espresso text-white' : 'text-gray-600 hover:text-espresso'}`}
+                >
+                  {f.label} <span className={filtro === f.id ? 'text-white/70' : 'text-gray-400'}>{conteo[f.id]}</span>
+                </button>
+              ))}
             </div>
           </div>
-        ) : platillos.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <ChefHat className="mx-auto text-gray-400 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay platillos</h3>
-            <p className="text-gray-500 mb-6">Comienza agregando tu primer platillo al menú</p>
-            <button
-              onClick={abrirModalNuevo}
-              className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors"
-            >
-              Agregar Platillo
-            </button>
+
+          {categorias.length > 1 && (
+            <div className="qp-rail -mx-1 flex gap-1 overflow-x-auto px-1" role="group" aria-label="Filtrar por categoría">
+              {[null, ...categorias].map((c) => (
+                <button
+                  key={c ?? 'todas'} type="button" onClick={() => setCategoria(c)} aria-pressed={categoria === c}
+                  className={`h-9 shrink-0 rounded-full px-3.5 text-[14px] font-semibold transition-colors ${categoria === c ? 'bg-orange-100 text-espresso' : 'text-gray-500 hover:text-espresso'}`}
+                >
+                  {c ?? 'Todas las categorías'}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!platillos ? (
+          <Cargando filas={4} />
+        ) : lista.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white">
+            <Vacio icono={UtensilsCrossed} titulo="La carta está vacía" texto="Crea el primer platillo para que aparezca en el menú del QR.">
+              <Boton onClick={() => setEditando('nuevo')}><Plus size={18} aria-hidden="true" />Nuevo platillo</Boton>
+            </Vacio>
+          </div>
+        ) : visibles.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white">
+            <Vacio icono={Search} titulo="Ningún platillo coincide" texto="Prueba con otra búsqueda o quita los filtros.">
+              <Boton variante="secundario" onClick={() => { setQ(''); setFiltro('todos'); setCategoria(null); }}>Quitar filtros</Boton>
+            </Vacio>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {platillos.map(platillo => (
-              <div key={platillo.id} className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-                <div className="h-48 overflow-hidden bg-gray-200">
-                  <img 
-                    src={platillo.imagenUrl} 
-                    alt={platillo.nombre}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
-                    }}
-                  />
-                </div>
-                <div className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-bold text-lg text-gray-800 flex-1">{platillo.nombre}</h3>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${getColorCategoria(platillo.categoria)}`}>
-                      {platillo.categoria}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                    {platillo.descripcion}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xl font-bold text-orange-600">
-                      {formatearPrecio(platillo.precio)}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => abrirModalEditar(platillo)}
-                        className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
-                        title="Editar"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button
-                        onClick={() => confirmarEliminar(platillo)}
-                        className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                        title="Eliminar"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+            {visibles.map((p) => (
+              <TarjetaPlatillo key={p.id} platillo={p} costo={costos[p.id]} onAbrir={() => setEditando(p.id)} />
             ))}
-          </div>
+          </ul>
         )}
-      </div>
+      </main>
 
-      {/* Modal Crear/Editar */}
-      {modalAbierto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">
-                {modoEdicion ? 'Editar Platillo' : 'Nuevo Platillo'}
-              </h2>
-              <button onClick={cerrarModal} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre del Platillo *
-                </label>
-                <input
-                  type="text"
-                  name="nombre"
-                  value={formData.nombre}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="Ej: Hamburguesa Clásica"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Descripción
-                </label>
-                <textarea
-                  name="descripcion"
-                  value={formData.descripcion}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
-                  rows="3"
-                  placeholder="Describe los ingredientes y características del platillo"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Precio * (COP)
-                  </label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type="number"
-                      name="precio"
-                      value={formData.precio}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                      placeholder="15000"
-                      min="0"
-                      step="100"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Categoría *
-                  </label>
-                  <div className="relative">
-                    <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <select
-                      name="categoria"
-                      value={formData.categoria}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent appearance-none"
-                      required
-                    >
-                      {categorias.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección de imagen */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Imagen del Platillo
-                </label>
-                
-                {/* Vista previa de la imagen */}
-                {imagenPreview && (
-                  <div className="mb-4 border-2 border-gray-200 rounded-lg p-2">
-                    <img 
-                      src={imagenPreview} 
-                      alt="Vista previa"
-                      className="w-full h-48 object-cover rounded-lg"
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop';
-                      }}
-                    />
-                  </div>
-                )}
-
-                {/* Botón para subir archivo */}
-                <div className="flex items-center gap-3">
-                  <label className="flex-1 cursor-pointer">
-                    <div className="flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors">
-                      <Upload size={20} className="text-gray-600" />
-                      <span className="text-sm font-medium text-gray-700">
-                        {archivoImagen ? archivoImagen.name : 'Seleccionar imagen desde tu computadora'}
-                      </span>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImagenChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Formatos: JPG, PNG, GIF. Tamaño máximo: 5MB
-                </p>
-              </div>
-
-              {/* URL alternativa */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  O proporciona una URL de imagen
-                </label>
-                <div className="relative">
-                  <ImageIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="url"
-                    name="imagenUrl"
-                    value={formData.imagenUrl}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="https://ejemplo.com/imagen.jpg"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={cerrarModal}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={cargando}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Save size={20} />
-                  {modoEdicion ? 'Actualizar' : 'Crear'} Platillo
-                </button>
-              </div>
-            </form>
+      <Panel
+        abierto={editando !== null}
+        onCerrar={cerrar}
+        titulo={seleccionado ? seleccionado.nombre : 'Nuevo platillo'}
+        subtitulo={seleccionado ? `${seleccionado.categoria} · ${estadoPlatillo(seleccionado).texto}` : 'Aparece en la carta del QR apenas lo guardes.'}
+        ancho="md:w-[640px]"
+        pie={
+          <div className="flex items-center gap-2">
+            {seleccionado && (
+              <BotonConfirmar confirmar="Toca otra vez para eliminar" onConfirmar={eliminar}>
+                <Trash2 size={16} aria-hidden="true" />Eliminar
+              </BotonConfirmar>
+            )}
+            <Boton variante="secundario" className="ml-auto" onClick={cerrar}>Cerrar</Boton>
+            <Boton type="submit" form="form-platillo">{seleccionado ? 'Guardar cambios' : 'Crear platillo'}</Boton>
           </div>
-        </div>
-      )}
-
-      {/* Modal de Confirmación */}
-      {modalConfirmacion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="text-red-600" size={32} />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">{modalConfirmacion.titulo}</h3>
-              <p className="text-gray-600">{modalConfirmacion.mensaje}</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={modalConfirmacion.onCancelar}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={modalConfirmacion.onConfirmar}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-semibold transition-colors"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal de Alerta */}
-      {modalAlerta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="text-center mb-6">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                modalAlerta.tipo === 'exito' ? 'bg-green-100' : 'bg-red-100'
-              }`}>
-                <span className="text-4xl">{modalAlerta.tipo === 'exito' ? '✅' : '❌'}</span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">{modalAlerta.titulo}</h3>
-              <p className="text-gray-600">{modalAlerta.mensaje}</p>
-            </div>
-            <button
-              onClick={() => setModalAlerta(null)}
-              className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                modalAlerta.tipo === 'exito' 
-                  ? 'bg-green-500 hover:bg-green-600 text-white' 
-                  : 'bg-red-500 hover:bg-red-600 text-white'
-              }`}
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
+        }
+      >
+        {editando !== null && (
+          <FichaPlatillo
+            key={seleccionado?.id ?? 'nuevo'}
+            platillo={seleccionado}
+            platillos={lista}
+            recetas={recetas}
+            insumos={insumos}
+            mostrar={mostrar}
+            onGuardado={async (id) => { await cargarPlatillos(); setEditando(id); }}
+            onRecetaCambio={async () => { await Promise.all([cargarRecetas(), cargarPlatillos()]); }}
+          />
+        )}
+      </Panel>
+      {aviso}
     </div>
   );
 }

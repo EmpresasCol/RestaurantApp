@@ -1,587 +1,263 @@
-// src/GestionUsuarios.js
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Users, Shield, Eye, EyeOff, CheckCircle, AlertCircle, Lock } from 'lucide-react';
+// Usuarios: quién entra a Qpro, con qué rol y por dónde (web o app móvil).
+// Los domiciliarios creados aquí aparecen en Domicilios; los meseros entran por la app.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Eye, EyeOff, Monitor, Plus, Search, Smartphone, Trash2, Users } from 'lucide-react';
 import * as api from './services/api';
+import { useAuth } from './context/AuthContext';
+import { Boton, BotonConfirmar, Campo, Cargando, Chip, Lista, Panel, useAviso, Vacio } from './components/inventario/ui';
+import { coincide, iniciales, ROLES, validarUsuario } from './utils/administracion';
 
-function GestionUsuarios() {
-  const [usuarios, setUsuarios] = useState([]);
-  const [cargando, setCargando] = useState(false);
-  const [modalAbierto, setModalAbierto] = useState(false);
-  const [modoEdicion, setModoEdicion] = useState(false);
-  const [usuarioEditando, setUsuarioEditando] = useState(null);
-  const [modalAlerta, setModalAlerta] = useState(null);
-  const [modalConfirmacion, setModalConfirmacion] = useState(null);
-  const [mostrarPassword, setMostrarPassword] = useState(false);
+const FORM_VACIO = { nombre: '', nombreUsuario: '', rol: 'Caja', clave: '', confirmarClave: '' };
+const rolDe = (id) => ROLES.find((r) => r.id === id);
 
-  const [formData, setFormData] = useState({
-    nombreUsuario: '',
-    clave: '',
-    confirmarClave: '',
-    nombre: '',
-    rol: 'Caja'
-  });
+function Acceso({ rol }) {
+  const web = rolDe(rol)?.acceso === 'Web';
+  const Icono = web ? Monitor : Smartphone;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[13px] text-gray-500">
+      <Icono size={15} aria-hidden="true" />
+      {web ? 'Web' : 'App móvil'}
+    </span>
+  );
+}
 
-  const roles = ['Administrador', 'Caja', 'Cocina', 'Mesero', 'Domiciliario'];
-
-  const getRolColor = (rol) => {
-    const colores = {
-      'Administrador': 'bg-purple-100 text-purple-700 border-purple-300',
-      'Caja': 'bg-green-100 text-green-700 border-green-300',
-      'Cocina': 'bg-orange-100 text-orange-700 border-orange-300',
-      'Mesero': 'bg-blue-100 text-blue-700 border-blue-300',
-      'Domiciliario': 'bg-teal-100 text-teal-700 border-teal-300'
-    };
-    return colores[rol] || 'bg-gray-100 text-gray-700 border-gray-300';
-  };
-
-  const getRolIcon = (rol) => {
-    switch(rol) {
-      case 'Administrador':
-        return '👑';
-      case 'Caja':
-        return '💰';
-      case 'Cocina':
-        return '👨‍🍳';
-      case 'Mesero':
-        return '🍽️';
-      case 'Domiciliario':
-        return '🛵';
-      default:
-        return '👤';
-    }
-  };
+function FichaUsuario({ usuario, esPropio, mostrar, onGuardado }) {
+  const [form, setForm] = useState(FORM_VACIO);
+  const [verClave, setVerClave] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const edicion = !!usuario;
 
   useEffect(() => {
-    cargarUsuarios();
-  }, []);
+    setForm(usuario ? { nombre: usuario.nombre, nombreUsuario: usuario.nombreUsuario, rol: usuario.rol, clave: '', confirmarClave: '' } : FORM_VACIO);
+  }, [usuario]);
 
-  const cargarUsuarios = async () => {
-    setCargando(true);
-    try {
-      const data = await api.getUsuarios();
-      setUsuarios(data);
-      console.log('✅ Usuarios cargados:', data);
-    } catch (error) {
-      console.error('Error al cargar usuarios:', error);
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'No se pudieron cargar los usuarios'
-      });
-    } finally {
-      setCargando(false);
-    }
-  };
+  const cambiar = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
 
-  const abrirModalNuevo = () => {
-    setModoEdicion(false);
-    setUsuarioEditando(null);
-    setFormData({
-      nombreUsuario: '',
-      clave: '',
-      confirmarClave: '',
-      nombre: '',
-      rol: 'Caja'
-    });
-    setModalAbierto(true);
-  };
-
-  const abrirModalEditar = (usuario) => {
-    setModoEdicion(true);
-    setUsuarioEditando(usuario);
-    setFormData({
-      nombreUsuario: usuario.nombreUsuario,
-      clave: '',
-      confirmarClave: '',
-      nombre: usuario.nombre,
-      rol: usuario.rol
-    });
-    setModalAbierto(true);
-  };
-
-  const cerrarModal = () => {
-    setModalAbierto(false);
-    setModoEdicion(false);
-    setUsuarioEditando(null);
-    setMostrarPassword(false);
-    setFormData({
-      nombreUsuario: '',
-      clave: '',
-      confirmarClave: '',
-      nombre: '',
-      rol: 'Caja'
-    });
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const validarFormulario = () => {
-    if (!formData.nombreUsuario.trim()) {
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'El nombre de usuario es obligatorio'
-      });
-      return false;
-    }
-
-    if (formData.nombreUsuario.length < 3) {
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'El nombre de usuario debe tener al menos 3 caracteres'
-      });
-      return false;
-    }
-
-    if (!formData.nombre.trim()) {
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: 'El nombre completo es obligatorio'
-      });
-      return false;
-    }
-
-    if (!modoEdicion || formData.clave) {
-      if (!formData.clave) {
-        setModalAlerta({
-          tipo: 'error',
-          titulo: 'Error',
-          mensaje: 'La contraseña es obligatoria'
-        });
-        return false;
-      }
-
-      if (formData.clave.length < 4) {
-        setModalAlerta({
-          tipo: 'error',
-          titulo: 'Error',
-          mensaje: 'La contraseña debe tener al menos 4 caracteres'
-        });
-        return false;
-      }
-
-      if (formData.clave !== formData.confirmarClave) {
-        setModalAlerta({
-          tipo: 'error',
-          titulo: 'Error',
-          mensaje: 'Las contraseñas no coinciden'
-        });
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  const handleSubmit = async (e) => {
+  const guardar = async (e) => {
     e.preventDefault();
-    
-    if (!validarFormulario()) return;
+    const error = validarUsuario(form, { edicion });
+    if (error) return mostrar(error, 'error');
 
-    setCargando(true);
+    const datos = { nombre: form.nombre.trim(), nombreUsuario: form.nombreUsuario.trim(), rol: form.rol, clave: form.clave };
+    setGuardando(true);
     try {
-      const usuarioData = {
-        nombreUsuario: formData.nombreUsuario.trim(),
-        nombre: formData.nombre.trim(),
-        rol: formData.rol
-      };
-
-      if (formData.clave) {
-        usuarioData.clave = formData.clave;
-      }
-
-      if (modoEdicion && usuarioEditando) {
-        await api.updateUsuario(usuarioEditando.id, usuarioData);
-        setModalAlerta({
-          tipo: 'exito',
-          titulo: '¡Actualizado!',
-          mensaje: 'Usuario actualizado exitosamente'
-        });
+      if (edicion) {
+        await api.updateUsuario(usuario.id, datos);
+        mostrar(form.clave ? 'Usuario y clave actualizados' : 'Usuario actualizado');
+        onGuardado(usuario.id);
       } else {
-        await api.createUsuario(usuarioData);
-        setModalAlerta({
-          tipo: 'exito',
-          titulo: '¡Creado!',
-          mensaje: 'Usuario creado exitosamente'
-        });
+        const creado = await api.createUsuario(datos);
+        mostrar(`${datos.nombre} ya puede entrar por ${rolDe(datos.rol).acceso === 'Web' ? 'la web' : 'la app móvil'}`);
+        onGuardado(creado.id);
       }
-
-      cerrarModal();
-      await cargarUsuarios();
-    } catch (error) {
-      console.error('Error al guardar usuario:', error);
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: error.message || 'Error al guardar el usuario'
-      });
+    } catch (err) {
+      mostrar(err.message, 'error');
     } finally {
-      setCargando(false);
+      setGuardando(false);
     }
   };
 
-  const confirmarEliminar = (usuario) => {
-    setModalConfirmacion({
-      titulo: '¿Eliminar usuario?',
-      mensaje: `¿Estás seguro de eliminar al usuario "${usuario.nombreUsuario}"? Esta acción no se puede deshacer.`,
-      onConfirmar: () => eliminarUsuario(usuario.id),
-      onCancelar: () => setModalConfirmacion(null)
-    });
-  };
+  return (
+    <form id="form-usuario" onSubmit={guardar} className="space-y-5 p-5" noValidate>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Campo label="Nombre completo" value={form.nombre} onChange={cambiar('nombre')} placeholder="Ana Ruiz" autoFocus={!edicion} autoComplete="off" />
+        <Campo
+          label="Usuario para entrar" value={form.nombreUsuario} onChange={cambiar('nombreUsuario')}
+          placeholder="ana.caja" autoComplete="off" autoCapitalize="none" spellCheck={false}
+          ayuda="Sin espacios, mínimo 3 caracteres"
+        />
+      </div>
 
-  const eliminarUsuario = async (id) => {
-    setModalConfirmacion(null);
-    setCargando(true);
+      <fieldset>
+        <legend className="mb-1.5 text-[13px] font-semibold text-gray-600">Rol</legend>
+        {esPropio && <p className="mb-2 text-[13px] text-gray-500">No puedes cambiar tu propio rol; pídeselo a otro administrador.</p>}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {ROLES.map((r) => {
+            const activo = form.rol === r.id;
+            return (
+              <label
+                key={r.id}
+                className={`flex cursor-pointer gap-3 rounded-2xl border px-4 py-3 transition-colors has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-orange-100 ${
+                  activo ? 'border-espresso bg-white ring-1 ring-espresso' : 'border-gray-200 bg-white hover:border-gray-300'
+                } ${esPropio && !activo ? 'cursor-not-allowed opacity-50' : ''}`}
+              >
+                <input
+                  type="radio" name="rol" value={r.id} checked={activo} onChange={cambiar('rol')}
+                  disabled={esPropio && !activo} className="mt-1 h-4 w-4 accent-espresso"
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[15px] font-bold text-espresso">{r.id}</span>
+                    <Acceso rol={r.id} />
+                  </span>
+                  <span className="mt-0.5 block text-[13px] leading-snug text-gray-500">{r.descripcion}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="rounded-2xl bg-gray-100 p-4">
+        <legend className="sr-only">Clave</legend>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-[15px] font-bold text-espresso">{edicion ? 'Cambiar clave' : 'Clave'}</p>
+          <Boton variante="fantasma" tamano="sm" onClick={() => setVerClave((v) => !v)} aria-pressed={verClave}>
+            {verClave ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+            {verClave ? 'Ocultar' : 'Mostrar'}
+          </Boton>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Campo
+            label={edicion ? 'Clave nueva' : 'Clave'} type={verClave ? 'text' : 'password'} autoComplete="new-password"
+            value={form.clave} onChange={cambiar('clave')} ayuda="Mínimo 4 caracteres"
+          />
+          <Campo
+            label="Repite la clave" type={verClave ? 'text' : 'password'} autoComplete="new-password"
+            value={form.confirmarClave} onChange={cambiar('confirmarClave')}
+            ayuda={edicion ? 'Déjalas vacías para conservar la actual' : undefined}
+          />
+        </div>
+      </fieldset>
+
+      {guardando && <p className="text-[13px] text-gray-500" role="status">Guardando…</p>}
+    </form>
+  );
+}
+
+function GestionUsuarios() {
+  const { usuario: sesion } = useAuth();
+  const [usuarios, setUsuarios] = useState(null);
+  const [q, setQ] = useState('');
+  const [rol, setRol] = useState(null);
+  const [editando, setEditando] = useState(null); // null, 'nuevo' o el id del usuario
+  const [aviso, mostrar] = useAviso();
+
+  const cargar = useCallback(async () => {
     try {
-      await api.deleteUsuario(id);
-      setModalAlerta({
-        tipo: 'exito',
-        titulo: '¡Eliminado!',
-        mensaje: 'Usuario eliminado exitosamente'
-      });
-      await cargarUsuarios();
-    } catch (error) {
-      console.error('Error al eliminar usuario:', error);
-      setModalAlerta({
-        tipo: 'error',
-        titulo: 'Error',
-        mensaje: error.message || 'Error al eliminar el usuario'
-      });
-    } finally {
-      setCargando(false);
+      setUsuarios(await api.getUsuarios());
+    } catch {
+      setUsuarios((u) => u ?? []);
+      mostrar('No se pudieron cargar los usuarios', 'error');
+    }
+  }, [mostrar]);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const lista = useMemo(() => usuarios ?? [], [usuarios]);
+  const conteo = useMemo(() => Object.fromEntries(ROLES.map((r) => [r.id, lista.filter((u) => u.rol === r.id).length])), [lista]);
+  const visibles = lista
+    .filter((u) => !rol || u.rol === rol)
+    .filter((u) => !q.trim() || coincide(u.nombre, q) || coincide(u.nombreUsuario, q))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
+  const seleccionado = typeof editando === 'number' ? lista.find((u) => u.id === editando) : null;
+  const esPropio = seleccionado?.id === sesion?.id;
+  const cerrar = useCallback(() => setEditando(null), []);
+
+  const eliminar = async () => {
+    try {
+      await api.deleteUsuario(seleccionado.id);
+      mostrar(`${seleccionado.nombre} ya no tiene acceso`);
+      setEditando(null);
+      await cargar();
+    } catch (err) {
+      mostrar(err.message, 'error');
     }
   };
-
-  const estadisticasRoles = roles.reduce((acc, rol) => {
-    acc[rol] = usuarios.filter(u => u.rol === rol).length;
-    return acc;
-  }, {});
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Users className="text-purple-600" size={32} />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">Gestión de Usuarios</h1>
-                <p className="text-gray-600">Administra los usuarios del sistema</p>
-              </div>
-            </div>
-            <button
-              onClick={abrirModalNuevo}
-              disabled={cargando}
-              className="flex items-center gap-2 bg-purple-500 text-white px-6 py-3 rounded-lg hover:bg-purple-600 transition-colors font-semibold disabled:opacity-50"
-            >
-              <Plus size={20} />
-              Nuevo Usuario
-            </button>
+      <main className="mx-auto max-w-[1100px] px-4 py-6 lg:px-6 lg:py-8">
+        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.02em] text-espresso">Usuarios</h1>
+            <p className="mt-1 text-[15px] text-gray-500">Quién entra a Qpro, con qué rol y por dónde: la web o la app móvil.</p>
+          </div>
+          <Boton tamano="lg" onClick={() => setEditando('nuevo')}><Plus size={18} aria-hidden="true" />Nuevo usuario</Boton>
+        </header>
+
+        <div className="mb-4 space-y-3">
+          <label className="relative block max-w-sm">
+            <span className="sr-only">Buscar usuario</span>
+            <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+            <input
+              value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o usuario"
+              className="h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-3.5 text-[15px] text-espresso placeholder:text-gray-500 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
+            />
+          </label>
+          <div className="qp-rail -mx-1 flex gap-1 overflow-x-auto px-1" role="group" aria-label="Filtrar por rol">
+            {[null, ...ROLES.map((r) => r.id)].map((r) => (
+              <button
+                key={r ?? 'todos'} type="button" onClick={() => setRol(r)} aria-pressed={rol === r}
+                className={`tabular h-9 shrink-0 rounded-full px-3.5 text-[14px] font-bold transition-colors ${rol === r ? 'bg-espresso text-white' : 'text-gray-600 hover:bg-gray-100 hover:text-espresso'}`}
+              >
+                {r ?? 'Todos'} <span className={rol === r ? 'text-white/70' : 'text-gray-400'}>{r ? conteo[r] : lista.length}</span>
+              </button>
+            ))}
           </div>
         </div>
-      </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {roles.map(rol => (
-            <div key={rol} className="bg-white rounded-lg shadow-sm p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600">{rol}</p>
-                  <p className="text-2xl font-bold text-gray-900">{estadisticasRoles[rol]}</p>
-                </div>
-                <span className="text-3xl">{getRolIcon(rol)}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {cargando && usuarios.length === 0 ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-600">Cargando usuarios...</p>
-            </div>
-          </div>
-        ) : usuarios.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <Users className="mx-auto text-gray-400 mb-4" size={64} />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No hay usuarios</h3>
-            <p className="text-gray-500 mb-6">Comienza agregando el primer usuario al sistema</p>
-            <button
-              onClick={abrirModalNuevo}
-              className="bg-purple-500 text-white px-6 py-2 rounded-lg hover:bg-purple-600 transition-colors"
-            >
-              Agregar Usuario
-            </button>
+        {!usuarios ? (
+          <Cargando filas={5} />
+        ) : visibles.length === 0 ? (
+          <div className="rounded-2xl border border-gray-200 bg-white">
+            <Vacio icono={Users} titulo={lista.length ? 'Nadie coincide' : 'Aún no hay usuarios'} texto={lista.length ? 'Prueba con otra búsqueda o quita el filtro de rol.' : 'Crea el primero para que el equipo pueda entrar.'} />
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Usuario</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Nombre Completo</th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Rol</th>
-                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {usuarios.map((usuario) => (
-                    <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                            <span className="text-lg">{getRolIcon(usuario.rol)}</span>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900">{usuario.nombreUsuario}</p>
-                            <p className="text-xs text-gray-500">ID: {usuario.id}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-gray-900">{usuario.nombre}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border ${getRolColor(usuario.rol)}`}>
-                          <Shield size={14} />
-                          {usuario.rol}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => abrirModalEditar(usuario)}
-                            className="p-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors"
-                            title="Editar"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => confirmarEliminar(usuario)}
-                            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
-                            title="Eliminar"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <Lista>
+            {visibles.map((u) => (
+              <button
+                key={u.id} type="button" onClick={() => setEditando(u.id)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-orange-100 text-[13px] font-bold text-espresso" aria-hidden="true">
+                  {iniciales(u.nombre)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-[15px] font-bold text-espresso">{u.nombre}</span>
+                    {u.id === sesion?.id && <Chip tono="info">Tú</Chip>}
+                  </span>
+                  <span className="block truncate text-[13px] text-gray-500">@{u.nombreUsuario}</span>
+                </span>
+                <span className="hidden w-28 sm:block"><Acceso rol={u.rol} /></span>
+                <Chip className="w-28 justify-center">{u.rol}</Chip>
+              </button>
+            ))}
+          </Lista>
         )}
-      </div>
+      </main>
 
-      {modalAbierto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">
-                {modoEdicion ? 'Editar Usuario' : 'Nuevo Usuario'}
-              </h2>
-              <button onClick={cerrarModal} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nombre de Usuario *
-                  </label>
-                  <input
-                    type="text"
-                    name="nombreUsuario"
-                    value={formData.nombreUsuario}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                    placeholder="usuario123"
-                    required
-                    disabled={modoEdicion}
-                  />
-                  {modoEdicion && (
-                    <p className="text-xs text-gray-500 mt-1">El nombre de usuario no se puede cambiar</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Rol *</label>
-                  <div className="relative">
-                    <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <select
-                      name="rol"
-                      value={formData.rol}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent appearance-none"
-                      required
-                    >
-                      {roles.map(rol => (
-                        <option key={rol} value={rol}>{getRolIcon(rol)} {rol}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Nombre Completo *</label>
-                <input
-                  type="text"
-                  name="nombre"
-                  value={formData.nombre}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="Juan Pérez"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {modoEdicion ? 'Nueva Contraseña (dejar en blanco para no cambiar)' : 'Contraseña *'}
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type={mostrarPassword ? "text" : "password"}
-                      name="clave"
-                      value={formData.clave}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="••••••••"
-                      required={!modoEdicion}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setMostrarPassword(!mostrarPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {mostrarPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {modoEdicion ? 'Confirmar Nueva Contraseña' : 'Confirmar Contraseña *'}
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                    <input
-                      type={mostrarPassword ? "text" : "password"}
-                      name="confirmarClave"
-                      value={formData.confirmarClave}
-                      onChange={handleInputChange}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="••••••••"
-                      required={!modoEdicion || formData.clave}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {modoEdicion && !formData.clave && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-800">
-                    💡 Si no deseas cambiar la contraseña, deja los campos en blanco
-                  </p>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={cerrarModal}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={cargando}
-                  className="flex-1 bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <Save size={20} />
-                  {modoEdicion ? 'Actualizar' : 'Crear'} Usuario
-                </button>
-              </div>
-            </form>
+      <Panel
+        abierto={editando !== null}
+        onCerrar={cerrar}
+        titulo={seleccionado ? seleccionado.nombre : 'Nuevo usuario'}
+        subtitulo={seleccionado ? `@${seleccionado.nombreUsuario} · ${seleccionado.rol}` : 'Elige su rol: define qué ve y por dónde entra.'}
+        ancho="md:w-[620px]"
+        pie={
+          <div className="flex items-center gap-2">
+            {seleccionado && !esPropio && (
+              <BotonConfirmar confirmar="Toca otra vez para eliminar" onConfirmar={eliminar}>
+                <Trash2 size={16} aria-hidden="true" />Eliminar
+              </BotonConfirmar>
+            )}
+            <Boton variante="secundario" className="ml-auto" onClick={cerrar}>Cerrar</Boton>
+            <Boton type="submit" form="form-usuario">{seleccionado ? 'Guardar cambios' : 'Crear usuario'}</Boton>
           </div>
-        </div>
-      )}
-
-      {modalConfirmacion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="text-red-600" size={32} />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">{modalConfirmacion.titulo}</h3>
-              <p className="text-gray-600">{modalConfirmacion.mensaje}</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={modalConfirmacion.onCancelar}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 rounded-lg font-semibold transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={modalConfirmacion.onConfirmar}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-semibold transition-colors"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {modalAlerta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6">
-            <div className="text-center mb-6">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                modalAlerta.tipo === 'exito' ? 'bg-green-100' : 'bg-red-100'
-              }`}>
-                {modalAlerta.tipo === 'exito' ? (
-                  <CheckCircle className="text-green-600" size={32} />
-                ) : (
-                  <AlertCircle className="text-red-600" size={32} />
-                )}
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">{modalAlerta.titulo}</h3>
-              <p className="text-gray-600">{modalAlerta.mensaje}</p>
-            </div>
-            <button
-              onClick={() => setModalAlerta(null)}
-              className={`w-full py-3 rounded-lg font-semibold transition-colors ${
-                modalAlerta.tipo === 'exito' 
-                  ? 'bg-green-500 hover:bg-green-600 text-white' 
-                  : 'bg-red-500 hover:bg-red-600 text-white'
-              }`}
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
+        }
+      >
+        {editando !== null && (
+          <FichaUsuario
+            key={seleccionado?.id ?? 'nuevo'}
+            usuario={seleccionado}
+            esPropio={esPropio}
+            mostrar={mostrar}
+            onGuardado={async (id) => { await cargar(); setEditando(id); }}
+          />
+        )}
+      </Panel>
+      {aviso}
     </div>
   );
 }

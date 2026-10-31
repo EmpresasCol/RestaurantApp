@@ -125,3 +125,33 @@ describe('Gestión de usuarios', () => {
     expect(ultimaPeticion().cuerpo.Rol).toBe(4);
   });
 });
+
+describe('Platillos y mesas (administrador)', () => {
+  test('un 409 al eliminar un platillo muestra el mensaje de la API, no el JSON crudo', async () => {
+    global.fetch.mockReturnValue(fallo(409, { message: '"Pizza" ya tiene ventas registradas' }));
+    await expect(api.deletePlatillo(4)).rejects.toThrow('"Pizza" ya tiene ventas registradas');
+  });
+
+  test('updatePlatillo envía el id dentro del cuerpo', async () => {
+    global.fetch.mockReturnValue(ok({}, 204));
+    await api.updatePlatillo(4, { nombre: 'Pizza', precio: 30000 });
+    expect(ultimaPeticion().cuerpo).toEqual({ id: 4, nombre: 'Pizza', precio: 30000 });
+  });
+
+  test('fijarCantidadMesas usa PUT /mesas/cantidad', async () => {
+    global.fetch.mockReturnValue(ok([{ id: 1, numero: 1 }]));
+
+    const mesas = await api.fijarCantidadMesas(12);
+
+    const { url, opciones, cuerpo } = ultimaPeticion();
+    expect(url).toMatch(/\/mesas\/cantidad$/);
+    expect(opciones.method).toBe('PUT');
+    expect(cuerpo).toEqual({ cantidad: 12 });
+    expect(mesas).toHaveLength(1);
+  });
+
+  test('un error de validación de ASP.NET se traduce a su primer mensaje', async () => {
+    global.fetch.mockReturnValue(fallo(400, { title: 'One or more validation errors occurred.', errors: { Nombre: ['El nombre es obligatorio'] } }));
+    await expect(api.createUsuario({ nombreUsuario: 'ana', nombre: '', clave: '1234', rol: 'Caja' })).rejects.toThrow('El nombre es obligatorio');
+  });
+});

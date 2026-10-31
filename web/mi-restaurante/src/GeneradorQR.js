@@ -1,291 +1,224 @@
-import React, { useEffect, useState } from 'react';
+// Códigos QR de las mesas: el administrador fija cuántas mesas tiene el salón y obtiene un
+// código por mesa, con el número dentro del QR. El código lleva ?mesa=<id>&numero=<n>.
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Printer, Download, QrCode } from 'lucide-react';
-import { getMesas } from './services/api';
+import { Download, ExternalLink, Minus, Plus, Printer, QrCode } from 'lucide-react';
+import { fijarCantidadMesas, getMesas } from './services/api';
+import { Boton, Cargando, useAviso, Vacio } from './components/inventario/ui';
+import { cambioMesas, insigniaMesa, limitarMesas, MAXIMO_MESAS, urlMesa } from './utils/administracion';
+import logo from './components/logo.jpg';
+
+const ESPRESSO = '#2A1D15';
+const porNumero = (mesas) => [...mesas].sort((a, b) => a.numero - b.numero);
+
+const descargarPNG = async (nodo, nombre) => {
+  const { default: html2canvas } = await import('html2canvas');
+  const canvas = await html2canvas(nodo, { scale: 3, backgroundColor: '#ffffff', logging: false });
+  const enlace = document.createElement('a');
+  enlace.download = nombre;
+  enlace.href = canvas.toDataURL('image/png');
+  enlace.click();
+};
+
+/** Tarjeta imprimible de una mesa: el único diseño de QR de Qpro. */
+const TarjetaQR = React.forwardRef(function TarjetaQR({ mesa, url }, ref) {
+  return (
+    <article ref={ref} className="qp-tarjeta-qr w-[300px] rounded-[24px] border border-gray-200 bg-white p-6 text-center">
+      <div className="flex items-center justify-center gap-2">
+        <img src={logo} alt="" className="h-8 w-8 rounded-[10px] object-contain ring-1 ring-gray-200" />
+        <span className="text-[17px] font-extrabold tracking-[-0.01em] text-espresso">Qpro</span>
+      </div>
+      <p className="mt-5 text-[15px] font-semibold text-gray-500">Mesa</p>
+      <p className="tabular text-[56px] font-extrabold leading-none tracking-[-0.03em] text-espresso">{mesa.numero}</p>
+      <div className="mx-auto mt-5 w-fit rounded-[16px] bg-white p-2 ring-1 ring-gray-200">
+        <QRCodeSVG
+          value={url}
+          size={208}
+          level="H"
+          fgColor={ESPRESSO}
+          bgColor="#FFFFFF"
+          title={`Código QR de la mesa ${mesa.numero}`}
+          imageSettings={{ src: insigniaMesa(mesa.numero), width: 48, height: 48, excavate: true }}
+        />
+      </div>
+      <p className="mx-auto mt-5 max-w-[220px] text-[14px] font-medium leading-snug text-gray-600">
+        Escanea con la cámara, mira la carta y pide desde tu mesa.
+      </p>
+    </article>
+  );
+});
+
+function ControlMesas({ mesas, onGuardar, guardando }) {
+  const numeros = mesas.map((m) => m.numero);
+  const [texto, setTexto] = useState(String(mesas.length || 1));
+  useEffect(() => setTexto(String(mesas.length || 1)), [mesas.length]);
+
+  const cantidad = limitarMesas(texto);
+  const { crear, retirar } = cambioMesas(numeros, cantidad);
+  const hayCambio = crear > 0 || retirar.length > 0;
+  const mover = (d) => setTexto(String(limitarMesas(cantidad + d)));
+
+  return (
+    <section className="flex flex-wrap items-center gap-x-6 gap-y-4 rounded-2xl border border-gray-200 bg-white p-4 sm:p-5" aria-label="Número de mesas">
+      <div>
+        <label htmlFor="cantidad-mesas" className="block text-[15px] font-bold text-espresso">Mesas del salón</label>
+        <p className="tabular text-[13px] text-gray-500">
+          {hayCambio
+            ? [crear > 0 && `Se crean ${crear}`, retirar.length > 0 && `se retiran la${retirar.length > 1 ? 's' : ''} ${retirar.join(', ')}`].filter(Boolean).join(' y ')
+            : `Hay ${mesas.length} mesa${mesas.length === 1 ? '' : 's'} con su código`}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button" onClick={() => mover(-1)} disabled={cantidad <= 1}
+          className="grid h-11 w-11 place-items-center rounded-full border border-gray-300 bg-white text-espresso transition-colors hover:bg-gray-50 disabled:text-gray-300"
+          aria-label="Una mesa menos"
+        >
+          <Minus size={18} />
+        </button>
+        <input
+          id="cantidad-mesas" type="number" inputMode="numeric" min="1" max={MAXIMO_MESAS}
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => setTexto(String(cantidad))}
+          onKeyDown={(e) => e.key === 'Enter' && hayCambio && onGuardar(cantidad)}
+          className="tabular h-11 w-20 rounded-xl border border-gray-300 bg-white text-center text-[18px] font-extrabold text-espresso focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
+        />
+        <button
+          type="button" onClick={() => mover(1)} disabled={cantidad >= MAXIMO_MESAS}
+          className="grid h-11 w-11 place-items-center rounded-full border border-gray-300 bg-white text-espresso transition-colors hover:bg-gray-50 disabled:text-gray-300"
+          aria-label="Una mesa más"
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+      <Boton onClick={() => onGuardar(cantidad)} disabled={!hayCambio || guardando}>
+        {guardando ? 'Guardando…' : 'Guardar'}
+      </Boton>
+      {hayCambio && (
+        <Boton variante="fantasma" onClick={() => setTexto(String(mesas.length || 1))}>Deshacer</Boton>
+      )}
+    </section>
+  );
+}
 
 function GeneradorQR() {
-  const baseURL = window.location.origin + window.location.pathname;
-  // Mesas reales de la API: el QR lleva el Id (lo que espera POST /pedidos) y el número visible.
-  const [idPorNumero, setIdPorNumero] = useState({});
-  const mesas = Object.keys(idPorNumero).map(Number).sort((a, b) => a - b);
-  const [diseñoSeleccionado, setDiseñoSeleccionado] = useState('premium');
+  const base = window.location.origin + window.location.pathname;
+  const [mesas, setMesas] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+  const tarjetas = useRef({});
+  const [aviso, mostrar] = useAviso();
 
-  useEffect(() => {
-    getMesas()
-      .then((data) => setIdPorNumero(Object.fromEntries(data.map((m) => [m.numero, m.id]))))
-      .catch(() => setIdPorNumero({}));
-  }, []);
+  const cargar = useCallback(async () => {
+    try {
+      setMesas(porNumero(await getMesas()));
+    } catch {
+      setMesas((m) => m ?? []);
+      mostrar('No se pudieron cargar las mesas', 'error');
+    }
+  }, [mostrar]);
 
-  const urlMesa = (numero) => `${baseURL}?mesa=${idPorNumero[numero]}&numero=${numero}`;
+  useEffect(() => { cargar(); }, [cargar]);
 
-  const imprimirTodo = () => {
-    window.print();
+  const guardar = async (cantidad) => {
+    setGuardando(true);
+    try {
+      setMesas(porNumero(await fijarCantidadMesas(cantidad)));
+      mostrar(`Listo: el salón tiene ${cantidad} mesa${cantidad === 1 ? '' : 's'}`);
+    } catch (err) {
+      mostrar(err.message, 'error');
+    } finally {
+      setGuardando(false);
+    }
   };
 
-  const descargarQR = (mesa) => {
-    const contenedor = document.getElementById(`qr-card-${mesa}`);
-    
-    import('html2canvas').then((html2canvas) => {
-      html2canvas.default(contenedor, {
-        scale: 3,
-        backgroundColor: '#ffffff',
-        logging: false
-      }).then(canvas => {
-        const link = document.createElement('a');
-        link.download = `restaurante-delice-mesa-${mesa}.png`;
-        link.href = canvas.toDataURL();
-        link.click();
-      });
-    });
+  const descargar = async (mesa) => {
+    try {
+      await descargarPNG(tarjetas.current[mesa.id], `qpro-mesa-${mesa.numero}.png`);
+    } catch {
+      mostrar(`No se pudo descargar la mesa ${mesa.numero}`, 'error');
+    }
   };
 
   const descargarTodos = async () => {
-    const html2canvas = await import('html2canvas');
-    
-    for (let mesa of mesas) {
-      const contenedor = document.getElementById(`qr-card-${mesa}`);
-      const canvas = await html2canvas.default(contenedor, {
-        scale: 3,
-        backgroundColor: '#ffffff'
-      });
-      
-      const link = document.createElement('a');
-      link.download = `mesa-${mesa}.png`;
-      link.href = canvas.toDataURL();
-      link.click();
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
+    setDescargando(true);
+    for (const mesa of mesas) {
+      await descargar(mesa);
+      await new Promise((r) => setTimeout(r, 400)); // el navegador bloquea descargas seguidas sin pausa
     }
-  };
-
-  const abrirEnNavegador = (mesa) => {
-    const url = urlMesa(mesa);
-    window.open(url, '_blank');
-  };
-
-  const renderQRPremium = (mesa) => {
-    const url = urlMesa(mesa);
-    
-    return (
-      <div 
-        id={`qr-card-${mesa}`}
-        className="bg-gradient-to-br from-orange-50 to-white rounded-2xl shadow-2xl p-8 border-4 border-orange-500 page-break"
-        style={{ width: '400px', height: '550px' }}
-      >
-        {/* Header */}
-        <div className="text-center mb-6">
-          <div className="w-20 h-20 bg-orange-500 rounded-full mx-auto mb-4 flex items-center justify-center shadow-lg">
-            <span className="text-4xl">🍽️</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
-            Restaurante Délice
-          </h1>
-          <div className="w-32 h-1 bg-gradient-to-r from-orange-400 to-orange-600 mx-auto rounded-full mb-3"></div>
-          <p className="text-gray-600 text-sm">Escanea y ordena desde tu mesa</p>
-        </div>
-
-        {/* Mesa Badge */}
-        <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl p-4 mb-6 shadow-lg">
-          <div className="text-center">
-            <p className="text-sm font-medium mb-1">MESA NÚMERO</p>
-            <p className="text-5xl font-bold">{mesa}</p>
-          </div>
-        </div>
-
-        {/* QR Code */}
-        <div className="flex justify-center mb-6">
-          <div className="bg-white p-4 rounded-2xl shadow-lg border-4 border-orange-200">
-            <QRCodeSVG
-              id={`qr-mesa-${mesa}`}
-              value={url}
-              size={180}
-              level="H"
-              includeMargin={true}
-              imageSettings={{
-                src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23f97316'/%3E%3Ctext x='50' y='65' font-size='50' text-anchor='middle' fill='white'%3E🍽️%3C/text%3E%3C/svg%3E",
-                height: 35,
-                width: 35,
-                excavate: true,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 text-orange-600">
-            <QrCode size={20} />
-            <p className="text-sm font-semibold">Apunta tu cámara aquí</p>
-          </div>
-          <p className="text-xs text-gray-500">
-            📱 Menú digital • 🍔 Pide sin esperar • 💳 Paga fácil
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  const renderQRMinimalista = (mesa) => {
-    const url = urlMesa(mesa);
-    
-    return (
-      <div 
-        id={`qr-card-${mesa}`}
-        className="bg-white rounded-xl shadow-xl p-8 border border-gray-200 page-break"
-        style={{ width: '350px', height: '500px' }}
-      >
-        <div className="h-full flex flex-col justify-between">
-          {/* Header minimalista */}
-          <div className="text-center">
-            <h1 className="text-2xl font-light text-gray-800 mb-1">
-              Délice
-            </h1>
-            <div className="w-16 h-px bg-gray-300 mx-auto mb-4"></div>
-            <div className="inline-block bg-black text-white px-6 py-2 rounded-full">
-              <span className="text-3xl font-bold">Mesa {mesa}</span>
-            </div>
-          </div>
-
-          {/* QR Code */}
-          <div className="flex justify-center">
-            <div className="bg-gray-50 p-5 rounded-xl">
-              <QRCodeSVG
-                id={`qr-mesa-${mesa}`}
-                value={url}
-                size={180}
-                level="H"
-                fgColor="#000000"
-                bgColor="#f9fafb"
-              />
-            </div>
-          </div>
-
-          {/* Footer minimalista */}
-          <div className="text-center">
-            <p className="text-sm text-gray-600 mb-2">Escanea para ordenar</p>
-            <p className="text-xs text-gray-400">Menu digital • Sin contacto</p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderQRPorDiseño = (mesa) => {
-    switch (diseñoSeleccionado) {
-      case 'premium':
-        return renderQRPremium(mesa);
-      case 'minimalista':
-        return renderQRMinimalista(mesa);
-      default:
-        return renderQRPremium(mesa);
-    }
+    setDescargando(false);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header de control */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8 no-print">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                🎨 Generador de QR Premium
-              </h1>
-              <p className="text-gray-600">
-                Códigos QR profesionales para cada mesa
-              </p>
-            </div>
-            <button
-              onClick={imprimirTodo}
-              className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <Printer size={20} />
-              Imprimir Todos
-            </button>
+    <div className="min-h-screen bg-gray-50">
+      <main className="mx-auto max-w-[1440px] px-4 py-6 lg:px-6 lg:py-8">
+        <header className="qp-no-print mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-[28px] font-extrabold leading-tight tracking-[-0.02em] text-espresso">Códigos QR</h1>
+            <p className="mt-1 max-w-[65ch] text-[15px] text-gray-500">
+              Un código por mesa. El comensal lo escanea, ve la carta y su pedido llega a cocina con el número de su mesa.
+            </p>
           </div>
-
-          {/* Selector de diseño */}
-          <div className="border-t pt-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Estilo de diseño:</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setDiseñoSeleccionado('premium')}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  diseñoSeleccionado === 'premium'
-                    ? 'border-orange-500 bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-4xl mb-2">✨</div>
-                <p className="font-semibold text-gray-800">Premium</p>
-                <p className="text-xs text-gray-600">Colorido y elegante</p>
-              </button>
-
-              <button
-                onClick={() => setDiseñoSeleccionado('minimalista')}
-                className={`p-4 rounded-lg border-2 transition-all ${
-                  diseñoSeleccionado === 'minimalista'
-                    ? 'border-orange-500 bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="text-4xl mb-2">⚪</div>
-                <p className="font-semibold text-gray-800">Minimalista</p>
-                <p className="text-xs text-gray-600">Simple y limpio</p>
-              </button>
+          {mesas?.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <Boton variante="secundario" onClick={descargarTodos} disabled={descargando}>
+                <Download size={17} aria-hidden="true" />{descargando ? 'Descargando…' : 'Descargar todos'}
+              </Boton>
+              <Boton variante="secundario" onClick={() => window.print()}>
+                <Printer size={17} aria-hidden="true" />Imprimir
+              </Boton>
             </div>
-          </div>
-        </div>
+          )}
+        </header>
 
-        {/* Grid de QR codes */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
-          {mesas.map(mesa => (
-            <div key={mesa} className="relative">
-              {renderQRPorDiseño(mesa)}
-              
-              {/* Botones de acción */}
-              <div className="absolute top-4 right-4 flex gap-2 no-print">
-                <button
-                  onClick={() => abrirEnNavegador(mesa)}
-                  className="bg-blue-600 text-white p-2 rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
-                  title="Abrir en navegador"
-                >
-                  🔗
-                </button>
-                <button
-                  onClick={() => descargarQR(mesa)}
-                  className="bg-green-600 text-white p-2 rounded-lg shadow-lg hover:bg-green-700 transition-colors"
-                  title="Descargar esta mesa"
-                >
-                  <Download size={20} />
-                </button>
+        {!mesas ? (
+          <Cargando filas={2} />
+        ) : (
+          <>
+            <div className="qp-no-print mb-6">
+              <ControlMesas mesas={mesas} onGuardar={guardar} guardando={guardando} />
+            </div>
+
+            {mesas.length === 0 ? (
+              <div className="rounded-2xl border border-gray-200 bg-white">
+                <Vacio icono={QrCode} titulo="Aún no hay mesas" texto="Elige cuántas mesas tiene el salón y guarda: cada una tendrá su código." />
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
+            ) : (
+              <ul className="qp-hoja-qr grid justify-center gap-6 [grid-template-columns:repeat(auto-fill,300px)]">
+                {mesas.map((mesa) => {
+                  const url = urlMesa(base, mesa);
+                  return (
+                    <li key={mesa.id} className="qp-celda-qr">
+                      <TarjetaQR ref={(n) => { tarjetas.current[mesa.id] = n; }} mesa={mesa} url={url} />
+                      <div className="qp-no-print mt-2 flex justify-center gap-1">
+                        <Boton variante="fantasma" tamano="sm" onClick={() => window.open(url, '_blank', 'noopener')}>
+                          <ExternalLink size={15} aria-hidden="true" />Probar
+                        </Boton>
+                        <Boton variante="fantasma" tamano="sm" onClick={() => descargar(mesa)} aria-label={`Descargar el QR de la mesa ${mesa.numero}`}>
+                          <Download size={15} aria-hidden="true" />Descargar
+                        </Boton>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+      </main>
+      {aviso}
 
-      {/* Estilos para impresión */}
+      {/* Al imprimir solo salen las tarjetas, dos por fila en A4. */}
       <style>{`
         @media print {
-          .no-print {
-            display: none !important;
-          }
-          
-          .page-break {
-            page-break-after: always;
-            page-break-inside: avoid;
-          }
-          
-          body {
-            margin: 0;
-            padding: 0;
-          }
-
-          @page {
-            size: A4;
-            margin: 1cm;
-          }
+          @page { size: A4; margin: 12mm; }
+          body * { visibility: hidden; }
+          .qp-hoja-qr, .qp-hoja-qr * { visibility: visible; }
+          .qp-no-print { display: none !important; }
+          .qp-hoja-qr { position: absolute; inset: 0 auto auto 0; width: 100%; grid-template-columns: repeat(2, 300px); gap: 10mm; }
+          .qp-celda-qr { break-inside: avoid; }
+          .qp-tarjeta-qr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
       `}</style>
     </div>

@@ -51,14 +51,91 @@ function FilaIngrediente({ r, insumo, onCambio, onQuitar }) {
   );
 }
 
+/**
+ * Receta de un platillo: insumos por porción, costo y % sobre el precio de venta.
+ * La usan Configuración > Recetas y la ficha del platillo en Platillos.
+ */
+export function EditorReceta({ platillo, recetas, insumos, actuar, mostrar, titulo }) {
+  const [nuevo, setNuevo] = useState(null);
+  const [cantidadNueva, setCantidadNueva] = useState('');
+  const porInsumo = useMemo(() => Object.fromEntries(insumos.map((i) => [i.id, i])), [insumos]);
+  const lineas = recetas.filter((r) => r.platilloId === platillo.id);
+  const costo = lineas.reduce((t, r) => t + r.cantidadRequerida * (porInsumo[r.productoId]?.precioCosto ?? 0), 0);
+  const porcentaje = platillo.precio > 0 && lineas.length ? Math.round((costo / platillo.precio) * 100) : null;
+
+  const agregar = () => {
+    const n = Number(cantidadNueva);
+    if (!(n > 0)) return mostrar('Escribe cuánto lleva por porción', 'error');
+    actuar(createReceta({ platilloId: platillo.id, productoId: nuevo.id, cantidadRequerida: n, unidadMedida: nuevo.unidadMedida, opcional: false }), `${nuevo.nombre} agregado`);
+    setNuevo(null);
+    setCantidadNueva('');
+  };
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 px-4 py-4">
+        <div>
+          <h2 className="text-[20px] font-extrabold tracking-[-0.02em] text-espresso">{titulo ?? platillo.nombre}</h2>
+          <p className="tabular text-[13px] text-gray-500">Se vende a {formatearCOP(platillo.precio)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[13px] text-gray-500">Cuesta prepararlo</p>
+          <p className="flex items-center justify-end gap-2">
+            <span className="tabular text-[22px] font-extrabold text-espresso">{formatearCOP(costo)}</span>
+            {porcentaje != null && <Chip tono={tonoCosto(porcentaje)}>{porcentaje} % del precio</Chip>}
+          </p>
+        </div>
+      </header>
+
+      {lineas.length === 0 ? (
+        <p className="px-4 py-5 text-[14px] text-amber-800">Sin receta, este platillo no descuenta inventario. Agrega lo que lleva una porción.</p>
+      ) : (
+        <ul className="divide-y divide-gray-200">
+          {lineas.map((r) => (
+            <FilaIngrediente
+              key={r.id}
+              r={r}
+              insumo={porInsumo[r.productoId]}
+              onCambio={(dto) => actuar(updateReceta(r.id, dto))}
+              onQuitar={() => actuar(deleteReceta(r.id), `${r.productoNombre} quitado`)}
+            />
+          ))}
+        </ul>
+      )}
+
+      <footer className="border-t border-gray-200 bg-gray-50 p-4">
+        <p className="mb-2 text-[13px] font-semibold text-gray-600">Agregar insumo a la receta (por una porción)</p>
+        {nuevo ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-espresso">{nuevo.nombre}</span>
+            <label className="flex items-center gap-1.5 text-[13px] text-gray-600">
+              <input
+                type="number" min="0.001" step="any" inputMode="decimal" autoFocus
+                value={cantidadNueva}
+                onChange={(e) => setCantidadNueva(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && agregar()}
+                className="tabular h-10 w-24 rounded-xl border border-gray-300 bg-white px-2 text-right text-[15px] font-bold text-espresso focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
+                aria-label={`Cantidad de ${nuevo.nombre} por porción en ${nuevo.unidadMedida}`}
+              />
+              {nuevo.unidadMedida}
+            </label>
+            <Boton variante="fantasma" onClick={() => setNuevo(null)}>Cancelar</Boton>
+            <Boton onClick={agregar}>Agregar</Boton>
+          </div>
+        ) : (
+          <BuscadorInsumo insumos={insumos.filter((i) => !lineas.some((r) => r.productoId === i.id))} onElegir={setNuevo} />
+        )}
+      </footer>
+    </div>
+  );
+}
+
 export default function RecetasConfig({ onCambio }) {
   const [platillos, setPlatillos] = useState(null);
   const [recetas, setRecetas] = useState([]);
   const [insumos, setInsumos] = useState([]);
   const [seleccion, setSeleccion] = useState(null);
   const [q, setQ] = useState('');
-  const [nuevo, setNuevo] = useState(null);
-  const [cantidadNueva, setCantidadNueva] = useState('');
   const [aviso, mostrar] = useAviso();
 
   const cargar = useCallback(() => {
@@ -85,9 +162,6 @@ export default function RecetasConfig({ onCambio }) {
   }, [platillos, q]);
 
   const platillo = platillos?.find((p) => p.id === seleccion);
-  const lineas = recetas.filter((r) => r.platilloId === seleccion);
-  const costo = resumen[seleccion]?.costo ?? 0;
-  const porcentaje = platillo?.precio > 0 && lineas.length ? Math.round((costo / platillo.precio) * 100) : null;
 
   const actuar = async (promesa, ok) => {
     try {
@@ -98,14 +172,6 @@ export default function RecetasConfig({ onCambio }) {
     } catch (e) {
       mostrar(mensajeError(e, 'No se pudo guardar la receta'), 'error');
     }
-  };
-
-  const agregar = () => {
-    const n = Number(cantidadNueva);
-    if (!(n > 0)) return mostrar('Escribe cuánto lleva por porción', 'error');
-    actuar(createReceta({ platilloId: seleccion, productoId: nuevo.id, cantidadRequerida: n, unidadMedida: nuevo.unidadMedida, opcional: false }), `${nuevo.nombre} agregado`);
-    setNuevo(null);
-    setCantidadNueva('');
   };
 
   if (!platillos) return <Cargando filas={6} />;
@@ -130,7 +196,7 @@ export default function RecetasConfig({ onCambio }) {
               <li key={p.id}>
                 <button
                   type="button"
-                  onClick={() => { setSeleccion(p.id); setNuevo(null); }}
+                  onClick={() => setSeleccion(p.id)}
                   aria-current={seleccion === p.id ? 'true' : undefined}
                   className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${seleccion === p.id ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
                 >
@@ -150,61 +216,7 @@ export default function RecetasConfig({ onCambio }) {
         {!platillo ? (
           <div className="rounded-2xl border border-gray-200 bg-white"><Vacio icono={ChefHat} titulo="Elige un platillo" /></div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-            <header className="flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 px-4 py-4">
-              <div>
-                <h2 className="text-[20px] font-extrabold tracking-[-0.02em] text-espresso">{platillo.nombre}</h2>
-                <p className="tabular text-[13px] text-gray-500">Se vende a {formatearCOP(platillo.precio)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[13px] text-gray-500">Cuesta prepararlo</p>
-                <p className="flex items-center justify-end gap-2">
-                  <span className="tabular text-[22px] font-extrabold text-espresso">{formatearCOP(costo)}</span>
-                  {porcentaje != null && <Chip tono={tonoCosto(porcentaje)}>{porcentaje} % del precio</Chip>}
-                </p>
-              </div>
-            </header>
-
-            {lineas.length === 0 ? (
-              <p className="px-4 py-5 text-[14px] text-amber-800">Sin receta, este platillo no descuenta inventario. Agrega lo que lleva una porción.</p>
-            ) : (
-              <ul className="divide-y divide-gray-200">
-                {lineas.map((r) => (
-                  <FilaIngrediente
-                    key={r.id}
-                    r={r}
-                    insumo={porInsumo[r.productoId]}
-                    onCambio={(dto) => actuar(updateReceta(r.id, dto))}
-                    onQuitar={() => actuar(deleteReceta(r.id), `${r.productoNombre} quitado`)}
-                  />
-                ))}
-              </ul>
-            )}
-
-            <footer className="border-t border-gray-200 bg-gray-50 p-4">
-              <p className="mb-2 text-[13px] font-semibold text-gray-600">Agregar insumo a la receta (por una porción)</p>
-              {nuevo ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-espresso">{nuevo.nombre}</span>
-                  <label className="flex items-center gap-1.5 text-[13px] text-gray-600">
-                    <input
-                      type="number" min="0.001" step="any" inputMode="decimal" autoFocus
-                      value={cantidadNueva}
-                      onChange={(e) => setCantidadNueva(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && agregar()}
-                      className="tabular h-10 w-24 rounded-xl border border-gray-300 bg-white px-2 text-right text-[15px] font-bold text-espresso focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100"
-                      aria-label={`Cantidad de ${nuevo.nombre} por porción en ${nuevo.unidadMedida}`}
-                    />
-                    {nuevo.unidadMedida}
-                  </label>
-                  <Boton variante="fantasma" onClick={() => setNuevo(null)}>Cancelar</Boton>
-                  <Boton onClick={agregar}>Agregar</Boton>
-                </div>
-              ) : (
-                <BuscadorInsumo insumos={insumos.filter((i) => !lineas.some((r) => r.productoId === i.id))} onElegir={setNuevo} />
-              )}
-            </footer>
-          </div>
+          <EditorReceta key={platillo.id} platillo={platillo} recetas={recetas} insumos={insumos} actuar={actuar} mostrar={mostrar} />
         )}
       </section>
       {aviso}

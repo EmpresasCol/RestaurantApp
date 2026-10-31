@@ -108,12 +108,58 @@ namespace RestaurantApi.Controllers
             });
         }
 
+        public const int MaximoMesas = 200;
+
+        /// <summary>
+        /// Deja el salón con las mesas 1..N: crea las que faltan y retira las de número mayor.
+        /// No retira una mesa ocupada o con pedidos en el historial (los pedidos guardan su mesa).
+        /// </summary>
+        [HttpPut("cantidad")]
+        [Authorize(Roles = "Administrador")]
+        public async Task<ActionResult<IEnumerable<MesaDto>>> FijarCantidad([FromBody] CantidadMesasDto dto)
+        {
+            if (dto.Cantidad < 1 || dto.Cantidad > MaximoMesas)
+                return BadRequest(new { message = $"El número de mesas debe estar entre 1 y {MaximoMesas}" });
+
+            var mesas = await _context.Mesas.ToListAsync();
+            var sobrantes = mesas.Where(m => m.Numero > dto.Cantidad).ToList();
+            var idsSobrantes = sobrantes.Select(m => m.Id).ToList();
+            var conPedidos = await _context.Pedidos
+                .Where(p => idsSobrantes.Contains(p.MesaId))
+                .Select(p => p.MesaId).Distinct().ToListAsync();
+
+            var bloqueadas = sobrantes
+                .Where(m => m.Estado != EstadoMesa.Disponible || conPedidos.Contains(m.Id))
+                .Select(m => m.Numero).OrderBy(n => n).ToList();
+            if (bloqueadas.Count > 0)
+            {
+                return Conflict(new
+                {
+                    message = $"No se pueden retirar las mesas {string.Join(", ", bloqueadas)}: están ocupadas o tienen pedidos registrados.",
+                    mesas = bloqueadas
+                });
+            }
+
+            _context.Mesas.RemoveRange(sobrantes);
+            var existentes = mesas.Select(m => m.Numero).ToHashSet();
+            for (var n = 1; n <= dto.Cantidad; n++)
+                if (!existentes.Contains(n))
+                    _context.Mesas.Add(new Mesa { Numero = n, Estado = EstadoMesa.Disponible });
+
+            await _context.SaveChangesAsync();
+            return (await _context.Mesas.OrderBy(m => m.Numero).ToListAsync())
+                .Select(m => new MesaDto { Id = m.Id, Numero = m.Numero, Estado = m.Estado.ToString() })
+                .ToList();
+        }
+
         [HttpDelete("{id}")]
         [Authorize(Roles = "Administrador")]
         public async Task<IActionResult> DeleteMesa(int id)
         {
             var mesa = await _context.Mesas.FindAsync(id);
             if (mesa == null) return NotFound();
+            if (await _context.Pedidos.AnyAsync(p => p.MesaId == id))
+                return Conflict(new { message = $"La mesa {mesa.Numero} tiene pedidos registrados y no se puede eliminar" });
 
             _context.Mesas.Remove(mesa);
             await _context.SaveChangesAsync();

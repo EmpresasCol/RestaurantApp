@@ -131,10 +131,12 @@ namespace RestaurantApi.Controllers
         [Authorize(Roles = "Administrador")]
         public async Task<ActionResult<UsuarioDto>> PostUsuario(Usuario usuario)
         {
-            if (!Enum.IsDefined(usuario.Rol))
-                return BadRequest(new { message = "Rol inválido" });
-            if (string.IsNullOrWhiteSpace(usuario.ClaveHash) || usuario.ClaveHash.Length < 3)
-                return BadRequest(new { message = "La clave es obligatoria" });
+            usuario.Nombre = usuario.Nombre?.Trim() ?? "";
+            usuario.NombreUsuario = usuario.NombreUsuario?.Trim() ?? "";
+            var error = ValidarDatos(usuario.Nombre, usuario.NombreUsuario, usuario.Rol)
+                ?? (string.IsNullOrWhiteSpace(usuario.ClaveHash) ? "La clave es obligatoria" : ValidarClave(usuario.ClaveHash));
+            if (error != null)
+                return BadRequest(new { message = error });
             if (await _context.Usuarios.AnyAsync(u => u.NombreUsuario == usuario.NombreUsuario))
                 return Conflict(new { message = "El nombre de usuario ya existe" });
 
@@ -151,14 +153,27 @@ namespace RestaurantApi.Controllers
         public async Task<IActionResult> PutUsuario(int id, ActualizarUsuarioDto dto)
         {
             if (id != dto.Id) return BadRequest();
-            if (!Enum.IsDefined(dto.Rol))
-                return BadRequest(new { message = "Rol inválido" });
+            dto.Nombre = dto.Nombre?.Trim() ?? "";
+            dto.NombreUsuario = dto.NombreUsuario?.Trim() ?? "";
+            var error = ValidarDatos(dto.Nombre, dto.NombreUsuario, dto.Rol)
+                ?? (string.IsNullOrWhiteSpace(dto.ClaveHash) ? null : ValidarClave(dto.ClaveHash));
+            if (error != null)
+                return BadRequest(new { message = error });
 
             var usuario = await _context.Usuarios.FindAsync(id);
             if (usuario == null) return NotFound();
 
             if (await _context.Usuarios.AnyAsync(u => u.Id != id && u.NombreUsuario == dto.NombreUsuario))
                 return Conflict(new { message = "El nombre de usuario ya existe" });
+
+            // Sin estas dos reglas el administrador podría dejar el sistema sin nadie que lo gestione.
+            if (usuario.Rol == RolUsuario.Administrador && dto.Rol != RolUsuario.Administrador)
+            {
+                if (QproClaims.IdUsuario(User) == id)
+                    return BadRequest(new { message = "No puedes quitarte el rol de Administrador" });
+                if (await EsUltimoAdministradorAsync(id))
+                    return BadRequest(new { message = "Debe quedar al menos un Administrador" });
+            }
 
             usuario.Nombre = dto.Nombre;
             usuario.NombreUsuario = dto.NombreUsuario;
@@ -180,10 +195,35 @@ namespace RestaurantApi.Controllers
             var usuario = await _context.Usuarios.FindAsync(id);
             if (usuario == null) return NotFound();
 
+            if (usuario.Rol == RolUsuario.Administrador && await EsUltimoAdministradorAsync(id))
+                return BadRequest(new { message = "Debe quedar al menos un Administrador" });
+
+            // Pedidos y domicilios guardan quién los tomó: borrar al usuario rompería el historial.
+            var tieneHistorial = await _context.Pedidos.AnyAsync(p => p.UsuarioId == id)
+                || await _context.Domicilios.AnyAsync(d => d.UsuarioCreadorId == id || d.DomiciliarioId == id);
+            if (tieneHistorial)
+                return Conflict(new { message = $"{usuario.Nombre} tiene pedidos o domicilios en el historial y no se puede eliminar. Cámbiale la clave para quitarle el acceso." });
+
+            _context.UsuariosFCM.RemoveRange(_context.UsuariosFCM.Where(t => t.UsuarioId == id));
             _context.Usuarios.Remove(usuario);
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+        private static string? ValidarDatos(string nombre, string nombreUsuario, RolUsuario rol)
+        {
+            if (!Enum.IsDefined(rol)) return "Rol inválido";
+            if (nombre.Length == 0) return "El nombre es obligatorio";
+            if (nombreUsuario.Length < 3) return "El usuario debe tener al menos 3 caracteres";
+            if (nombreUsuario.Any(char.IsWhiteSpace)) return "El usuario no puede tener espacios";
+            return null;
+        }
+
+        private static string? ValidarClave(string clave)
+            => clave.Length < 4 ? "La clave debe tener al menos 4 caracteres" : null;
+
+        private Task<bool> EsUltimoAdministradorAsync(int id)
+            => _context.Usuarios.AllAsync(u => u.Id == id || u.Rol != RolUsuario.Administrador);
 
         /// <summary>Valida credenciales y migra a BCrypt las claves heredadas en texto plano.</summary>
         private async Task<Usuario?> AutenticarAsync(LoginRequestDto request)

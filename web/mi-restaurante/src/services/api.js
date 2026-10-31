@@ -20,6 +20,18 @@ const fetchWithHeaders = async (url, options = {}) => {
   return response;
 };
 
+// La API responde { message }, un texto o un ProblemDetails; se devuelve un Error legible.
+const errorDe = async (response, respaldo) => {
+  const texto = await response.text().catch(() => '');
+  try {
+    const json = JSON.parse(texto);
+    if (typeof json === 'string') return new Error(json);
+    return new Error(json.message || Object.values(json.errors ?? {}).flat()[0] || json.title || respaldo);
+  } catch {
+    return new Error(texto || respaldo);
+  }
+};
+
 // ==================== AUTENTICACIÓN ====================
 export const login = async (usuario, clave) => {
   try {
@@ -64,71 +76,27 @@ export const getPlatillo = async (id) => {
 };
 
 export const createPlatillo = async (platilloData) => {
-  try {
-    console.log('📤 Creando platillo:', platilloData);
-    
-    const response = await fetchWithHeaders(`${API_URL}/platillos`, {
-      method: 'POST',
-      body: JSON.stringify(platilloData)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error al crear platillo: ${errorText}`);
-    }
-
-    const resultado = await response.json();
-    console.log('✅ Platillo creado:', resultado);
-    return resultado;
-  } catch (error) {
-    console.error('❌ Error en createPlatillo:', error);
-    throw error;
-  }
+  const response = await fetchWithHeaders(`${API_URL}/platillos`, {
+    method: 'POST',
+    body: JSON.stringify(platilloData)
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo crear el platillo');
+  return await response.json();
 };
 
 export const updatePlatillo = async (id, platilloData) => {
-  try {
-    console.log('🔄 Actualizando platillo:', { id, ...platilloData });
-    
-    const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ id, ...platilloData })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Error del servidor:', errorText);
-      throw new Error(errorText || 'Error al actualizar platillo');
-    }
-
-    console.log('✅ Platillo actualizado exitosamente');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error en updatePlatillo:', error);
-    throw error;
-  }
+  const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ id, ...platilloData })
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo actualizar el platillo');
+  return { success: true };
 };
 
 export const deletePlatillo = async (id) => {
-  try {
-    console.log('🗑️ Eliminando platillo:', id);
-    
-    const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, {
-      method: 'DELETE'
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Error del servidor:', errorText);
-      throw new Error(errorText || 'Error al eliminar platillo');
-    }
-
-    console.log('✅ Platillo eliminado exitosamente');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error en deletePlatillo:', error);
-    throw error;
-  }
+  const response = await fetchWithHeaders(`${API_URL}/platillos/${id}`, { method: 'DELETE' });
+  if (!response.ok) throw await errorDe(response, 'No se pudo eliminar el platillo');
+  return { success: true };
 };
 
 // ==================== MESAS ====================
@@ -155,6 +123,16 @@ export const updateEstadoMesa = async (id, estado) => {
     console.error('Error en updateEstadoMesa:', error);
     throw error;
   }
+};
+
+/** Deja el salón con las mesas 1..cantidad y devuelve la lista resultante. */
+export const fijarCantidadMesas = async (cantidad) => {
+  const response = await fetchWithHeaders(`${API_URL}/mesas/cantidad`, {
+    method: 'PUT',
+    body: JSON.stringify({ cantidad })
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo cambiar el número de mesas');
+  return await response.json();
 };
 
 // ==================== PEDIDOS ====================
@@ -406,83 +384,38 @@ export const getUsuario = async (id) => {
 };
 
 export const createUsuario = async (usuarioData) => {
-  try {
-    const dataBackend = {
+  const response = await fetchWithHeaders(`${API_URL}/usuarios`, {
+    method: 'POST',
+    body: JSON.stringify({
       NombreUsuario: usuarioData.nombreUsuario,
       ClaveHash: usuarioData.clave,
       Nombre: usuarioData.nombre,
       Rol: rolAEnum(usuarioData.rol)
-    };
-
-    const response = await fetchWithHeaders(`${API_URL}/usuarios`, {
-      method: 'POST',
-      body: JSON.stringify(dataBackend)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error al crear usuario: ${errorText}`);
-    }
-
-    const resultado = await response.json();
-    console.log('✅ Usuario creado:', resultado);
-    return resultado;
-  } catch (error) {
-    console.error('❌ Error en createUsuario:', error);
-    throw error;
-  }
+    })
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo crear el usuario');
+  return await response.json();
 };
 
 export const updateUsuario = async (id, usuarioData) => {
-  try {
-    const dataBackend = {
-      Id: id,
-      NombreUsuario: usuarioData.nombreUsuario,
-      Nombre: usuarioData.nombre,
-      Rol: rolAEnum(usuarioData.rol)
-    };
+  const dataBackend = {
+    Id: id,
+    NombreUsuario: usuarioData.nombreUsuario,
+    Nombre: usuarioData.nombre,
+    Rol: rolAEnum(usuarioData.rol)
+  };
+  if (usuarioData.clave) dataBackend.ClaveHash = usuarioData.clave;
 
-    if (usuarioData.clave) {
-      dataBackend.ClaveHash = usuarioData.clave;
-    }
-
-    const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(dataBackend)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Error del servidor:', errorText);
-      throw new Error(errorText || 'Error al actualizar usuario');
-    }
-
-    console.log('✅ Usuario actualizado exitosamente');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error en updateUsuario:', error);
-    throw error;
-  }
+  const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dataBackend)
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo actualizar el usuario');
+  return { success: true };
 };
 
 export const deleteUsuario = async (id) => {
-  try {
-    console.log('🗑️ Eliminando usuario:', id);
-    
-    const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, {
-      method: 'DELETE'
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Error del servidor:', errorText);
-      throw new Error(errorText || 'Error al eliminar usuario');
-    }
-
-    console.log('✅ Usuario eliminado exitosamente');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error en deleteUsuario:', error);
-    throw error;
-  }
+  const response = await fetchWithHeaders(`${API_URL}/usuarios/${id}`, { method: 'DELETE' });
+  if (!response.ok) throw await errorDe(response, 'No se pudo eliminar el usuario');
+  return { success: true };
 };

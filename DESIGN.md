@@ -396,5 +396,6 @@ React Bits Carousel sin marco, 24px de radio, 12px entre diapositivas, asomo de 
 
 ### Brechas conocidas
 - Inventario sigue este sistema completo (tareas diarias, Movimientos, Configuración y la ficha lateral), con piezas compartidas en `components/inventario/ui.js` y `ListaConfig.js`.
-- Domicilios, NuevoDomicilio, Reportes, GestionPlatillos, GestionUsuarios y GeneradorQR no se rediseñaron: solo heredan la paleta por el remapeo de Tailwind y conservan su estructura anterior (`rounded-lg`, `shadow-lg`, botones `orange-600` rellenos, spinners con borde). No son referencia de este sistema.
+- Platillos, Usuarios y Códigos QR ya siguen el sistema con las piezas de `ui.js` (ficha lateral `Panel`, `BotonConfirmar`, avisos); la tarjeta QR es el único diseño imprimible (blanca, 24px, número a 56px/800 y el número también dentro del código).
+- Domicilios, NuevoDomicilio y Reportes no se rediseñaron: solo heredan la paleta por el remapeo de Tailwind y conservan su estructura anterior (`rounded-lg`, `shadow-lg`, botones `orange-600` rellenos, spinners con borde). No son referencia de este sistema.
 - En Caja, el menú de estados (`shadow-xl`) y los avisos arriba a la derecha con animación `ease-out` propia siguen el estilo anterior. El detalle expandido de la factura ya sigue este sistema.

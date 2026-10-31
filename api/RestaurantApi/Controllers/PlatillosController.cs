@@ -59,8 +59,8 @@ namespace RestaurantApi.Controllers
         [HttpPost]
         public async Task<ActionResult<Platillo>> PostPlatillo(Platillo platillo)
         {
-            if (platillo.Precio <= 0)
-                return BadRequest(new { message = "El precio debe ser mayor que cero" });
+            var error = await ValidarAsync(platillo, idActual: null);
+            if (error != null) return error;
 
             platillo.Id = 0;
             _context.Platillos.Add(platillo);
@@ -83,8 +83,8 @@ namespace RestaurantApi.Controllers
                 return NotFound(new { message = $"Platillo con ID {id} no encontrado" });
             }
 
-            if (platillo.Precio <= 0)
-                return BadRequest(new { message = "El precio debe ser mayor que cero" });
+            var error = await ValidarAsync(platillo, id);
+            if (error != null) return error;
 
             try
             {
@@ -122,12 +122,13 @@ namespace RestaurantApi.Controllers
                 return NotFound(new { message = $"Platillo con ID {id} no encontrado" });
             }
 
-            var tieneDetalles = await _context.PedidoDetalles
-                .AnyAsync(d => d.PlatilloId == id);
+            // Pedidos y domicilios guardan el platillo vendido; borrarlo rompería el historial y la caja.
+            var tieneVentas = await _context.PedidoDetalles.AnyAsync(d => d.PlatilloId == id)
+                || await _context.DomicilioDetalles.AnyAsync(d => d.PlatilloId == id);
 
-            if (tieneDetalles)
+            if (tieneVentas)
             {
-                return BadRequest(new { message = "No se puede eliminar este platillo porque está siendo usado en pedidos existentes." });
+                return Conflict(new { message = $"\"{platillo.Nombre}\" ya tiene ventas registradas en pedidos o domicilios y no se puede eliminar." });
             }
 
             try
@@ -141,6 +142,29 @@ namespace RestaurantApi.Controllers
                 _logger?.LogError(ex, "Error al eliminar platillo {Id}", id);
                 return BadRequest(new { message = "No se pudo eliminar el platillo: tiene registros asociados." });
             }
+        }
+
+        /// <summary>Normaliza los textos y valida lo que la carta y la caja necesitan.</summary>
+        private async Task<ActionResult?> ValidarAsync(Platillo platillo, int? idActual)
+        {
+            platillo.Nombre = platillo.Nombre?.Trim() ?? "";
+            platillo.Descripcion = platillo.Descripcion?.Trim();
+            platillo.Categoria = string.IsNullOrWhiteSpace(platillo.Categoria) ? "General" : platillo.Categoria.Trim();
+
+            if (platillo.Nombre.Length == 0)
+                return BadRequest(new { message = "El nombre es obligatorio" });
+            if (platillo.Nombre.Length > 100)
+                return BadRequest(new { message = "El nombre admite máximo 100 caracteres" });
+            if (platillo.Categoria.Length > 50)
+                return BadRequest(new { message = "La categoría admite máximo 50 caracteres" });
+            if (platillo.Precio <= 0)
+                return BadRequest(new { message = "El precio debe ser mayor que cero" });
+
+            var nombre = platillo.Nombre.ToLower();
+            if (await _context.Platillos.AnyAsync(p => p.Id != idActual && p.Nombre.ToLower() == nombre))
+                return Conflict(new { message = $"Ya existe un platillo llamado \"{platillo.Nombre}\"" });
+
+            return null;
         }
 
         private bool PlatilloExists(int id)
