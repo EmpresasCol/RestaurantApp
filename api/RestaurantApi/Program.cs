@@ -2,10 +2,12 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using RestaurantApi;
+using RestaurantApi.Hubs;
 using RestaurantApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,17 @@ builder.Services
             NameClaimType = QproClaims.Usuario,
             RoleClaimType = QproClaims.Rol,
             ClockSkew = TimeSpan.FromMinutes(1)
+        };
+        // El navegador no envía cabeceras en WebSocket: SignalR manda el JWT por query string.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx =>
+            {
+                var token = ctx.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && ctx.HttpContext.Request.Path.StartsWithSegments("/api/hubs"))
+                    ctx.Token = token;
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -74,6 +87,7 @@ builder.Services.AddSwaggerGen(c =>
         [new OpenApiSecurityScheme { Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" } }] = Array.Empty<string>()
     });
 });
+builder.Services.AddSignalR();
 builder.Services.AddScoped<DomicilioRealtimeService>();
 builder.Services.AddScoped<IInventarioService, InventarioService>();
 
@@ -88,7 +102,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(origenes)
             .AllowAnyMethod()
-            .AllowAnyHeader();
+            .AllowAnyHeader()
+            .AllowCredentials(); // lo exige el negotiate de SignalR
     });
 });
 
@@ -133,11 +148,34 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
+// Tras cada escritura exitosa se avisa por SignalR qué tema cambió.
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)) return;
+    if (context.Response.StatusCode is < 200 or >= 300) return;
+    var tema = TemaRealtime.Desde(context.Request.Path.Value);
+    if (tema is null) return;
+
+    try
+    {
+        var hub = context.RequestServices.GetRequiredService<IHubContext<QproHub>>();
+        await hub.Clients.All.SendAsync("cambio", tema);
+    }
+    catch (Exception ex)
+    {
+        // Un aviso fallido no debe romper la petición: el polling de respaldo lo cubre.
+        app.Logger.LogWarning(ex, "No se pudo avisar el cambio '{Tema}' por SignalR", tema);
+    }
+});
+
 // Endpoint de salud para Docker healthcheck
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow })).AllowAnonymous();
 app.MapGet("/api/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow })).AllowAnonymous();
 
 app.MapControllers();
+app.MapHub<QproHub>("/api/hubs/qpro");
 
 // Inicializar recetas predeterminadas en arranque de la aplicación
 try

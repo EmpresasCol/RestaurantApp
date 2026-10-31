@@ -11,6 +11,7 @@ import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import MenuQR from './components/menu/MenuQR';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useCambios } from './services/realtime';
 import Reportes from './Reportes';
 import GestionPlatillos from './GestionPlatillos';
 import GestionUsuarios from './GestionUsuarios';
@@ -118,13 +119,17 @@ function AppContent() {
     cargarPlatillos();
   }, []);
 
+  const enCocina = vistaActual === 'cocina' && !esClienteQR;
+  useCambios('pedidos', () => enCocina && cargarPedidos());
+
+  // Respaldo por si SignalR está caído.
   useEffect(() => {
-    if (vistaActual === 'cocina' && !esClienteQR) {
+    if (enCocina) {
       cargarPedidos();
-      const interval = setInterval(cargarPedidos, 2000);
+      const interval = setInterval(cargarPedidos, 60000);
       return () => clearInterval(interval);
     }
-  }, [vistaActual, esClienteQR]);
+  }, [enCocina]);
 
   useEffect(() => {
     if (usuario) {

@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { POLLING_DOMICILIOS_MS, ordenarPorPrioridad, transformarDomicilios } from "./utils/kds"
 import { AlertCircle, Check, ChefHat, Clock, LogOut, MapPin, MessageSquareText, Phone, Truck, User } from "lucide-react"
 import { useAuth } from "./context/AuthContext"
+import { useCambios } from "./services/realtime"
 import * as api from "./services/api"
 import { getDomiciliosActivos, actualizarEstadoDomicilio } from "./services/domiciliosApi"
 import logo from "./components/logo.jpg"
@@ -161,8 +162,9 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
     }
   }, [])
 
-  // Polling solo de domicilios con intervalo estable (los pedidos de mesa los
-  // refresca el padre cada 2 s y llegan por props).
+  // Domicilios por SignalR con polling de respaldo (los pedidos de mesa los
+  // refresca el padre y llegan por props).
+  useCambios("domicilios", cargarTodosLosDatos)
   useEffect(() => {
     cargarTodosLosDatos()
     const interval = setInterval(cargarTodosLosDatos, POLLING_DOMICILIOS_MS)

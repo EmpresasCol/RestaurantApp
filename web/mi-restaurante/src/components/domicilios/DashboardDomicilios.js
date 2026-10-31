@@ -10,15 +10,18 @@ import {
   AlertCircle
 } from 'lucide-react';
 import * as api from '../../services/api';
+import { useCambios } from '../../services/realtime';
 
 function DashboardDomicilios() {
   const [estadisticas, setEstadisticas] = useState(null);
   const [domiciliosActivos, setDomiciliosActivos] = useState([]);
   const [cargando, setCargando] = useState(true);
 
+  useCambios('domicilios', () => cargarDatos());
+
   useEffect(() => {
     cargarDatos();
-    const interval = setInterval(cargarDatos, 30000); // Actualizar cada 30 segundos
+    const interval = setInterval(cargarDatos, 60000); // Respaldo por si SignalR está caído
     return () => clearInterval(interval);
   }, []);
 

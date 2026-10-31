@@ -1,5 +1,6 @@
 // src/Domicilios.js
 import React, { useState, useEffect } from 'react';
+import { useCambios } from './services/realtime';
 import { 
   Bell, 
   Package, 
@@ -44,12 +45,15 @@ function Domicilios({ onNuevoDomicilio }) {
   const [nuevoMetodoPago, setNuevoMetodoPago] = useState('');
   const [nuevoPagadoAnticipado, setNuevoPagadoAnticipado] = useState(false);
 
+  useCambios('domicilios', () => cargarDatos(true));
+
+  // Respaldo por si SignalR está caído.
   useEffect(() => {
     cargarDatos();
-    
+
     const interval = setInterval(() => {
       cargarDatos(true);
-    }, 30000);
+    }, 60000);
     
     return () => clearInterval(interval);
   }, [filtroEstado]);

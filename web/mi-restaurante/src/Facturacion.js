@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Download, Receipt, ChevronDown, ChevronUp, Printer, Check, X, CheckCircle, AlertCircle, Users, Truck, Banknote, CreditCard, QrCode, Calendar } from 'lucide-react';
 import CountUp from './components/reactbits/CountUp/CountUp';
 import * as api from './services/api';
+import { useCambios } from './services/realtime';
 import { getDomicilios, actualizarEstadoDomicilio } from './services/domiciliosApi';
 import { etiquetaImpuesto, impuestoIncluido } from './utils/impuestos';
 
@@ -125,7 +126,12 @@ function Facturacion() {
     }
   }, []);
 
-  // Cargar datos al iniciar y actualización automática cada 15 segundos
+  const recargarEnSilencio = useCallback(() => cargarDatos(false), [cargarDatos]);
+  useCambios('pedidos', recargarEnSilencio);
+  useCambios('mesas', recargarEnSilencio);
+  useCambios('domicilios', recargarEnSilencio);
+
+  // Cargar datos al iniciar; el intervalo es respaldo por si SignalR está caído
   useEffect(() => {
     console.log('🔄 Iniciando actualización automática de datos');
     cargarDatos();
@@ -133,7 +139,7 @@ function Facturacion() {
     const interval = setInterval(() => {
       console.log('⏰ Actualización automática...');
       cargarDatos(false);
-    }, 15000);
+    }, 60000);
     
     return () => {
       console.log('🛑 Deteniendo actualización automática');

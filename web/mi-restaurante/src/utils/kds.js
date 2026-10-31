@@ -1,7 +1,8 @@
 // src/utils/kds.js
 // Reglas del KDS (pantalla de cocina).
 
-export const POLLING_DOMICILIOS_MS = 5000;
+// Respaldo: los cambios llegan por SignalR; el polling cubre la conexión caída.
+export const POLLING_DOMICILIOS_MS = 60000;
 
 // Cada plato de la comanda suma este peso (≈ minutos extra de preparación).
 export const PESO_POR_PLATO = 1;
