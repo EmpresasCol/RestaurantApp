@@ -7,7 +7,7 @@ import BuscadorInsumo from './BuscadorInsumo';
 import EscanerCodigo from './EscanerCodigo';
 import { Boton, Campo, Panel, Selector } from './ui';
 
-export default function AsociarCodigo({ abierto, codigo: codigoInicial = '', insumos, insumoFijo = null, proveedores = [], onCerrar, onAsociado }) {
+export default function AsociarCodigo({ abierto, codigo: codigoInicial = '', insumos, insumoFijo = null, proveedores = [], onCerrar, onAsociado, onCrearInsumo }) {
   const [insumo, setInsumo] = useState(insumoFijo);
   const [codigo, setCodigo] = useState(codigoInicial);
   const [tipo, setTipo] = useState('unidad');
@@ -83,7 +83,14 @@ export default function AsociarCodigo({ abierto, codigo: codigoInicial = '', ins
                 <button type="button" className="text-[13px] font-bold text-orange-700 underline underline-offset-4" onClick={() => setInsumo(null)}>Cambiar</button>
               </div>
             ) : (
-              <BuscadorInsumo insumos={insumos} onElegir={setInsumo} autoFocus />
+              <>
+                <BuscadorInsumo insumos={insumos} onElegir={setInsumo} autoFocus />
+                {onCrearInsumo && (
+                  <button type="button" onClick={() => onCrearInsumo(codigo.trim())} className="mt-2 text-[13px] font-bold text-orange-700 underline underline-offset-4">
+                    ¿No existe todavía? Crear insumo nuevo con este código
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

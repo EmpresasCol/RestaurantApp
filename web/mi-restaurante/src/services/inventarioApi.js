@@ -139,8 +139,8 @@ export const getStockPorProducto = async (productoId) => {
   return response.data;
 };
 
-export const getMovimientos = async () => {
-  const response = await api.get('/inventario/movimientos');
+export const getMovimientos = async (filtros = {}) => {
+  const response = await api.get('/inventario/movimientos', { params: filtros });
   return response.data;
 };
 
@@ -230,6 +230,8 @@ export const compras = {
   estadoOrden: (id, estado) => datos(api.put(`/compras/ordenes/${id}/estado`, { estado })),
   vencimientos: (dias = 30) => datos(api.get('/compras/vencimientos', { params: { dias } })),
   darDeBaja: (loteId, motivo) => datos(api.post(`/compras/lotes/${loteId}/baja`, { motivo })),
+  editarLote: (loteId, lote) => datos(api.put(`/compras/lotes/${loteId}`, lote)),
+  trasladar: (traslado) => datos(api.post('/compras/traslados', traslado)),
   conteo: (conteo) => datos(api.post('/compras/conteos', conteo)),
 };
 

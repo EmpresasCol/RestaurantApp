@@ -365,6 +365,11 @@ namespace RestaurantApi.Controllers
                     return BadRequest("No se puede eliminar el proveedor porque tiene productos asociados");
                 }
 
+                if (await _context.OrdenesCompra.AnyAsync(o => o.ProveedorId == id))
+                {
+                    return BadRequest("El proveedor tiene órdenes de compra. Desactívalo en lugar de eliminarlo.");
+                }
+
                 _context.Proveedores.Remove(proveedor);
                 await _context.SaveChangesAsync();
 
@@ -540,6 +545,11 @@ namespace RestaurantApi.Controllers
                     return BadRequest("No se puede eliminar el almacén porque tiene productos en stock");
                 }
 
+                if (await _context.MovimientosInventario.AnyAsync(m => m.AlmacenId == id) || await _context.Lotes.AnyAsync(l => l.AlmacenId == id))
+                {
+                    return BadRequest("El almacén tiene historial de movimientos. Desactívalo en lugar de eliminarlo.");
+                }
+
                 _context.Almacenes.Remove(almacen);
                 await _context.SaveChangesAsync();
 
@@ -583,6 +593,7 @@ namespace RestaurantApi.Controllers
                         p.PuntoReorden,
                         p.RequiereCaducidad,
                         p.DiasVencimiento,
+                        p.CodigoBarras,
                         p.ImagenUrl,
                         p.Activo,
                         p.FechaCreacion
@@ -638,13 +649,11 @@ namespace RestaurantApi.Controllers
                     return BadRequest(ModelState);
                 }
 
-                // Verificar si ya existe un producto con ese código
-                var existente = await _context.ProductosInventario
-                    .FirstOrDefaultAsync(p => p.Codigo.ToLower() == dto.Codigo.ToLower());
-
-                if (existente != null)
+                dto.Codigo = string.IsNullOrWhiteSpace(dto.Codigo) ? await SiguienteCodigoAsync() : dto.Codigo.Trim();
+                var conflicto = await ValidarCodigosAsync(dto, null);
+                if (conflicto != null)
                 {
-                    return BadRequest("Ya existe un producto con ese código");
+                    return BadRequest(conflicto);
                 }
 
                 // Verificar que la categoría existe
@@ -682,6 +691,7 @@ namespace RestaurantApi.Controllers
                     PuntoReorden = dto.PuntoReorden,
                     RequiereCaducidad = dto.RequiereCaducidad,
                     DiasVencimiento = dto.DiasVencimiento,
+                    CodigoBarras = string.IsNullOrWhiteSpace(dto.CodigoBarras) ? null : dto.CodigoBarras.Trim(),
                     ImagenUrl = dto.ImagenUrl,
                     Activo = dto.Activo,
                     FechaCreacion = DateTime.UtcNow
@@ -719,13 +729,11 @@ namespace RestaurantApi.Controllers
                     return NotFound($"Producto con ID {id} no encontrado");
                 }
 
-                // Verificar si el nuevo código ya existe en otro producto
-                var existente = await _context.ProductosInventario
-                    .FirstOrDefaultAsync(p => p.Codigo.ToLower() == dto.Codigo.ToLower() && p.Id != id);
-
-                if (existente != null)
+                dto.Codigo = string.IsNullOrWhiteSpace(dto.Codigo) ? producto.Codigo : dto.Codigo.Trim();
+                var conflicto = await ValidarCodigosAsync(dto, id);
+                if (conflicto != null)
                 {
-                    return BadRequest("Ya existe otro producto con ese código");
+                    return BadRequest(conflicto);
                 }
 
                 // Verificar que la categoría existe
@@ -761,6 +769,7 @@ namespace RestaurantApi.Controllers
                 producto.PuntoReorden = dto.PuntoReorden;
                 producto.RequiereCaducidad = dto.RequiereCaducidad;
                 producto.DiasVencimiento = dto.DiasVencimiento;
+                producto.CodigoBarras = string.IsNullOrWhiteSpace(dto.CodigoBarras) ? null : dto.CodigoBarras.Trim();
                 producto.ImagenUrl = dto.ImagenUrl;
                 producto.Activo = dto.Activo;
                 producto.FechaActualizacion = DateTime.UtcNow;
@@ -774,6 +783,36 @@ namespace RestaurantApi.Controllers
                 _logger.LogError(ex, "Error al actualizar producto");
                 return StatusCode(500, new { message = "Error al actualizar producto" });
             }
+        }
+
+        /// <summary>Siguiente código interno libre con el formato PROD-001.</summary>
+        private async Task<string> SiguienteCodigoAsync()
+        {
+            var codigos = await _context.ProductosInventario
+                .Where(p => p.Codigo != null && p.Codigo.StartsWith("PROD-"))
+                .Select(p => p.Codigo!)
+                .ToListAsync();
+            var max = codigos.Select(c => int.TryParse(c[5..], out var n) ? n : 0).DefaultIfEmpty(0).Max();
+            return $"PROD-{max + 1:D3}";
+        }
+
+        /// <summary>El código interno y el de barras no pueden repetirse en otro insumo ni en una presentación de compra.</summary>
+        private async Task<string?> ValidarCodigosAsync(ProductoInventarioDto dto, int? id)
+        {
+            var codigo = dto.Codigo!.ToLower();
+            if (await _context.ProductosInventario.AnyAsync(p => p.Id != id && p.Codigo != null && p.Codigo.ToLower() == codigo))
+                return $"Ya existe otro insumo con el código {dto.Codigo}";
+
+            var barras = dto.CodigoBarras?.Trim();
+            if (string.IsNullOrEmpty(barras)) return null;
+
+            var otro = await _context.ProductosInventario
+                .FirstOrDefaultAsync(p => p.Id != id && (p.CodigoBarras == barras || p.Codigo == barras));
+            if (otro != null) return $"El código de barras {barras} ya pertenece a {otro.Nombre}";
+
+            var pres = await _context.PresentacionesCompra.Include(x => x.Producto)
+                .FirstOrDefaultAsync(x => x.Codigo == barras && x.ProductoId != id);
+            return pres != null ? $"El código de barras {barras} ya está asociado a {pres.Producto?.Nombre} ({pres.Nombre})" : null;
         }
 
         /// <summary>
@@ -935,15 +974,24 @@ namespace RestaurantApi.Controllers
 
         // ==================== GET: Obtener todos los movimientos ====================
         [HttpGet("movimientos")]
-        public async Task<ActionResult<IEnumerable<object>>> GetMovimientos()
+        public async Task<ActionResult<IEnumerable<object>>> GetMovimientos(
+            [FromQuery] DateTime? desde = null, [FromQuery] DateTime? hasta = null, [FromQuery] string? tipo = null,
+            [FromQuery] int? productoId = null, [FromQuery] int? almacenId = null)
         {
             try
             {
+                // Fechas de calendario de Colombia → instantes UTC (hasta es inclusivo).
+                var desdeUtc = desde.HasValue ? HoraLocal.AUtc(desde.Value.Date) : (DateTime?)null;
+                var hastaUtc = hasta.HasValue ? HoraLocal.AUtc(hasta.Value.Date.AddDays(1)) : (DateTime?)null;
                 var movimientos = await _context.MovimientosInventario
                     .Include(m => m.Producto)
-                    .Include(m => m.Almacen) // ✅ Cambio: ahora es Almacen en lugar de AlmacenOrigen
+                    .Include(m => m.Almacen)
+                    .Where(m => (desdeUtc == null || m.Fecha >= desdeUtc) && (hastaUtc == null || m.Fecha < hastaUtc)
+                                && (tipo == null || m.TipoMovimiento == tipo)
+                                && (productoId == null || m.ProductoId == productoId)
+                                && (almacenId == null || m.AlmacenId == almacenId))
                     .OrderByDescending(m => m.Fecha)
-                    .Take(100)
+                    .Take(500)
                     .Select(m => new
                     {
                         m.Id,
@@ -958,7 +1006,10 @@ namespace RestaurantApi.Controllers
                         m.CostoTotal,
                         m.Motivo,
                         m.Referencia,
-                        m.Fecha
+                        m.Fecha,
+                        m.LoteId,
+                        UnidadMedida = m.Producto.UnidadMedida,
+                        UsuarioNombre = _context.Usuarios.Where(u => u.Id == m.UsuarioId).Select(u => u.Nombre).FirstOrDefault()
                     })
                     .ToListAsync();
 
@@ -1064,6 +1115,16 @@ namespace RestaurantApi.Controllers
                         return BadRequest("Tipo de movimiento no válido");
                 }
 
+                // El kárdex guarda cuánto cambió, no el total nuevo.
+                var cantidadMovimiento = dto.TipoMovimiento == "Ajuste" ? Math.Abs(nuevaCantidad - stock.Cantidad) : dto.Cantidad;
+                var motivo = dto.TipoMovimiento == "Ajuste"
+                    ? $"{(string.IsNullOrWhiteSpace(dto.Motivo) ? "Ajuste" : dto.Motivo.Trim())}: {stock.Cantidad:0.##} → {nuevaCantidad:0.##}"
+                    : dto.Motivo ?? string.Empty;
+                if (dto.TipoMovimiento == "Ajuste" && cantidadMovimiento == 0)
+                {
+                    return BadRequest("La cantidad es igual a la que ya hay: no hay nada que ajustar");
+                }
+
                 // Actualizar stock
                 stock.Cantidad = nuevaCantidad;
                 stock.FechaActualizacion = DateTime.UtcNow;
@@ -1074,9 +1135,9 @@ namespace RestaurantApi.Controllers
                     ProductoId = dto.ProductoId,
                     AlmacenId = dto.AlmacenId,
                     TipoMovimiento = dto.TipoMovimiento,
-                    Cantidad = dto.Cantidad,
+                    Cantidad = cantidadMovimiento,
                     CostoUnitario = costoUnitario,
-                    Motivo = dto.Motivo ?? string.Empty,
+                    Motivo = motivo,
                     Referencia = dto.Referencia ?? string.Empty,
                     LoteId = dto.LoteId,
                     // El responsable es quien está autenticado, no lo que diga el cuerpo.
@@ -1441,10 +1502,15 @@ namespace RestaurantApi.Controllers
                 if (producto == null)
                     return BadRequest("El producto/insumo especificado no existe.");
 
-                if (!Enum.TryParse<UnidadMedida>(dto.UnidadMedida, true, out var unidadEnum))
+                // El descuento no convierte unidades: la receta siempre va en la unidad del insumo.
+                if (!Enum.TryParse<UnidadMedida>(producto.UnidadMedida, true, out var unidadEnum)
+                    && !Enum.TryParse(dto.UnidadMedida, true, out unidadEnum))
                 {
                     unidadEnum = UnidadMedida.Unidad;
                 }
+
+                if (await _context.Recetas.AnyAsync(r => r.PlatilloId == dto.PlatilloId && r.ProductoId == dto.ProductoId))
+                    return BadRequest($"{producto.Nombre} ya está en la receta de {platillo.Nombre}. Edita la cantidad.");
 
                 var receta = new Receta
                 {
@@ -1499,7 +1565,8 @@ namespace RestaurantApi.Controllers
 
                 receta.CantidadRequerida = dto.CantidadRequerida;
 
-                if (!string.IsNullOrEmpty(dto.UnidadMedida) && Enum.TryParse<UnidadMedida>(dto.UnidadMedida, true, out var unidadEnum))
+                var unidadInsumo = await _context.ProductosInventario.Where(p => p.Id == receta.ProductoId).Select(p => p.UnidadMedida).FirstOrDefaultAsync();
+                if (Enum.TryParse<UnidadMedida>(unidadInsumo, true, out var unidadEnum))
                 {
                     receta.UnidadMedida = unidadEnum;
                 }

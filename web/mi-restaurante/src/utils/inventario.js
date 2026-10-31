@@ -79,3 +79,11 @@ export const enlaceWhatsApp = (telefono, texto) => {
 
 /** Paquetes enteros que cubren una cantidad en unidad base. */
 export const paquetesPara = (cantidad, factor) => (factor > 0 ? Math.ceil((Number(cantidad) || 0) / factor) : 0);
+
+/** Signo con que el movimiento afecta el stock del almacén donde se registró. */
+export const signoMovimiento = (m) => {
+  if (m.tipoMovimiento === 'Entrada') return '+';
+  if (m.tipoMovimiento === 'Ajuste') return '±';
+  if (m.tipoMovimiento === 'Transferencia') return String(m.motivo ?? '').startsWith('Traslado desde') ? '+' : '−';
+  return '−';
+};

@@ -1,10 +1,10 @@
 // Lotes por vencer y vencidos: usar primero lo que vence antes y sacar del stock lo vencido.
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarCheck } from 'lucide-react';
+import { CalendarCheck, Pencil } from 'lucide-react';
 import { compras, mensajeError } from '../../services/inventarioApi';
 import { formatearCantidad, formatearCOP, formatearFecha, nivelVencimiento, textoVencimiento } from '../../utils/inventario';
-import { BotonConfirmar } from './FichaInsumo';
-import { Cargando, Chip, Lista, useAviso, Vacio } from './ui';
+import EditorLote from './EditorLote';
+import { BotonConfirmar, Cargando, Chip, Lista, useAviso, Vacio } from './ui';
 
 const RANGOS = [
   { dias: 0, label: 'Vencidos y hoy' },
@@ -17,6 +17,7 @@ export default function Vencimientos({ onAbrirInsumo, onCambio, version }) {
   const [dias, setDias] = useState(7);
   const [lotes, setLotes] = useState(null);
   const [error, setError] = useState(null);
+  const [editando, setEditando] = useState(null);
   const [aviso, mostrar] = useAviso();
 
   const cargar = () => compras.vencimientos(dias).then(setLotes).catch((e) => setError(mensajeError(e, 'No se pudieron cargar los vencimientos')));
@@ -72,6 +73,14 @@ export default function Vencimientos({ onAbrirInsumo, onCambio, version }) {
           <Lista>
             {lotes.map((l) => {
               const nivel = nivelVencimiento(l.diasParaVencer);
+              if (editando === l.id) {
+                return (
+                  <div key={l.id} className="px-4 py-3">
+                    <p className="mb-2 text-[14px] font-bold text-espresso">{l.insumo} · lote {l.numeroLote}</p>
+                    <EditorLote lote={l} onCancelar={() => setEditando(null)} onGuardado={() => { setEditando(null); mostrar('Lote corregido'); cargar(); onCambio?.(); }} />
+                  </div>
+                );
+              }
               return (
                 <div key={l.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5">
                   <button type="button" onClick={() => onAbrirInsumo(l.productoId)} className="min-w-0 flex-1 text-left">
@@ -82,6 +91,9 @@ export default function Vencimientos({ onAbrirInsumo, onCambio, version }) {
                   </button>
                   <span className="tabular w-24 text-right text-[14px] font-bold text-espresso">{formatearCOP(l.valor)}</span>
                   <Chip tono={nivel === 'normal' ? 'neutro' : nivel === 'aviso' ? 'aviso' : 'peligro'}>{textoVencimiento(l.diasParaVencer)}</Chip>
+                  <button type="button" onClick={() => setEditando(l.id)} className="grid h-9 w-9 place-items-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-espresso" aria-label={`Corregir fecha del lote ${l.numeroLote}`}>
+                    <Pencil size={15} />
+                  </button>
                   {l.diasParaVencer < 0 && <BotonConfirmar onConfirmar={() => darDeBaja(l)}>Dar de baja</BotonConfirmar>}
                 </div>
               );

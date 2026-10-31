@@ -152,3 +152,28 @@ Automáticas: `ComprasTests.cs` (11 casos) y `src/__tests__/inventario.test.js`.
 | OPE-16 | Conteo | Contar 92 kg donde el sistema dice 100 | Ajuste de 8 kg, lotes descontados, diferencia valorizada; contar lo mismo otra vez no genera ajuste |
 | OPE-17 | Conteo escaneando | Escanear 3 veces la caja de 10 kg | El conteo de ese insumo sube a 30 |
 | OPE-18 | Celular | Repetir OPE-04, 10 y 16 a 390 px | Todo cabe sin desplazamiento horizontal; botones de 44 px o más |
+
+## 7. Movimientos, configuración y reglas de la vida real (31/10/2026)
+
+Automáticas: `InventarioRealTests.cs` (8 casos) y la prueba de signos en `inventario.test.js`.
+
+Reglas nuevas:
+- **Lo vencido no se usa:** un lote con fecha pasada sigue en bodega hasta darlo de baja,
+  pero no se vende, no se gasta en recetas y no cuenta para "disponible" ni para el estado.
+- **Niveles con decimales** (2,5 kg). **Receta en la unidad del insumo** y sin insumos repetidos.
+- **Kárdex:** un ajuste guarda la diferencia (100 → 96 = 4), no el total.
+- **Código interno automático** (PROD-021) y **código de barras único** entre insumos y presentaciones.
+- Almacén o proveedor con historial: se desactiva, no se elimina.
+
+| ID | Caso | Pasos | Resultado esperado |
+| --- | --- | --- | --- |
+| REAL-01 | Vencido no se vende | Insumo cuyo único lote venció | Platillo "No disponible por el momento"; la ficha avisa los vencidos |
+| REAL-02 | Corregir fecha | Vencimientos o ficha → lápiz → nueva fecha | El lote vuelve a ser utilizable y sale de vencidos |
+| REAL-03 | Traslado | Movimientos → Registrar → Traslado 4 L Bodega → Bar | Dos movimientos (salida y llegada); el lote viaja con su fecha |
+| REAL-04 | Merma / salida | Registrar → Merma "Se cayó" 1 kg | Baja el stock y el lote más próximo a vencer |
+| REAL-05 | Ajuste | Registrar → Ajuste a 96 donde hay 100 | Kárdex muestra ±4 con "100 → 96" |
+| REAL-06 | Nuevo insumo escaneando | Configuración → Catálogo → Nuevo → escanear código | Se crea con PROD-0xx y el código; escanearlo en Recibir lo reconoce |
+| REAL-07 | Producto nuevo al recibir | Recibir → código desconocido → "Crear insumo nuevo" | Se crea y entra a la recepción |
+| REAL-08 | Receta | Recetas → agregar insumo y cantidad | Cantidad en la unidad del insumo; costo y % del precio se actualizan |
+| REAL-09 | Kárdex | Movimientos → 30 días, filtro Merma | Agrupado por día, con quién lo hizo y el valor perdido |
+| REAL-10 | Desactivar | Intentar eliminar un almacén con historial | Mensaje: desactívalo en lugar de eliminarlo |

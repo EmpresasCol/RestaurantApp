@@ -35,6 +35,24 @@ namespace RestaurantApi.Dtos
         [StringLength(50)] public string? NumeroLote { get; set; }
     }
 
+    /// <summary>Corrige un lote registrado con datos equivocados.</summary>
+    public class EditarLoteDto
+    {
+        /// <summary>Null quita la fecha (solo si el insumo no es perecedero).</summary>
+        public DateTime? FechaVencimiento { get; set; }
+        [StringLength(50)] public string? NumeroLote { get; set; }
+    }
+
+    /// <summary>Mover existencias entre almacenes (bodega → cocina, por ejemplo).</summary>
+    public class TrasladoDto
+    {
+        [Required] public int ProductoId { get; set; }
+        [Required] public int AlmacenOrigenId { get; set; }
+        [Required] public int AlmacenDestinoId { get; set; }
+        [Range(0.001, 9999999)] public decimal Cantidad { get; set; }
+        [StringLength(300)] public string? Motivo { get; set; }
+    }
+
     public class BajaLoteDto
     {
         [StringLength(300)] public string? Motivo { get; set; }

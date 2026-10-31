@@ -1,5 +1,5 @@
 import {
-  enlaceWhatsApp, nivelVencimiento, paquetesPara, telefonoWhatsApp, textoCobertura, textoPedidoProveedor, textoVencimiento,
+  enlaceWhatsApp, nivelVencimiento, paquetesPara, signoMovimiento, telefonoWhatsApp, textoCobertura, textoPedidoProveedor, textoVencimiento,
 } from '../utils/inventario';
 
 describe('vencimientos', () => {
@@ -57,4 +57,12 @@ test('paquetes completos que cubren una cantidad', () => {
   expect(paquetesPara(42, 10)).toBe(5);
   expect(paquetesPara(40, 10)).toBe(4);
   expect(paquetesPara(5, 0)).toBe(0);
+});
+
+test('signo del movimiento en el kárdex', () => {
+  expect(signoMovimiento({ tipoMovimiento: 'Entrada' })).toBe('+');
+  expect(signoMovimiento({ tipoMovimiento: 'Merma' })).toBe('−');
+  expect(signoMovimiento({ tipoMovimiento: 'Ajuste' })).toBe('±');
+  expect(signoMovimiento({ tipoMovimiento: 'Transferencia', motivo: 'Traslado a Bar' })).toBe('−');
+  expect(signoMovimiento({ tipoMovimiento: 'Transferencia', motivo: 'Traslado desde Bodega' })).toBe('+');
 });

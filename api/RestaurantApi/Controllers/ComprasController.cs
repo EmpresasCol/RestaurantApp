@@ -117,7 +117,7 @@ namespace RestaurantApi.Controllers
                     p.RequiereCaducidad, p.DiasVencimiento, p.Activo, p.CategoriaId, Categoria = p.Categoria?.Nombre,
                     p.ProveedorId, Proveedor = p.Proveedor?.Nombre, ProveedorTelefono = p.Proveedor?.Telefono
                 },
-                estado.Stock, estado.Valor, estado.Estado, estado.ConsumoDiario, estado.DiasCobertura, estado.Pedido,
+                estado.Stock, estado.Vencido, estado.Valor, estado.Estado, estado.ConsumoDiario, estado.DiasCobertura, estado.Pedido,
                 PorAlmacen = porAlmacen, Lotes = lotes, Presentaciones = presentaciones, Movimientos = movimientos,
                 UsadoEn = usadoEn, OrdenesAbiertas = ordenesAbiertas
             });
@@ -559,6 +559,102 @@ namespace RestaurantApi.Controllers
             return Ok(new { message = $"Se dio de baja {cantidad:0.##} {lote.Producto?.UnidadMedida} de {lote.Producto?.Nombre}", Perdida = Math.Round(cantidad * lote.CostoUnitario, 0) });
         }
 
+        /// <summary>Corrige la fecha de vencimiento o el número de un lote mal registrado.</summary>
+        [HttpPut("lotes/{id:int}")]
+        public async Task<IActionResult> EditarLote(int id, [FromBody] EditarLoteDto dto)
+        {
+            var lote = await _context.Lotes.Include(l => l.Producto).FirstOrDefaultAsync(l => l.Id == id);
+            if (lote == null) return NotFound(new { message = "Lote no encontrado" });
+            if (dto.FechaVencimiento == null && lote.Producto?.RequiereCaducidad == true)
+                return BadRequest(new { message = $"{lote.Producto.Nombre} es perecedero: el lote necesita fecha de vencimiento" });
+
+            lote.FechaVencimiento = dto.FechaVencimiento?.Date;
+            if (!string.IsNullOrWhiteSpace(dto.NumeroLote)) lote.NumeroLote = dto.NumeroLote.Trim();
+            // Un lote marcado vencido por error vuelve a estar activo si la fecha nueva no ha pasado.
+            if (lote.Estado == "Vencido" && lote.CantidadActual > 0 && (lote.FechaVencimiento == null || lote.FechaVencimiento >= Hoy))
+                lote.Estado = "Activo";
+
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // ==================== TRASLADOS ====================
+
+        /// <summary>
+        /// Mueve existencias entre almacenes. Los lotes viajan con su fecha de vencimiento
+        /// (primero los que vencen antes); lo vencido no se traslada.
+        /// </summary>
+        [HttpPost("traslados")]
+        public async Task<ActionResult<object>> Trasladar([FromBody] TrasladoDto dto)
+        {
+            if (dto.AlmacenOrigenId == dto.AlmacenDestinoId) return BadRequest(new { message = "El origen y el destino son el mismo almacén" });
+            if (dto.Cantidad <= 0) return BadRequest(new { message = "La cantidad debe ser mayor que cero" });
+
+            var producto = await _context.ProductosInventario.FindAsync(dto.ProductoId);
+            if (producto == null) return BadRequest(new { message = "El insumo no existe" });
+            var almacenes = await _context.Almacenes.Where(a => a.Id == dto.AlmacenOrigenId || a.Id == dto.AlmacenDestinoId).ToDictionaryAsync(a => a.Id);
+            if (almacenes.Count != 2) return BadRequest(new { message = "Uno de los almacenes no existe" });
+
+            var origen = await _context.Stock.FirstOrDefaultAsync(s => s.ProductoId == dto.ProductoId && s.AlmacenId == dto.AlmacenOrigenId);
+            var vencido = (await LotesInventario.VencidoAsync(_context, new[] { dto.ProductoId })).GetValueOrDefault((dto.ProductoId, dto.AlmacenOrigenId));
+            var disponible = Math.Max(0, (origen?.Cantidad ?? 0) - vencido);
+            if (origen == null || disponible < dto.Cantidad)
+                return BadRequest(new { message = $"En {almacenes[dto.AlmacenOrigenId].Nombre} solo hay {disponible:0.##} {producto.UnidadMedida} sin vencer" });
+
+            var destino = await _context.Stock.FirstOrDefaultAsync(s => s.ProductoId == dto.ProductoId && s.AlmacenId == dto.AlmacenDestinoId);
+            if (destino == null)
+            {
+                destino = new Stock { ProductoId = dto.ProductoId, AlmacenId = dto.AlmacenDestinoId, Cantidad = 0, CostoPromedio = origen.CostoPromedio };
+                _context.Stock.Add(destino);
+            }
+            destino.CostoPromedio = destino.Cantidad > 0
+                ? Math.Round((destino.Cantidad * destino.CostoPromedio + dto.Cantidad * origen.CostoPromedio) / (destino.Cantidad + dto.Cantidad), 2)
+                : origen.CostoPromedio;
+            destino.Cantidad += dto.Cantidad;
+            origen.Cantidad -= dto.Cantidad;
+            origen.FechaActualizacion = destino.FechaActualizacion = DateTime.UtcNow;
+
+            var hoy = Hoy;
+            var lotes = (await _context.Lotes
+                    .Where(l => l.ProductoId == dto.ProductoId && l.AlmacenId == dto.AlmacenOrigenId && l.CantidadActual > 0
+                                && (l.FechaVencimiento == null || l.FechaVencimiento >= hoy))
+                    .ToListAsync())
+                .OrderBy(l => l.FechaVencimiento == null).ThenBy(l => l.FechaVencimiento).ThenBy(l => l.FechaIngreso);
+            var pendiente = dto.Cantidad;
+            foreach (var lote in lotes)
+            {
+                if (pendiente <= 0) break;
+                var mover = Math.Min(pendiente, lote.CantidadActual);
+                lote.CantidadActual -= mover;
+                if (lote.CantidadActual == 0) lote.Estado = "Agotado";
+                _context.Lotes.Add(new Lote
+                {
+                    ProductoId = lote.ProductoId, AlmacenId = dto.AlmacenDestinoId, NumeroLote = lote.NumeroLote,
+                    FechaIngreso = lote.FechaIngreso, FechaVencimiento = lote.FechaVencimiento,
+                    CantidadInicial = mover, CantidadActual = mover, CostoUnitario = lote.CostoUnitario, Estado = "Activo"
+                });
+                pendiente -= mover;
+            }
+
+            var motivo = string.IsNullOrWhiteSpace(dto.Motivo) ? null : $" · {dto.Motivo.Trim()}";
+            foreach (var (almacenId, texto) in new[]
+                     {
+                         (dto.AlmacenOrigenId, $"Traslado a {almacenes[dto.AlmacenDestinoId].Nombre}{motivo}"),
+                         (dto.AlmacenDestinoId, $"Traslado desde {almacenes[dto.AlmacenOrigenId].Nombre}{motivo}")
+                     })
+            {
+                _context.MovimientosInventario.Add(new MovimientoInventario
+                {
+                    ProductoId = dto.ProductoId, AlmacenId = almacenId, TipoMovimiento = "Transferencia",
+                    Cantidad = dto.Cantidad, CostoUnitario = origen.CostoPromedio, Motivo = texto,
+                    Referencia = $"Traslado {hoy:yyyy-MM-dd}", UsuarioId = UsuarioId, Fecha = DateTime.UtcNow
+                });
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = $"Se trasladaron {dto.Cantidad:0.##} {producto.UnidadMedida} de {producto.Nombre} a {almacenes[dto.AlmacenDestinoId].Nombre}" });
+        }
+
         // ==================== CONTEO FÍSICO ====================
 
         /// <summary>Lo contado reemplaza el stock del almacén; cada diferencia queda como ajuste.</summary>
@@ -623,7 +719,7 @@ namespace RestaurantApi.Controllers
             int Id, string? Codigo, string Nombre, string UnidadMedida, string? Categoria, int? ProveedorId, string? Proveedor,
             decimal Stock, decimal StockMinimo, decimal PuntoReorden, decimal? StockMaximo, decimal Valor, string Estado,
             decimal ConsumoDiario, decimal? DiasCobertura, decimal Pedido, DateTime? ProximoVencimiento, bool RequiereCaducidad, bool Activo,
-            decimal PrecioCosto);
+            decimal PrecioCosto, decimal Vencido);
 
         /// <summary>
         /// Stock, consumo diario (ventas de los últimos 14 días), cobertura y lo ya pedido de
@@ -638,9 +734,14 @@ namespace RestaurantApi.Controllers
                 .ToListAsync();
             var ids = productos.Select(p => p.Id).ToList();
 
+            var vencido = await LotesInventario.VencidoAsync(_context, ids);
+            // Cantidad = lo utilizable (sin vencidos); Valor = todo lo que hay en bodega.
             var stock = (await _context.Stock.Where(s => ids.Contains(s.ProductoId)).ToListAsync())
                 .GroupBy(s => s.ProductoId)
-                .ToDictionary(g => g.Key, g => (Cantidad: g.Sum(s => Math.Max(s.Cantidad, 0)), Valor: g.Sum(s => Math.Max(s.Cantidad, 0) * s.CostoPromedio)));
+                .ToDictionary(g => g.Key, g => (
+                    Cantidad: g.Sum(s => Math.Max(0, s.Cantidad - vencido.GetValueOrDefault((s.ProductoId, s.AlmacenId)))),
+                    Valor: g.Sum(s => Math.Max(s.Cantidad, 0) * s.CostoPromedio),
+                    Vencido: g.Sum(s => Math.Min(Math.Max(s.Cantidad, 0), vencido.GetValueOrDefault((s.ProductoId, s.AlmacenId))))));
 
             var desde = DateTime.UtcNow.AddDays(-DiasConsumo);
             var consumo = (await _context.MovimientosInventario
@@ -667,7 +768,7 @@ namespace RestaurantApi.Controllers
 
             return productos.Select(p =>
             {
-                var (cantidad, valor) = stock.GetValueOrDefault(p.Id);
+                var (cantidad, valor, cantidadVencida) = stock.GetValueOrDefault(p.Id);
                 var diario = Math.Round(consumo.GetValueOrDefault(p.Id), 3);
                 var punto = PuntoReorden(p);
                 var estado = cantidad <= 0 ? "Agotado" : punto > 0 && cantidad <= punto ? "Bajo" : "OK";
@@ -675,7 +776,7 @@ namespace RestaurantApi.Controllers
                     p.Id, p.Codigo, p.Nombre, p.UnidadMedida, p.Categoria?.Nombre, p.ProveedorId, p.Proveedor?.Nombre,
                     Math.Round(cantidad, 2), p.StockMinimo, punto, p.StockMaximo, Math.Round(valor, 0), estado,
                     diario, diario > 0 ? Math.Round(cantidad / diario, 1) : null, Math.Round(pedido.GetValueOrDefault(p.Id), 2),
-                    vencimientos.GetValueOrDefault(p.Id), p.RequiereCaducidad, p.Activo, p.PrecioCosto);
+                    vencimientos.GetValueOrDefault(p.Id), p.RequiereCaducidad, p.Activo, p.PrecioCosto, Math.Round(cantidadVencida, 2));
             }).ToList();
         }
 

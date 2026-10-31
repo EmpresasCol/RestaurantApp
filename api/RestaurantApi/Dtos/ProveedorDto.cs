@@ -11,22 +11,22 @@ namespace RestaurantApi.Dtos
         public string Nombre { get; set; }
 
         [StringLength(100)]
-        public string Contacto { get; set; }
+        public string? Contacto { get; set; }
 
         [StringLength(20)]
-        public string Telefono { get; set; }
+        public string? Telefono { get; set; }
 
         [EmailAddress(ErrorMessage = "Email inválido")]
         [StringLength(100)]
-        public string Email { get; set; }
+        public string? Email { get; set; }
 
-        public string Direccion { get; set; }
+        public string? Direccion { get; set; }
 
         [StringLength(100)]
-        public string Ciudad { get; set; }
+        public string? Ciudad { get; set; }
 
         [StringLength(200)]
-        public string TipoProductos { get; set; }
+        public string? TipoProductos { get; set; }
 
         public bool Activo { get; set; } = true;
     }

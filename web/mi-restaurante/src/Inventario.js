@@ -9,14 +9,12 @@ import {
 import { getProveedores } from './services/inventarioApi';
 import ConteoFisico from './components/inventario/ConteoFisico';
 import FichaInsumo from './components/inventario/FichaInsumo';
-import GestionAlmacenes from './components/inventario/GestionAlmacenes';
-import GestionCategorias from './components/inventario/GestionCategorias';
-import GestionProductos from './components/inventario/GestionProductos';
-import GestionProveedores from './components/inventario/GestionProveedores';
-import GestionRecetas from './components/inventario/GestionRecetas';
+import CatalogoInsumos from './components/inventario/CatalogoInsumos';
+import { Almacenes, Categorias, Proveedores } from './components/inventario/ConfigCatalogos';
+import RecetasConfig from './components/inventario/RecetasConfig';
 import HoyInventario from './components/inventario/HoyInventario';
 import ListaInsumos from './components/inventario/ListaInsumos';
-import MovimientosInventario from './components/inventario/MovimientosInventario';
+import Movimientos from './components/inventario/Movimientos';
 import PedidosProveedor from './components/inventario/PedidosProveedor';
 import RecibirMercancia from './components/inventario/RecibirMercancia';
 import Vencimientos from './components/inventario/Vencimientos';
@@ -45,11 +43,11 @@ const TITULOS = {
 };
 
 const CONFIGURACION = [
-  { id: 'catalogo', label: 'Catálogo de insumos', componente: GestionProductos },
-  { id: 'recetas', label: 'Recetas', componente: GestionRecetas },
-  { id: 'categorias', label: 'Categorías', componente: GestionCategorias },
-  { id: 'almacenes', label: 'Almacenes', componente: GestionAlmacenes },
-  { id: 'proveedores', label: 'Proveedores', componente: GestionProveedores },
+  { id: 'catalogo', label: 'Catálogo de insumos', componente: CatalogoInsumos },
+  { id: 'recetas', label: 'Recetas', componente: RecetasConfig },
+  { id: 'categorias', label: 'Categorías', componente: Categorias },
+  { id: 'almacenes', label: 'Almacenes', componente: Almacenes },
+  { id: 'proveedores', label: 'Proveedores', componente: Proveedores },
 ];
 
 function Inventario() {
@@ -95,7 +93,7 @@ function Inventario() {
   };
 
   const [titulo, detalle] = TITULOS[tarea];
-  const Config = CONFIGURACION.find((c) => c.id === seccionConfig)?.componente ?? GestionProductos;
+  const Config = CONFIGURACION.find((c) => c.id === seccionConfig)?.componente ?? CatalogoInsumos;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -147,8 +145,8 @@ function Inventario() {
         )}
         {tarea === 'vencimientos' && <Vencimientos onAbrirInsumo={setFichaId} onCambio={cambio} version={version} />}
         {tarea === 'conteo' && <ConteoFisico onAbrirInsumo={setFichaId} onCambio={cambio} />}
-        {tarea === 'insumos' && <ListaInsumos onAbrirInsumo={setFichaId} filtroInicial={filtroInsumos} version={version} />}
-        {tarea === 'movimientos' && <MovimientosInventario key={version} />}
+        {tarea === 'insumos' && <ListaInsumos onAbrirInsumo={setFichaId} onCambio={cambio} filtroInicial={filtroInsumos} version={version} />}
+        {tarea === 'movimientos' && <Movimientos onAbrirInsumo={setFichaId} onCambio={cambio} version={version} />}
         {tarea === 'configuracion' && (
           <div>
             <div className="qp-rail -mx-1 mb-5 flex gap-1 overflow-x-auto px-1" role="tablist" aria-label="Configuración">
@@ -165,7 +163,7 @@ function Inventario() {
                 </button>
               ))}
             </div>
-            <Config />
+            <Config onCambio={cambio} />
           </div>
         )}
       </main>

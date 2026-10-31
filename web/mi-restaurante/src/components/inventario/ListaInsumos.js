@@ -1,9 +1,10 @@
 // Todos los insumos con su estado; tocar uno abre su ficha.
 import React, { useEffect, useMemo, useState } from 'react';
-import { Package, Search } from 'lucide-react';
+import { Package, Plus, Search } from 'lucide-react';
 import { compras, mensajeError } from '../../services/inventarioApi';
 import { formatearCantidad, formatearFecha, textoCobertura } from '../../utils/inventario';
-import { Cargando, ChipEstado, Selector, Vacio } from './ui';
+import FormularioInsumo from './FormularioInsumo';
+import { Boton, Cargando, ChipEstado, Selector, useAviso, Vacio } from './ui';
 
 const FILTROS = [
   { id: 'todos', label: 'Todos' },
@@ -14,7 +15,9 @@ const FILTROS = [
 
 const normalizar = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-export default function ListaInsumos({ onAbrirInsumo, filtroInicial = 'todos', version }) {
+export default function ListaInsumos({ onAbrirInsumo, onCambio, filtroInicial = 'todos', version }) {
+  const [creando, setCreando] = useState(false);
+  const [aviso, mostrar] = useAviso();
   const [insumos, setInsumos] = useState(null);
   const [error, setError] = useState(null);
   const [filtro, setFiltro] = useState(filtroInicial);
@@ -77,6 +80,7 @@ export default function ListaInsumos({ onAbrirInsumo, filtroInicial = 'todos', v
             <option value="">Todas</option>
             {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
           </Selector>
+          <Boton onClick={() => setCreando(true)} className="h-11"><Plus size={18} aria-hidden="true" /> <span className="hidden sm:inline">Nuevo insumo</span></Boton>
         </div>
       </div>
 
@@ -126,6 +130,12 @@ export default function ListaInsumos({ onAbrirInsumo, filtroInicial = 'todos', v
           </div>
         )}
       </div>
+      <FormularioInsumo
+        abierto={creando}
+        onCerrar={() => setCreando(false)}
+        onGuardado={(msg, id) => { setCreando(false); mostrar(msg); onCambio?.(); if (id) onAbrirInsumo(id); }}
+      />
+      {aviso}
     </div>
   );
 }

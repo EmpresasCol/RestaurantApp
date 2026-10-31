@@ -14,13 +14,13 @@ namespace RestaurantApi.Dtos
         [StringLength(100)]
         public string Nombre { get; set; }
 
-        public string Descripcion { get; set; }
+        public string? Descripcion { get; set; }
 
         [StringLength(200)]
-        public string Ubicacion { get; set; }
+        public string? Ubicacion { get; set; }
 
         [StringLength(50)]
-        public string Tipo { get; set; } = "Principal";
+        public string? Tipo { get; set; } = "Principal";
 
         public bool Activo { get; set; } = true;
     }

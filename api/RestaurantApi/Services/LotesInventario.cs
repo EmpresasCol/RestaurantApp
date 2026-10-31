@@ -7,6 +7,23 @@ namespace RestaurantApi.Services
     public static class LotesInventario
     {
         /// <summary>
+        /// Cantidad en lotes ya vencidos por (producto, almacén). Sigue físicamente en bodega
+        /// hasta que se da de baja, pero no se puede vender ni gastar en recetas.
+        /// </summary>
+        public static async Task<Dictionary<(int ProductoId, int AlmacenId), decimal>> VencidoAsync(RestauranteContext context, IEnumerable<int>? productoIds = null)
+        {
+            var hoy = HoraLocal.AhoraColombia().Date;
+            var ids = productoIds?.ToList();
+            return (await context.Lotes
+                    .Where(l => l.CantidadActual > 0 && l.FechaVencimiento != null && l.FechaVencimiento < hoy
+                                && (ids == null || ids.Contains(l.ProductoId)))
+                    .Select(l => new { l.ProductoId, l.AlmacenId, l.CantidadActual })
+                    .ToListAsync())
+                .GroupBy(l => (l.ProductoId, l.AlmacenId))
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.CantidadActual));
+        }
+
+        /// <summary>
         /// Saca la cantidad de los lotes (el indicado primero, luego FIFO por vencimiento)
         /// para que los lotes no muestren más existencias que el stock.
         /// </summary>

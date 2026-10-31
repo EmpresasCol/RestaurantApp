@@ -220,16 +220,21 @@ namespace RestaurantApi.Services
             return resultado;
         }
 
-        /// <summary>Existencias totales (todos los almacenes) por producto; un producto inactivo cuenta como 0.</summary>
+        /// <summary>
+        /// Existencias utilizables (todos los almacenes) por producto: sin lo vencido.
+        /// Un producto inactivo cuenta como 0.
+        /// </summary>
         private async Task<Dictionary<int, decimal>> ExistenciasAsync()
         {
             var activos = await _context.ProductosInventario.Where(p => p.Activo).Select(p => p.Id).ToListAsync();
             var stock = await _context.Stock
                 .Where(s => activos.Contains(s.ProductoId) && s.Cantidad > 0)
-                .GroupBy(s => s.ProductoId)
-                .Select(g => new { g.Key, Total = g.Sum(s => s.Cantidad) })
+                .Select(s => new { s.ProductoId, s.AlmacenId, s.Cantidad })
                 .ToListAsync();
-            return stock.ToDictionary(s => s.Key, s => s.Total);
+            var vencido = await LotesInventario.VencidoAsync(_context, activos);
+            return stock
+                .GroupBy(s => s.ProductoId)
+                .ToDictionary(g => g.Key, g => g.Sum(s => Math.Max(0, s.Cantidad - vencido.GetValueOrDefault((s.ProductoId, s.AlmacenId)))));
         }
 
         public async Task<Dictionary<int, int?>> PorcionesDisponiblesAsync()
@@ -301,22 +306,27 @@ namespace RestaurantApi.Services
                 .ToList();
 
             var producto = await _context.ProductosInventario.FindAsync(productoId);
+            var vencido = await LotesInventario.VencidoAsync(_context, new[] { productoId });
+            var hoy = HoraLocal.AhoraColombia().Date;
             var restante = cantidad;
             int movimientos = 0;
 
             foreach (var stock in stocks)
             {
                 if (restante <= 0) break;
-                if (stock.Cantidad <= 0) continue;
+                // Lo vencido no se gasta en recetas: queda para darlo de baja.
+                var utilizable = stock.Cantidad - vencido.GetValueOrDefault((productoId, stock.AlmacenId));
+                if (utilizable <= 0) continue;
 
-                var tomar = Math.Min(restante, stock.Cantidad);
+                var tomar = Math.Min(restante, utilizable);
                 stock.Cantidad -= tomar;
                 stock.FechaActualizacion = DateTime.UtcNow;
                 restante -= tomar;
 
                 var costoStock = stock.CostoPromedio > 0 ? stock.CostoPromedio : producto?.PrecioCosto ?? 0;
                 var lotes = await _context.Lotes
-                    .Where(l => l.ProductoId == productoId && l.AlmacenId == stock.AlmacenId && l.CantidadActual > 0)
+                    .Where(l => l.ProductoId == productoId && l.AlmacenId == stock.AlmacenId && l.CantidadActual > 0
+                                && (l.FechaVencimiento == null || l.FechaVencimiento >= hoy))
                     .OrderBy(l => l.FechaVencimiento == null)
                     .ThenBy(l => l.FechaVencimiento)
                     .ThenBy(l => l.FechaIngreso)

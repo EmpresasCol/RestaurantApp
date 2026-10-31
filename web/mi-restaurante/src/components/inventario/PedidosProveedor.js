@@ -7,8 +7,7 @@ import {
   enlaceWhatsApp, fechaISO, formatearCantidad, formatearCOP, formatearFecha, textoPedidoProveedor,
 } from '../../utils/inventario';
 import BuscadorInsumo from './BuscadorInsumo';
-import { BotonConfirmar } from './FichaInsumo';
-import { Boton, Campo, Cargando, Chip, ChipEstado, Lista, Panel, Selector, useAviso, Vacio } from './ui';
+import { Boton, BotonConfirmar, Campo, Cargando, Chip, ChipEstado, Lista, Panel, Selector, useAviso, Vacio } from './ui';
 
 const ESTADO_ORDEN = {
   Pendiente: { tono: 'neutro', texto: 'Por enviar' },

@@ -8,6 +8,7 @@ import { fechaISO, formatearCantidad, formatearCOP } from '../../utils/inventari
 import AsociarCodigo from './AsociarCodigo';
 import BuscadorInsumo from './BuscadorInsumo';
 import EscanerCodigo from './EscanerCodigo';
+import FormularioInsumo from './FormularioInsumo';
 import { Boton, Campo, Chip, ease, Selector, useAviso, Vacio } from './ui';
 
 let secuencia = 0;
@@ -27,6 +28,7 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
   const [lineas, setLineas] = useState([]);
   const [resaltada, setResaltada] = useState(null);
   const [codigoNuevo, setCodigoNuevo] = useState(null);
+  const [creandoConCodigo, setCreandoConCodigo] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [aviso, mostrar] = useAviso();
@@ -302,6 +304,20 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
           setCodigoNuevo(null);
           mostrar(`Código guardado para ${insumo.nombre}`);
           agregar(lineaDesdeInsumo(insumo, pres));
+        }}
+        onCrearInsumo={(codigo) => { setCodigoNuevo(null); setCreandoConCodigo(codigo); }}
+      />
+      <FormularioInsumo
+        abierto={creandoConCodigo !== null}
+        codigoInicial={creandoConCodigo ?? ''}
+        onCerrar={() => setCreandoConCodigo(null)}
+        onGuardado={async (msg) => {
+          const codigo = creandoConCodigo;
+          setCreandoConCodigo(null);
+          mostrar(msg);
+          compras.insumos().then(setInsumos).catch(() => {});
+          // El insumo recién creado ya responde a su código: se agrega a la entrada.
+          if (codigo) alEscanear(codigo);
         }}
       />
       {aviso}

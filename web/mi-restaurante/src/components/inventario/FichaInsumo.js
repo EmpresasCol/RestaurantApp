@@ -1,15 +1,18 @@
 // Ficha de un insumo: todo lo que el encargado necesita al tocarlo en cualquier lista.
-import React, { useCallback, useEffect, useState } from 'react';
-import { Barcode, ChefHat, PackagePlus, Pencil, ShoppingCart, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, ArrowLeftRight, Barcode, ChefHat, PackagePlus, Pencil, Scale, ShoppingCart, Trash2 } from 'lucide-react';
 import { compras, getProducto, mensajeError, updateProducto } from '../../services/inventarioApi';
 import {
-  formatearCantidad, formatearCOP, formatearFecha, nivelVencimiento, textoCobertura, textoVencimiento,
+  formatearCantidad, formatearCOP, formatearFecha, nivelVencimiento, signoMovimiento, textoCobertura, textoVencimiento,
 } from '../../utils/inventario';
 import AsociarCodigo from './AsociarCodigo';
-import { Boton, Campo, Chip, ChipEstado, Cargando, Lista, Panel, useAviso } from './ui';
+import EditorLote from './EditorLote';
+import RegistrarMovimiento from './RegistrarMovimiento';
+import { Boton, BotonConfirmar, Campo, Chip, ChipEstado, Cargando, Lista, Panel, useAviso } from './ui';
 
 const TONO_VENCE = { vencido: 'peligro', pronto: 'peligro', aviso: 'aviso', normal: 'neutro' };
-const TONO_MOV = { Entrada: 'ok', Salida: 'neutro', Merma: 'peligro', Ajuste: 'info' };
+const TONO_MOV = { Entrada: 'ok', Salida: 'neutro', Merma: 'peligro', Ajuste: 'info', Transferencia: 'info' };
+const TEXTO_MOV = { Transferencia: 'Traslado' };
 
 function Bloque({ titulo, accion, children }) {
   return (
@@ -20,26 +23,6 @@ function Bloque({ titulo, accion, children }) {
       </div>
       {children}
     </section>
-  );
-}
-
-/** Botón de dos toques para acciones que no se deshacen (sin modal). */
-export function BotonConfirmar({ children, confirmar = 'Toca otra vez para confirmar', onConfirmar, ...props }) {
-  const [armado, setArmado] = useState(false);
-  useEffect(() => {
-    if (!armado) return undefined;
-    const t = setTimeout(() => setArmado(false), 3000);
-    return () => clearTimeout(t);
-  }, [armado]);
-  return (
-    <Boton
-      variante={armado ? 'primario' : 'peligro'}
-      tamano="sm"
-      {...props}
-      onClick={() => (armado ? (setArmado(false), onConfirmar()) : setArmado(true))}
-    >
-      {armado ? confirmar : children}
-    </Boton>
   );
 }
 
@@ -55,7 +38,7 @@ function EditarNiveles({ ficha, onGuardado, onCancelar }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const set = (k) => (e) => setValores((v) => ({ ...v, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
-  const entero = (v) => (v === '' || v == null ? null : Math.round(Number(v)));
+  const numero = (v) => (v === '' || v == null ? null : Number(v));
 
   const guardar = async () => {
     setGuardando(true);
@@ -67,8 +50,8 @@ function EditarNiveles({ ficha, onGuardado, onCancelar }) {
         id: p.id, codigo: p.codigo ?? '', nombre: p.nombre, descripcion: p.descripcion ?? '',
         categoriaId: p.categoriaId, categoriaNombre: '', proveedorId: p.proveedorId, proveedorNombre: '',
         unidadMedida: p.unidadMedida, precioCosto: p.precioCosto > 0 ? p.precioCosto : 0.01,
-        stockMinimo: entero(valores.stockMinimo) ?? 0, puntoReorden: entero(valores.puntoReorden), stockMaximo: entero(valores.stockMaximo),
-        requiereCaducidad: valores.requiereCaducidad, diasVencimiento: entero(valores.diasVencimiento),
+        stockMinimo: numero(valores.stockMinimo) ?? 0, puntoReorden: numero(valores.puntoReorden), stockMaximo: numero(valores.stockMaximo),
+        requiereCaducidad: valores.requiereCaducidad, diasVencimiento: numero(valores.diasVencimiento),
         codigoBarras: p.codigoBarras ?? '', imagenUrl: p.imagenUrl ?? '', activo: p.activo,
       });
       onGuardado();
@@ -82,9 +65,9 @@ function EditarNiveles({ ficha, onGuardado, onCancelar }) {
   return (
     <div className="space-y-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
       <div className="grid grid-cols-3 gap-2">
-        <Campo label="Mínimo" type="number" min="0" step="1" value={valores.stockMinimo} onChange={set('stockMinimo')} />
-        <Campo label="Pedir al llegar a" type="number" min="0" step="1" value={valores.puntoReorden} onChange={set('puntoReorden')} placeholder="= mínimo" />
-        <Campo label="Llenar hasta" type="number" min="0" step="1" value={valores.stockMaximo} onChange={set('stockMaximo')} placeholder="2 × punto" />
+        <Campo label="Mínimo" type="number" min="0" step="any" value={valores.stockMinimo} onChange={set('stockMinimo')} />
+        <Campo label="Pedir al llegar a" type="number" min="0" step="any" value={valores.puntoReorden} onChange={set('puntoReorden')} placeholder="= mínimo" />
+        <Campo label="Llenar hasta" type="number" min="0" step="any" value={valores.stockMaximo} onChange={set('stockMaximo')} placeholder="2 × punto" />
       </div>
       <label className="flex items-center gap-3 text-[14px] font-semibold text-espresso">
         <input type="checkbox" checked={valores.requiereCaducidad} onChange={set('requiereCaducidad')} className="h-5 w-5 rounded accent-espresso" />
@@ -105,6 +88,8 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
   const [error, setError] = useState(null);
   const [editando, setEditando] = useState(false);
   const [agregandoCodigo, setAgregandoCodigo] = useState(false);
+  const [loteEditando, setLoteEditando] = useState(null);
+  const [movimiento, setMovimiento] = useState(null);
   const [aviso, mostrar] = useAviso();
 
   const cargar = useCallback(() => {
@@ -143,6 +128,8 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
 
   const i = ficha?.insumo;
   const u = i?.unidadMedida;
+  // Estable entre renders: el panel de movimiento se reinicia cuando cambia.
+  const insumoMov = useMemo(() => (i ? { id: i.id, nombre: i.nombre, unidadMedida: u } : null), [i, u]);
 
   return (
     <Panel
@@ -186,6 +173,14 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
               <p className="text-[13px] text-gray-500">Valor en bodega</p>
               <p className="tabular text-[16px] font-bold text-espresso">{formatearCOP(ficha.valor)}</p>
             </div>
+            {ficha.vencido > 0 && (
+              <div className="col-span-2 flex items-start gap-2.5 rounded-xl bg-red-50 px-3.5 py-2.5 text-[14px] text-red-800">
+                <AlertTriangle size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                <span>
+                  Además hay <span className="tabular font-bold">{formatearCantidad(ficha.vencido, u)}</span> vencidos que no se usan en recetas ni cuentan para la venta. Dalos de baja abajo, en Lotes.
+                </span>
+              </div>
+            )}
             {ficha.pedido > 0 && (
               <div className="col-span-2 rounded-xl bg-purple-50 px-3.5 py-2.5 text-[14px] text-purple-800">
                 Ya hay <span className="tabular font-bold">{formatearCantidad(ficha.pedido, u)}</span> pedidos en {ficha.ordenesAbiertas.map((o) => o.numeroOrden).join(', ')}.
@@ -215,8 +210,19 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
             )}
           </Bloque>
 
-          {ficha.porAlmacen.length > 1 && (
-            <Bloque titulo="Por almacén">
+          <Bloque
+            titulo="Dónde está"
+            accion={
+              <span className="flex gap-1">
+                <Boton variante="fantasma" tamano="sm" onClick={() => setMovimiento('Ajuste')}><Scale size={15} aria-hidden="true" /> Ajustar</Boton>
+                <Boton variante="fantasma" tamano="sm" onClick={() => setMovimiento('Merma')}><Trash2 size={15} aria-hidden="true" /> Merma</Boton>
+                <Boton variante="fantasma" tamano="sm" onClick={() => setMovimiento('Traslado')}><ArrowLeftRight size={15} aria-hidden="true" /> Trasladar</Boton>
+              </span>
+            }
+          >
+            {ficha.porAlmacen.length === 0 ? (
+              <p className="text-[14px] text-gray-500">No hay existencias en ningún almacén.</p>
+            ) : (
               <Lista>
                 {ficha.porAlmacen.map((a) => (
                   <div key={a.almacenId} className="flex items-center justify-between px-4 py-3 text-[14px]">
@@ -225,8 +231,8 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
                   </div>
                 ))}
               </Lista>
-            </Bloque>
-          )}
+            )}
+          </Bloque>
 
           <Bloque titulo="Lotes y vencimientos">
             {ficha.lotes.length === 0 ? (
@@ -235,6 +241,13 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
               <Lista>
                 {ficha.lotes.map((l) => {
                   const nivel = nivelVencimiento(l.diasParaVencer);
+                  if (loteEditando === l.id) {
+                    return (
+                      <div key={l.id} className="px-4 py-3">
+                        <EditorLote lote={l} onCancelar={() => setLoteEditando(null)} onGuardado={() => { setLoteEditando(null); mostrar('Lote corregido'); refrescar(); }} />
+                      </div>
+                    );
+                  }
                   return (
                     <div key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
                       <div className="min-w-0 flex-1">
@@ -242,6 +255,9 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
                         <p className="text-[12px] text-gray-500">Llegó {formatearFecha(l.fechaIngreso)}{l.fechaVencimiento ? ` · vence ${formatearFecha(l.fechaVencimiento)}` : ''}</p>
                       </div>
                       <Chip tono={TONO_VENCE[nivel]}>{textoVencimiento(l.diasParaVencer)}</Chip>
+                      <button type="button" onClick={() => setLoteEditando(l.id)} className="grid h-9 w-9 place-items-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-espresso" aria-label={`Corregir lote ${l.numeroLote}`}>
+                        <Pencil size={15} />
+                      </button>
                       {nivel === 'vencido' && <BotonConfirmar onConfirmar={() => darDeBaja(l)}>Dar de baja</BotonConfirmar>}
                     </div>
                   );
@@ -293,13 +309,13 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
               <ol className="space-y-2.5">
                 {ficha.movimientos.map((m) => (
                   <li key={m.id} className="flex items-start gap-3 text-[13px]">
-                    <Chip tono={TONO_MOV[m.tipoMovimiento] ?? 'neutro'} className="w-[72px] justify-center">{m.tipoMovimiento}</Chip>
+                    <Chip tono={TONO_MOV[m.tipoMovimiento] ?? 'neutro'} className="w-[72px] justify-center">{TEXTO_MOV[m.tipoMovimiento] ?? m.tipoMovimiento}</Chip>
                     <span className="min-w-0 flex-1 text-gray-600">
                       <span className="block truncate font-semibold text-espresso">{m.motivo || m.referencia || '—'}</span>
                       {new Date(m.fecha).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })} · {m.almacen}
                     </span>
-                    <span className={`tabular shrink-0 font-bold ${m.tipoMovimiento === 'Entrada' ? 'text-green-700' : 'text-espresso'}`}>
-                      {m.tipoMovimiento === 'Entrada' ? '+' : m.tipoMovimiento === 'Ajuste' ? '±' : '−'}{formatearCantidad(m.cantidad, u)}
+                    <span className={`tabular shrink-0 font-bold ${signoMovimiento(m) === '+' ? 'text-green-700' : 'text-espresso'}`}>
+                      {signoMovimiento(m)}{formatearCantidad(m.cantidad, u)}
                     </span>
                   </li>
                 ))}
@@ -317,6 +333,15 @@ export default function FichaInsumo({ productoId, onCerrar, onRecibir, onPedir, 
           proveedores={proveedores}
           onCerrar={() => setAgregandoCodigo(false)}
           onAsociado={() => { setAgregandoCodigo(false); mostrar('Presentación agregada'); cargar(); }}
+        />
+      )}
+      {i && (
+        <RegistrarMovimiento
+          abierto={!!movimiento}
+          tipoInicial={movimiento ?? 'Merma'}
+          insumoInicial={insumoMov}
+          onCerrar={() => setMovimiento(null)}
+          onHecho={(msg) => { setMovimiento(null); mostrar(msg); refrescar(); }}
         />
       )}
       {aviso}

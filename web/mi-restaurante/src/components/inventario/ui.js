@@ -215,3 +215,23 @@ export function Encabezado({ titulo, detalle, children }) {
 export const Lista = ({ children, className = '' }) => (
   <div className={`divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-white ${className}`}>{children}</div>
 );
+
+/** Botón de dos toques para acciones que no se deshacen (sin modal). */
+export function BotonConfirmar({ children, confirmar = 'Toca otra vez para confirmar', onConfirmar, ...props }) {
+  const [armado, setArmado] = useState(false);
+  useEffect(() => {
+    if (!armado) return undefined;
+    const t = setTimeout(() => setArmado(false), 3000);
+    return () => clearTimeout(t);
+  }, [armado]);
+  return (
+    <Boton
+      variante={armado ? 'primario' : 'peligro'}
+      tamano="sm"
+      {...props}
+      onClick={() => (armado ? (setArmado(false), onConfirmar()) : setArmado(true))}
+    >
+      {armado ? confirmar : children}
+    </Boton>
+  );
+}

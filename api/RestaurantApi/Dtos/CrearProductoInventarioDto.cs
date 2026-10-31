@@ -29,11 +29,11 @@ namespace RestaurantApi.Dtos
 
         [Required(ErrorMessage = "El stock mínimo es obligatorio")]
         [Range(0, int.MaxValue, ErrorMessage = "El stock mínimo no puede ser negativo")]
-        public int StockMinimo { get; set; }
+        public decimal StockMinimo { get; set; }
 
-        public int? StockMaximo { get; set; }
+        public decimal? StockMaximo { get; set; }
 
-        public int? PuntoReorden { get; set; }
+        public decimal? PuntoReorden { get; set; }
 
         public bool RequiereCaducidad { get; set; } = false;
 

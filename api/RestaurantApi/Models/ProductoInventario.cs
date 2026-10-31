@@ -39,11 +39,11 @@ namespace RestaurantApi.Models
         public decimal PrecioCosto { get; set; }
 
         [Required]
-        public int StockMinimo { get; set; }
+        public decimal StockMinimo { get; set; }
 
-        public int? StockMaximo { get; set; }
+        public decimal? StockMaximo { get; set; }
 
-        public int? PuntoReorden { get; set; }
+        public decimal? PuntoReorden { get; set; }
 
         public bool RequiereCaducidad { get; set; } = false;
 
