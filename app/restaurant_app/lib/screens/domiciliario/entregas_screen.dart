@@ -52,6 +52,22 @@ class _EntregasScreenState extends State<EntregasScreen> {
               Expanded(child: Text(usuario.isEmpty ? 'Hola' : 'Hola, $usuario', style: t.headlineSmall)),
               QChip('${plural(p.entregasHoy, 'entrega', 'entregas')} hoy', tono: QTono.marca),
             ]),
+            if (p.efectivoPorEntregar > 0) ...[
+              const SizedBox(height: 12),
+              QTarjeta(
+                color: QColors.warningWash,
+                child: Row(children: [
+                  const Icon(Icons.payments_outlined, color: QColors.warningText),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Tienes ${pesos(p.efectivoPorEntregar)} en efectivo: entrégalo en caja',
+                      style: const TextStyle(fontWeight: FontWeight.w800, color: QColors.warningText, fontFeatures: tabular),
+                    ),
+                  ),
+                ]),
+              ),
+            ],
             const SizedBox(height: 16),
             SegmentedButton<bool>(
               showSelectedIcon: false,
@@ -109,7 +125,7 @@ class _TarjetaDomicilio extends StatelessWidget {
         Row(children: [
           Text('Domicilio #${d.id}', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800, fontFeatures: tabular)),
           const SizedBox(width: 8),
-          QChip(d.etapa, tono: d.estado == 'Listo' ? QTono.ok : QTono.info),
+          QChip(d.etapa, tono: d.estado == 'Listo' ? QTono.ok : d.enCocina ? QTono.aviso : QTono.info),
           const Spacer(),
           Text(hora(d.fechaPedido), style: t.bodySmall?.copyWith(fontFeatures: tabular)),
         ]),

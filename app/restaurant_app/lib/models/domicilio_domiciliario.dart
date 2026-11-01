@@ -58,6 +58,12 @@ class DomicilioDomiciliario {
   final int? domiciliarioId;
   final String? domiciliarioNombre;
 
+  /// La cocina ya lo empezó (si se lo asignaron, todavía puede estar en cocina).
+  final bool cocinaEmpezo;
+  /// Billete con que paga el cliente y el cambio que hay que llevar.
+  final double? pagaCon;
+  final double? cambio;
+
   final List<DomicilioItem> detalles;
 
   DomicilioDomiciliario({
@@ -79,6 +85,9 @@ class DomicilioDomiciliario {
     this.notasCliente,
     this.domiciliarioId,
     this.domiciliarioNombre,
+    this.cocinaEmpezo = true,
+    this.pagaCon,
+    this.cambio,
     required this.detalles,
   });
 
@@ -102,6 +111,9 @@ class DomicilioDomiciliario {
         notasCliente: json['notasCliente'],
         domiciliarioId: json['domiciliarioId'],
         domiciliarioNombre: json['domiciliarioNombre'],
+        cocinaEmpezo: json['cocinaEmpezo'] ?? true,
+        pagaCon: (json['pagaCon'] as num?)?.toDouble(),
+        cambio: (json['cambio'] as num?)?.toDouble(),
         detalles: (json['detalles'] as List? ?? [])
             .map((e) => DomicilioItem.fromJson(e))
             .toList(),
@@ -109,6 +121,8 @@ class DomicilioDomiciliario {
 
   bool get estaLibre => domiciliarioId == null && estado == 'Listo';
   bool get esMio => domiciliarioId != null;
+  /// Se lo asignaron pero la cocina no lo ha terminado: todavía no se recoge.
+  bool get enCocina => estado == 'EnPreparacion';
   bool get puedeRecoger => estado == 'Listo';
   bool get puedeEntregar => estado == 'Recogido' || estado == 'EnCamino';
 
@@ -117,6 +131,7 @@ class DomicilioDomiciliario {
 
   /// Etapa en palabras del domiciliario.
   String get etapa => switch (estado) {
+        'EnPreparacion' => cocinaEmpezo ? 'En cocina' : 'Recibido en cocina',
         'Listo' => 'Listo para recoger',
         'Recogido' => 'Recogido',
         'EnCamino' => 'En camino',

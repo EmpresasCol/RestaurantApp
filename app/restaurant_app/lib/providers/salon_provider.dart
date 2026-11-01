@@ -138,12 +138,12 @@ class SalonProvider with ChangeNotifier {
     await _despuesDeEscribir(carta: true);
   }
 
-  /// Pide la cuenta a caja (la imprime) o avisa cómo pagó el cliente.
-  Future<void> pedirCuenta(int mesaId, {MetodoPago? metodo, String? comprobante}) async {
+  /// Pide la cuenta a caja (la imprime) o avisa cómo pagó la mesa: uno o varios pagos
+  /// (cada persona con su método, cada transferencia con su foto) y la propina.
+  Future<void> pedirCuenta(int mesaId, {List<PagoNuevo>? pagos, double propina = 0}) async {
     await _api.post('cuentas/solicitudes', {
       'mesaId': mesaId,
-      if (metodo != null) 'metodoPago': metodo.api,
-      if (comprobante != null) 'comprobante': comprobante,
+      if (pagos != null) ...{'propina': propina, 'pagos': pagos.map((p) => p.toJson()).toList()},
     });
     await _despuesDeEscribir();
   }

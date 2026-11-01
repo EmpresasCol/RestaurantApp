@@ -165,8 +165,18 @@ void main() {
       await p.pedirCuenta(3);
       expect(servidor.cuerpo('POST cuentas/solicitudes'), {'mesaId': 3});
 
-      await p.pedirCuenta(3, metodo: MetodoPago.qr, comprobante: 'data:image/jpeg;base64,AAAA');
-      expect(servidor.cuerpo('POST cuentas/solicitudes'), {'mesaId': 3, 'metodoPago': 'QR', 'comprobante': 'data:image/jpeg;base64,AAAA'});
+      await p.pedirCuenta(3, propina: 5000, pagos: const [
+        PagoNuevo(metodo: MetodoPago.qr, monto: 30000, comprobante: 'data:image/jpeg;base64,AAAA'),
+        PagoNuevo(metodo: MetodoPago.efectivo, monto: 31500),
+      ]);
+      expect(servidor.cuerpo('POST cuentas/solicitudes'), {
+        'mesaId': 3,
+        'propina': 5000,
+        'pagos': [
+          {'metodoPago': 'QR', 'monto': 30000, 'comprobante': 'data:image/jpeg;base64,AAAA'},
+          {'metodoPago': 'Efectivo', 'monto': 31500},
+        ],
+      });
       p.dispose();
     });
 
@@ -235,6 +245,39 @@ void main() {
 
       await p.recoger(1);
       expect(servidor.veces('PUT domiciliarios/3/pedidos/1/recoger'), 1);
+      p.dispose();
+    });
+
+    test('ve lo que le asignaron desde la cocina, primero lo que ya lleva, y el efectivo que debe entregar', () async {
+      final servidor = ServidorFalso()
+        ..responder('GET domiciliarios/3/pedidos', [
+          {...domicilio(5, 'EnPreparacion', domiciliarioId: 3), 'cocinaEmpezo': true},
+          domicilio(6, 'EnCamino', domiciliarioId: 3),
+          domicilio(7, 'Listo', domiciliarioId: 3),
+        ])
+        ..responder('GET domiciliarios/3/estadisticas', {'entregadosHoy': 2, 'efectivoPorEntregar': 56000});
+      final p = DomiciliarioProvider(domiciliarioId: 3, api: servidor.api(), cambios: const Stream.empty(), recargaPeriodica: false);
+
+      await p.cargar();
+      await pumpEventQueue();
+
+      expect(p.mios.map((d) => d.id), [6, 7, 5]);
+      expect(p.mios.last.etapa, 'En cocina');
+      expect(p.libres, isEmpty);
+      expect(p.efectivoPorEntregar, 56000);
+      p.dispose();
+    });
+
+    test('entregar envía cómo pagó el cliente y la foto de la transferencia', () async {
+      final servidor = ServidorFalso()
+        ..responder('GET domiciliarios/3/pedidos', [])
+        ..responder('GET domiciliarios/3/estadisticas', {'entregadosHoy': 1})
+        ..responder('PUT domiciliarios/3/pedidos/6/entregar', null, status: 204);
+      final p = DomiciliarioProvider(domiciliarioId: 3, api: servidor.api(), cambios: const Stream.empty(), recargaPeriodica: false);
+
+      await p.entregar(6, metodoPago: 'Nequi', comprobante: 'data:image/jpeg;base64,AAAA');
+
+      expect(servidor.cuerpo('PUT domiciliarios/3/pedidos/6/entregar'), {'metodoPago': 'Nequi', 'comprobante': 'data:image/jpeg;base64,AAAA'});
       p.dispose();
     });
   });

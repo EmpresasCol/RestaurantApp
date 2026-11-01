@@ -152,8 +152,50 @@ void main() {
     await tester.tap(avisar);
     await tester.pumpAndSettle();
     final cuerpo = servidor.cuerpo('POST cuentas/solicitudes');
-    expect(cuerpo['metodoPago'], 'QR');
-    expect(cuerpo['comprobante'], 'data:image/png;base64,$_png');
+    expect(cuerpo['propina'], 0);
+    expect(cuerpo['pagos'], [
+      {'metodoPago': 'QR', 'monto': 56500, 'comprobante': 'data:image/png;base64,$_png'},
+    ]);
+    salon.dispose();
+  });
+
+  testWidgets('pago dividido: efectivo y tarjeta con propina; no deja avisar más de lo que se debe', (tester) async {
+    final servidor = _salon(solicitudes: [solicitudJson()])..responder('POST cuentas/solicitudes', solicitudJson(metodo: 'Efectivo'));
+    final salon = await _cargado(servidor);
+    // Pantalla alta: toda la hoja cabe sin desplazarse.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_app(Scaffold(body: PagoSheet(cuenta: salon.cuenta(3)!)), salon: salon));
+
+    // Cuenta de 56.500 + propina sugerida del 10 % (5.700) = 62.200.
+    await tester.tap(find.textContaining('10 %'));
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'Valor pagado'), '40000');
+    await tester.tap(find.text('Agregar otro pago'));
+    await tester.pump();
+    expect(find.text('Cubre toda la cuenta'), findsOneWidget);
+    await tester.tap(find.text('Tarjeta').last);
+    await tester.pump();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Valor del pago 2'), '30000');
+    await tester.pump();
+    final avisar = find.widgetWithText(FilledButton, 'Avisar a caja');
+    expect(tester.widget<FilledButton>(avisar).onPressed, isNull);
+    expect(find.textContaining('Los pagos se pasan'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Valor del pago 2'), '22200');
+    await tester.pump();
+    await tester.tap(avisar);
+    await tester.pumpAndSettle();
+    expect(servidor.cuerpo('POST cuentas/solicitudes'), {
+      'mesaId': 3,
+      'propina': 5700,
+      'pagos': [
+        {'metodoPago': 'Efectivo', 'monto': 40000},
+        {'metodoPago': 'Tarjeta', 'monto': 22200},
+      ],
+    });
     salon.dispose();
   });
 

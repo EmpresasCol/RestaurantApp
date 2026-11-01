@@ -9,6 +9,7 @@ import '../../services/api.dart';
 import '../../theme/qpro_theme.dart';
 import '../../utils/formato.dart';
 import '../../widgets/q.dart';
+import 'cobro_entrega_sheet.dart';
 
 /// Detalle de un domicilio con el siguiente paso de la entrega:
 /// recoger en el restaurante → salir a entregar → entregado (y cobrado).
@@ -127,6 +128,10 @@ class EntregaDetalleScreen extends StatelessWidget {
           d.pagadoAnticipado
               ? const QChip('Pagado por anticipado: no cobres', tono: QTono.ok, icono: Icons.check_rounded)
               : QChip('Cobra ${pesos(d.porCobrar)} · ${d.metodoPago}', tono: QTono.aviso, icono: Icons.payments_outlined),
+          if (!d.pagadoAnticipado && d.cambio != null) ...[
+            const SizedBox(height: 8),
+            QChip('Paga con ${pesos(d.pagaCon!)}: lleva ${pesos(d.cambio!)} de cambio', tono: QTono.info, icono: Icons.currency_exchange_rounded),
+          ],
         ]),
         if ((d.notasCliente ?? '').isNotEmpty)
           _Seccion(titulo: 'Notas del cliente', children: [Text(d.notasCliente!, style: t.bodyLarge)]),
@@ -193,6 +198,7 @@ class _Accion extends StatelessWidget {
     final p = context.read<DomiciliarioProvider>();
     final d = domicilio;
     final Widget boton = switch (d.estado) {
+      'EnPreparacion' => const QChip('Te lo asignaron: la cocina lo está preparando', tono: QTono.aviso, icono: Icons.soup_kitchen_outlined),
       'Listo' => BotonConfirmar(
           texto: 'Recoger en el restaurante',
           confirmar: 'Toca otra vez: lo llevo yo',
@@ -208,8 +214,8 @@ class _Accion extends StatelessWidget {
           expandir: true,
           onPressed: () => _hacer(context, () => p.salir(d.id), 'En camino a ${d.barrio ?? 'la dirección'}'),
         ),
-      'EnCamino' => BotonConfirmar(
-          texto: d.pagadoAnticipado ? 'Entregado al cliente' : 'Entregado y cobrado ${pesos(d.porCobrar)}',
+      'EnCamino' when d.pagadoAnticipado => BotonConfirmar(
+          texto: 'Entregado al cliente',
           confirmar: 'Toca otra vez para confirmar la entrega',
           icono: Icons.task_alt_rounded,
           alto: 56,
@@ -217,6 +223,18 @@ class _Accion extends StatelessWidget {
           onConfirmar: () async {
             await _hacer(context, () => p.entregar(d.id), 'Domicilio #${d.id} entregado');
             if (context.mounted && p.pedido(d.id) == null) Navigator.of(context).maybePop();
+          },
+        ),
+      'EnCamino' => QBoton(
+          texto: 'Entregar y cobrar ${pesos(d.porCobrar)}',
+          icono: Icons.task_alt_rounded,
+          alto: 56,
+          expandir: true,
+          onPressed: () async {
+            final entregado = await mostrarCobroEntrega(context, d);
+            if (entregado != true || !context.mounted) return;
+            avisar(context, 'Domicilio #${d.id} entregado y facturado');
+            if (p.pedido(d.id) == null) Navigator.of(context).maybePop();
           },
         ),
       _ => const SizedBox.shrink(),

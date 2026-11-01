@@ -13,12 +13,18 @@ import 'screens/domiciliario/entregas_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/mesero/mesa_screen.dart';
 import 'screens/mesero/salon_screen.dart';
+import 'services/api.dart';
 import 'services/notification_service.dart';
 import 'theme/qpro_theme.dart';
 import 'widgets/q.dart';
 
-final navigatorKey = GlobalKey<NavigatorState>();
-final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+// Navegador y avisos de la sesión en curso. Cada sesión estrena los suyos: si al salir se
+// reutilizara el Navigator anterior, sus pantallas (que leen el provider del rol) seguirían
+// vivas sin ese provider y fallarían con ProviderNotFoundException.
+GlobalKey<NavigatorState>? _navegador;
+GlobalKey<ScaffoldMessengerState>? _mensajero;
+
+NavigatorState? get navegador => _navegador?.currentState;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,24 +53,26 @@ Future<void> _alLlegarAviso(NotificacionProvider avisos, AvisoPush aviso) async 
     SystemSound.play(SystemSoundType.alert);
   }
   await avisos.agregar(pedidoId: aviso.pedidoId, mesaNumero: aviso.mesaNumero, titulo: aviso.titulo, mensaje: aviso.mensaje);
-  final contexto = scaffoldMessengerKey.currentContext;
+  final contexto = _mensajero?.currentContext;
   if (contexto != null && contexto.mounted) {
     avisar(contexto, aviso.mesaNumero > 0 ? 'Mesa ${aviso.mesaNumero}: pedido listo para servir' : aviso.titulo);
   }
 }
 
 void _abrirMesa(int numero) {
-  final contexto = navigatorKey.currentContext;
+  final contexto = _navegador?.currentContext;
   if (contexto == null || numero <= 0) return;
   final mesa = contexto.read<SalonProvider?>()?.mesaPorNumero(numero);
-  if (mesa != null) navigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => MesaScreen(mesaId: mesa.id)));
+  if (mesa != null) navegador?.push(MaterialPageRoute(builder: (_) => MesaScreen(mesaId: mesa.id)));
 }
 
 class QproApp extends StatelessWidget {
-  const QproApp({super.key, required this.auth, required this.avisos});
+  const QproApp({super.key, required this.auth, required this.avisos, this.api});
 
   final AuthProvider auth;
   final NotificacionProvider avisos;
+  /// Para pruebas: la API simulada que usan los datos del rol.
+  final Api? api;
 
   @override
   Widget build(BuildContext context) {
@@ -79,38 +87,61 @@ class QproApp extends StatelessWidget {
         return switch (usuario?.rol) {
           RolUsuario.mesero => ChangeNotifierProvider(
               key: ValueKey('salon-${usuario!.id}'),
-              create: (_) => SalonProvider()..cargar(),
-              child: const _App(inicio: SalonScreen()),
+              create: (_) => SalonProvider(api: api)..cargar(),
+              child: _App(key: ValueKey('app-salon-${usuario.id}'), inicio: const SalonScreen()),
             ),
           RolUsuario.domiciliario => ChangeNotifierProvider(
               key: ValueKey('domicilios-${usuario!.id}'),
-              create: (_) => DomiciliarioProvider(domiciliarioId: usuario.id)..cargar(),
-              child: const _App(inicio: EntregasScreen()),
+              create: (_) => DomiciliarioProvider(domiciliarioId: usuario.id, api: api)..cargar(),
+              child: _App(key: ValueKey('app-domicilios-${usuario.id}'), inicio: const EntregasScreen()),
             ),
-          _ => _App(inicio: auth.iniciando ? const _Arranque() : const LoginScreen()),
+          _ => _App(key: const ValueKey('app-login'), inicio: auth.iniciando ? const _Arranque() : const LoginScreen()),
         };
       }),
     );
   }
 }
 
-class _App extends StatelessWidget {
-  const _App({required this.inicio});
+class _App extends StatefulWidget {
+  const _App({super.key, required this.inicio});
 
   final Widget inicio;
+
+  @override
+  State<_App> createState() => _AppState();
+}
+
+class _AppState extends State<_App> {
+  final _navegadorPropio = GlobalKey<NavigatorState>();
+  final _mensajeroPropio = GlobalKey<ScaffoldMessengerState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _navegador = _navegadorPropio;
+    _mensajero = _mensajeroPropio;
+  }
+
+  @override
+  void dispose() {
+    // La sesión nueva ya registró los suyos al montarse: solo se limpian si siguen siendo estos.
+    if (identical(_navegador, _navegadorPropio)) _navegador = null;
+    if (identical(_mensajero, _mensajeroPropio)) _mensajero = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Qpro',
       debugShowCheckedModeBanner: false,
-      navigatorKey: navigatorKey,
-      scaffoldMessengerKey: scaffoldMessengerKey,
+      navigatorKey: _navegadorPropio,
+      scaffoldMessengerKey: _mensajeroPropio,
       theme: qproTheme(),
       locale: const Locale('es', 'CO'),
       supportedLocales: const [Locale('es', 'CO'), Locale('es')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      home: _AlVolver(child: inicio),
+      home: _AlVolver(child: widget.inicio),
     );
   }
 }

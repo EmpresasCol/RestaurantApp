@@ -86,9 +86,11 @@ class _AvisoCuenta extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(solicitud.texto, style: const TextStyle(color: QColors.tealDeep, fontWeight: FontWeight.w800)),
             Text(
-              solicitud.metodo == null
+              !solicitud.pagoAvisado
                   ? 'Recoge la cuenta impresa en caja · ${hora(solicitud.fecha)}'
-                  : 'Avisado a las ${hora(solicitud.fechaPago ?? solicitud.fecha)}${solicitud.tieneComprobante ? ' · con foto' : ''}',
+                  : 'Avisado a las ${hora(solicitud.fechaPago ?? solicitud.fecha)}'
+                      '${solicitud.pagos.length > 1 ? ' · ${solicitud.pagos.length} pagos' : ''}'
+                      '${solicitud.tieneComprobante ? ' · con foto' : ''}',
               style: const TextStyle(color: QColors.tealDeep, fontSize: 13, fontFeatures: tabular),
             ),
           ]),
@@ -150,7 +152,10 @@ class _TarjetaPedido extends StatelessWidget {
         for (final d in pedido.detalles)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Opacity(
+              // Lo que ya se pagó en una cuenta dividida se ve, pero apagado.
+              opacity: d.pagado ? 0.45 : 1,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               SizedBox(
                 width: 30,
                 child: Text('${d.cantidad}×', style: t.titleSmall?.copyWith(color: QColors.caramelDeep, fontFeatures: tabular)),
@@ -161,8 +166,9 @@ class _TarjetaPedido extends StatelessWidget {
                   if ((d.nota ?? '').isNotEmpty) Text(d.nota!, style: t.bodySmall?.copyWith(color: QColors.stone600)),
                 ]),
               ),
-              Text(pesos(d.subtotal), style: t.bodyMedium?.copyWith(fontFeatures: tabular)),
-            ]),
+              Text(d.pagado ? 'Pagado' : pesos(d.subtotal), style: t.bodyMedium?.copyWith(fontFeatures: tabular)),
+              ]),
+            ),
           ),
         const Divider(height: 20),
         if (pedido.editable)
@@ -257,10 +263,10 @@ class _BarraCuentaState extends State<_BarraCuenta> {
             flex: 3,
             child: pedida
                 ? QBoton(
-                    texto: cuenta.solicitud!.metodo == null ? 'Registrar pago' : 'Cambiar pago',
+                    texto: cuenta.solicitud!.pagoAvisado ? 'Cambiar pago' : 'Registrar pago',
                     icono: Icons.payments_outlined,
                     alto: 56,
-                    variante: cuenta.solicitud!.metodo == null ? QVariante.primario : QVariante.secundario,
+                    variante: cuenta.solicitud!.pagoAvisado ? QVariante.secundario : QVariante.primario,
                     onPressed: () => mostrarPago(context, cuenta),
                   )
                 : QBoton(texto: 'Pedir la cuenta', icono: Icons.receipt_long_outlined, alto: 56, cargando: _enviando, onPressed: _pedirCuenta),

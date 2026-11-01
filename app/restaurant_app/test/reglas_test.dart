@@ -92,6 +92,42 @@ void main() {
       expect(SolicitudCuenta.fromJson(solicitudJson()).texto, 'Cuenta pedida a caja');
     });
 
+    test('varios pagos: dice si cubren la cuenta o cuánto cobra la caja', () {
+      final completa = SolicitudCuenta.fromJson({
+        ...solicitudJson(metodo: 'Mixto', foto: true),
+        'propina': 5000, 'totalAvisado': 61500, 'porCobrar': 56500, 'cuadra': true,
+        'pagos': [
+          {'id': 1, 'metodoPago': 'QR', 'monto': 30000, 'tieneComprobante': true},
+          {'id': 2, 'metodoPago': 'Efectivo', 'monto': 31500, 'tieneComprobante': false},
+        ],
+      });
+      expect(completa.pagos.map((p) => p.metodo), [MetodoPago.qr, MetodoPago.efectivo]);
+      expect(completa.texto, 'Pago completo avisado a caja');
+      expect(completa.pagoAvisado, isTrue);
+
+      final parcial = SolicitudCuenta.fromJson({
+        ...solicitudJson(metodo: 'QR', foto: true),
+        'totalAvisado': 20000, 'porCobrar': 56500, 'cuadra': false,
+        'pagos': [{'id': 1, 'metodoPago': 'QR', 'monto': 20000, 'tieneComprobante': true}],
+      });
+      expect(parcial.texto, contains('caja cobra el resto'));
+    });
+
+    test('partes iguales en centenas y la última cuadra el total', () {
+      expect(partesIguales(50000, 3), [16700, 16700, 16600]);
+      expect(partesIguales(0, 3), isEmpty);
+      expect(propinaSugerida(56500), 5700);
+    });
+
+    test('lo pagado en una cuenta dividida ya no suma a la mesa', () {
+      final p = Pedido.fromJson(pedidoJson(estado: 'Entregado', detalles: [
+        detalleJson(cantidad: 1),
+        {...detalleJson(id: 2, cantidad: 1), 'pagado': true},
+      ]));
+      expect(p.total, 25000);
+      expect(p.platos, 1);
+    });
+
     test('los métodos usan los valores de la API', () {
       expect(MetodoPago.values.map((m) => m.api), ['Efectivo', 'Tarjeta', 'QR']);
       expect(MetodoPago.deApi('tarjeta'), MetodoPago.tarjeta);

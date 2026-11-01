@@ -27,15 +27,23 @@ class DomiciliarioProvider with ChangeNotifier {
   bool _cargado = false;
   String? _error;
   int _entregasHoy = 0;
+  double _efectivoPorEntregar = 0;
 
   List<DomicilioDomiciliario> get pedidos => _pedidos;
   bool get cargando => _cargando;
   bool get cargado => _cargado;
   String? get error => _error;
   int get entregasHoy => _entregasHoy;
+  /// Efectivo que cobró y todavía no entrega en caja.
+  double get efectivoPorEntregar => _efectivoPorEntregar;
 
   List<DomicilioDomiciliario> get libres => _pedidos.where((p) => p.estaLibre).toList();
-  List<DomicilioDomiciliario> get mios => _pedidos.where((p) => p.esMio && p.estado != 'Entregado').toList();
+
+  /// Lo suyo: primero lo que ya lleva encima, luego lo listo para recoger y al final lo que sigue en cocina.
+  List<DomicilioDomiciliario> get mios {
+    int orden(DomicilioDomiciliario d) => switch (d.estado) { 'EnCamino' || 'Recogido' => 0, 'Listo' => 1, _ => 2 };
+    return _pedidos.where((p) => p.esMio && p.estado != 'Entregado').toList()..sort((a, b) => orden(a).compareTo(orden(b)));
+  }
 
   DomicilioDomiciliario? pedido(int id) => _pedidos.where((p) => p.id == id).firstOrNull;
 
@@ -64,16 +72,21 @@ class DomiciliarioProvider with ChangeNotifier {
     try {
       final stats = await _api.get('$_base/estadisticas') as Map<String, dynamic>;
       _entregasHoy = stats['entregadosHoy'] ?? _entregasHoy;
+      _efectivoPorEntregar = (stats['efectivoPorEntregar'] as num?)?.toDouble() ?? _efectivoPorEntregar;
       notifyListeners();
     } catch (_) {/* el contador no bloquea la operación */}
   }
 
   Future<void> recoger(int domicilioId) => _accion('recoger', domicilioId);
   Future<void> salir(int domicilioId) => _accion('en-camino', domicilioId);
-  Future<void> entregar(int domicilioId) => _accion('entregar', domicilioId);
+  /// Entregado y cobrado: el método con que pagó de verdad y, si fue transferencia, la foto.
+  Future<void> entregar(int domicilioId, {String? metodoPago, String? comprobante}) => _accion('entregar', domicilioId, {
+        if (metodoPago != null) 'metodoPago': metodoPago,
+        if (comprobante != null) 'comprobante': comprobante,
+      });
 
-  Future<void> _accion(String accion, int domicilioId) async {
-    await _api.put('$_base/pedidos/$domicilioId/$accion');
+  Future<void> _accion(String accion, int domicilioId, [Map<String, dynamic>? cuerpo]) async {
+    await _api.put('$_base/pedidos/$domicilioId/$accion', cuerpo);
     await cargar(silencioso: true);
   }
 

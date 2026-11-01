@@ -44,8 +44,9 @@ class Pedido {
     );
   }
 
-  double get total => detalles.fold(0, (sum, item) => sum + item.subtotal);
-  int get platos => detalles.fold(0, (n, d) => n + d.cantidad);
+  /// Lo que falta cobrar: los platos ya pagados en una cuenta dividida no cuentan.
+  double get total => detalles.where((d) => !d.pagado).fold(0, (sum, item) => sum + item.subtotal);
+  int get platos => detalles.where((d) => !d.pagado).fold(0, (n, d) => n + d.cantidad);
 
   bool get abierto => estado == EstadoPedido.enProceso || estado == EstadoPedido.listo || estado == EstadoPedido.entregado;
 
@@ -95,6 +96,7 @@ class ItemPedido {
     required this.precio,
     this.nota,
     this.estado = 'Pendiente',
+    this.pagado = false,
   });
 
   final int? id;
@@ -105,6 +107,8 @@ class ItemPedido {
   final double precio;
   final String? nota;
   final String estado;
+  /// Ya se cobró en una cuenta dividida.
+  final bool pagado;
 
   double get subtotal => precio * cantidad;
 
@@ -116,5 +120,6 @@ class ItemPedido {
         precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
         nota: json['nota'],
         estado: json['estado'] ?? 'Pendiente',
+        pagado: json['pagado'] == true,
       );
 }
