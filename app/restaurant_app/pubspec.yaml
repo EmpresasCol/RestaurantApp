@@ -1,6 +1,7 @@
 name: restaurant_app
-description: Qpro - App móvil para meseros
-version: 1.0.0+1
+description: Qpro - App móvil para meseros y domiciliarios
+publish_to: 'none'
+version: 2.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -8,44 +9,64 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  
-  url_launcher: ^6.2.5
+  flutter_localizations:
+    sdk: flutter
+
   provider: ^6.1.1
   http: ^1.1.0
-  google_fonts: ^6.1.0
-  intl: ^0.19.0
+  intl: ^0.20.2
   shared_preferences: ^2.2.2
-  
-  # Firebase para notificaciones
-  firebase_core: ^2.24.2
-  firebase_messaging: ^14.7.9
+  url_launcher: ^6.2.5
 
-  # Vibración y sonido
-  audioplayers: ^5.2.1
+  # Foto del comprobante de transferencia
+  image_picker: ^1.2.4
 
-  # Splash screen e iconos
-  flutter_native_splash: ^2.3.5
-  flutter_launcher_icons: ^0.13.1
+  # Notificaciones push (pedido listo)
+  firebase_core: ^5.1.0
+  firebase_messaging: ^17.0.1
+
+  # Sonido de "pedido listo" con la app abierta (archivo incluido, sin red)
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  # Herramientas de compilación: generan íconos y splash, no van dentro de la app
+  flutter_native_splash: ^2.3.5
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
+  assets:
+    - assets/splash/logo.png
+    - assets/sounds/listo.wav
+
+  # Manrope incluida en la app: misma letra que la web y sin descargas al abrir.
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-ExtraBold.ttf
+          weight: 800
 
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
+  remove_alpha_ios: true
   image_path: "assets/icon/icon.png"
-  
+
 flutter_native_splash:
-  color: "#3F291A"  # Fondo marrón oscuro
+  color: "#FFFFFF"
   image: assets/splash/logo.png
   android: true
-  ios: false
+  ios: true
   android_12:
-    color: "#3F291A"
+    color: "#FFFFFF"
     image: assets/splash/logo.png

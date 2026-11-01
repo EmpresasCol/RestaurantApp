@@ -2,101 +2,119 @@
 enum EstadoPedido { enProceso, listo, entregado, pagado, cancelado, desconocido }
 
 class Pedido {
-  final int id;
-  final int mesaId;
-  final int mesaNumero;
-  final DateTime fecha;
-  final EstadoPedido estado;
-  final List<ItemPedido> detalles;
-  
-  Pedido({
+  const Pedido({
     required this.id,
     required this.mesaId,
     required this.mesaNumero,
     required this.fecha,
     required this.estado,
     required this.detalles,
+    this.usuarioId = 0,
+    this.meseroNombre = '',
+    this.cocinaEmpezo = false,
   });
 
+  final int id;
+  final int mesaId;
+  final int mesaNumero;
+  final int usuarioId;
+  final String meseroNombre;
+  final DateTime fecha;
+  final EstadoPedido estado;
+  /// La cocina ya lo empezó o lo terminó (lo calcula la API).
+  final bool cocinaEmpezo;
+  final List<ItemPedido> detalles;
+
   factory Pedido.fromJson(Map<String, dynamic> json) {
+    final estado = _estadoFromString(json['estado'] ?? '');
+    final detalles = (json['detalles'] as List?)?.map((d) => ItemPedido.fromJson(d as Map<String, dynamic>)).toList() ?? [];
     return Pedido(
       id: json['id'] ?? 0,
       mesaId: json['mesaId'] ?? 0,
       mesaNumero: json['mesaNumero'] ?? json['mesaId'] ?? 0,
+      usuarioId: json['usuarioId'] ?? 0,
+      meseroNombre: json['meseroNombre'] ?? '',
       // La API envía UTC con "Z"; toLocal() deja la hora del dispositivo.
       fecha: DateTime.parse(json['fecha']).toLocal(),
-      estado: _estadoFromString(json['estado'] ?? ''),
-      detalles: (json['detalles'] as List?)
-          ?.map((d) => ItemPedido.fromJson(d))
-          .toList() ?? [],
+      estado: estado,
+      // Respaldo para una API anterior sin el campo: mismo criterio que el servidor.
+      cocinaEmpezo: json['cocinaEmpezo'] ??
+          (estado != EstadoPedido.enProceso || detalles.any((d) => d.estado == 'EnPreparacion' || d.estado == 'Listo')),
+      detalles: detalles,
     );
   }
 
-  double get total => detalles.fold(0, (sum, item) => sum + (item.precio * item.cantidad));
+  double get total => detalles.fold(0, (sum, item) => sum + item.subtotal);
+  int get platos => detalles.fold(0, (n, d) => n + d.cantidad);
 
-  // ✅ SOLO puede editar si está en proceso y no han pasado 5 minutos
-  bool get puedeEditar {
-    if (estado != EstadoPedido.enProceso) return false;
-    final diff = DateTime.now().difference(fecha);
-    // Una fecha "en el futuro" (desfase de zona horaria o reloj) no deja el pedido
-    // editable indefinidamente; se toleran 2 min de diferencia entre relojes.
-    return diff >= const Duration(minutes: -2) && diff <= const Duration(minutes: 5);
-  }
+  bool get abierto => estado == EstadoPedido.enProceso || estado == EstadoPedido.listo || estado == EstadoPedido.entregado;
 
-  // ✅ SOLO puede entregar si está LISTO (cambio principal)
-  bool get puedeEntregar {
-    return estado == EstadoPedido.listo;
-  }
+  /// Misma regla que la API: se edita o cancela mientras la cocina no lo haya empezado.
+  bool get editable => estado == EstadoPedido.enProceso && !cocinaEmpezo;
 
-  // ✅ NUNCA se muestra el botón de entregar si está en proceso
-  bool get mostrarBotonEntregar {
-    return estado == EstadoPedido.listo;
-  }
+  /// Cocina lo terminó y falta llevarlo a la mesa.
+  bool get porServir => estado == EstadoPedido.listo;
+
+  /// La caja no cobra lo que sigue en cocina.
+  bool get cobrable => estado == EstadoPedido.listo || estado == EstadoPedido.entregado;
+
+  /// Etapa en palabras del salón.
+  String get etapa => switch (estado) {
+        EstadoPedido.enProceso => cocinaEmpezo ? 'Preparando' : 'Sin empezar',
+        EstadoPedido.listo => 'Listo para servir',
+        EstadoPedido.entregado => 'Servido',
+        EstadoPedido.pagado => 'Pagado',
+        EstadoPedido.cancelado => 'Cancelado',
+        EstadoPedido.desconocido => 'Sin estado',
+      };
 
   static EstadoPedido _estadoFromString(String estado) {
     switch (estado.toLowerCase()) {
-      case 'enproceso': return EstadoPedido.enProceso;
-      case 'listo': return EstadoPedido.listo;
-      case 'entregado': return EstadoPedido.entregado;
-      case 'pagado': return EstadoPedido.pagado;
-      case 'cancelado': return EstadoPedido.cancelado;
-      default: return EstadoPedido.desconocido;
+      case 'enproceso':
+        return EstadoPedido.enProceso;
+      case 'listo':
+        return EstadoPedido.listo;
+      case 'entregado':
+        return EstadoPedido.entregado;
+      case 'pagado':
+        return EstadoPedido.pagado;
+      case 'cancelado':
+        return EstadoPedido.cancelado;
+      default:
+        return EstadoPedido.desconocido;
     }
   }
 }
 
 class ItemPedido {
-  final int? id;
-  final int platilloId;
-  final String platilloNombre;
-  int cantidad;
-  final double precio;
-  String? nota;
-
-  ItemPedido({
+  const ItemPedido({
     this.id,
     required this.platilloId,
     required this.platilloNombre,
     required this.cantidad,
     required this.precio,
     this.nota,
+    this.estado = 'Pendiente',
   });
 
-  factory ItemPedido.fromJson(Map<String, dynamic> json) {
-    return ItemPedido(
-      id: json['id'],
-      platilloId: json['platilloId'] ?? 0,
-      platilloNombre: json['platilloNombre'] ?? '',
-      cantidad: json['cantidad'] ?? 0,
-      precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
-      nota: json['nota'],
-    );
-  }
+  final int? id;
+  final int platilloId;
+  final String platilloNombre;
+  final int cantidad;
+  /// Precio con que se pidió (la API lo congela).
+  final double precio;
+  final String? nota;
+  final String estado;
 
-  Map<String, dynamic> toJson() => {
-    if (id != null) 'id': id,
-    'platilloId': platilloId,
-    'cantidad': cantidad,
-    'nota': nota,
-  };
+  double get subtotal => precio * cantidad;
+
+  factory ItemPedido.fromJson(Map<String, dynamic> json) => ItemPedido(
+        id: json['id'],
+        platilloId: json['platilloId'] ?? 0,
+        platilloNombre: json['platilloNombre'] ?? '',
+        cantidad: json['cantidad'] ?? 0,
+        precio: (json['precio'] as num?)?.toDouble() ?? 0.0,
+        nota: json['nota'],
+        estado: json['estado'] ?? 'Pendiente',
+      );
 }

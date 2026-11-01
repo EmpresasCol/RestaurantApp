@@ -1,166 +1,86 @@
-// app/restaurant_app/lib/providers/domiciliario_provider.dart
-// Gestiona el estado del domiciliario autenticado y sus pedidos en curso.
-// Patrón idéntico al usado por PedidoProvider / AuthProvider del proyecto.
-
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+
 import '../models/domicilio_domiciliario.dart';
-import '../services/domiciliario_service.dart';
-import '../services/sesion.dart';
+import '../services/api.dart';
+import '../services/realtime.dart';
 
+/// Domicilios del domiciliario en sesión: los libres para recoger y los suyos en curso.
+/// Se actualiza con el tiempo real de la API y, de respaldo, cada 60 s.
 class DomiciliarioProvider with ChangeNotifier {
-  final DomiciliarioService _service = DomiciliarioService();
+  DomiciliarioProvider({required this.domiciliarioId, Api? api, Stream<String>? cambios, bool recargaPeriodica = true})
+      : _api = api ?? Api.instancia {
+    _suscripcion = (cambios ?? Realtime.instancia.cambios).listen((tema) {
+      if (tema == 'domicilios' || tema == Realtime.reconectado) cargar(silencioso: true);
+    });
+    if (recargaPeriodica) _respaldo = Timer.periodic(const Duration(seconds: 60), (_) => cargar(silencioso: true));
+  }
 
-  // ── Identidad del domiciliario ──────────────────────────────────────────
-  int? _domiciliarioId;
-  String? _nombre;
-  int _entregasHoy = 0;
-  int _entregasTotales = 0;
+  final int domiciliarioId;
+  final Api _api;
+  StreamSubscription<String>? _suscripcion;
+  Timer? _respaldo;
 
-  int? get domiciliarioId => _domiciliarioId;
-  String? get nombre => _nombre;
-  int get entregasHoy => _entregasHoy;
-  int get entregasTotales => _entregasTotales;
-  bool get estaAutenticado => _domiciliarioId != null;
-
-  // ── Pedidos ─────────────────────────────────────────────────────────────
   List<DomicilioDomiciliario> _pedidos = [];
   bool _cargando = false;
+  bool _cargado = false;
   String? _error;
+  int _entregasHoy = 0;
 
   List<DomicilioDomiciliario> get pedidos => _pedidos;
   bool get cargando => _cargando;
+  bool get cargado => _cargado;
   String? get error => _error;
+  int get entregasHoy => _entregasHoy;
 
-  List<DomicilioDomiciliario> get pedidosLibres =>
-      _pedidos.where((p) => p.estaLibre).toList();
-  List<DomicilioDomiciliario> get pedidosMios =>
-      _pedidos.where((p) => p.esMio).toList();
+  List<DomicilioDomiciliario> get libres => _pedidos.where((p) => p.estaLibre).toList();
+  List<DomicilioDomiciliario> get mios => _pedidos.where((p) => p.esMio && p.estado != 'Entregado').toList();
 
-  Timer? _polling;
-  static const _intervaloRefresco = Duration(seconds: 10);
+  DomicilioDomiciliario? pedido(int id) => _pedidos.where((p) => p.id == id).firstOrNull;
 
-  // ── Persistencia local ──────────────────────────────────────────────────
+  String get _base => 'domiciliarios/$domiciliarioId';
 
-  Future<void> cargarDesdePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await Sesion.cargar();
-    final jsonStr = prefs.getString('domiciliario_sesion');
-    // Sin token no hay sesión: la API rechazaría todas las peticiones.
-    if (jsonStr == null || Sesion.token == null) return;
-
-    try {
-      final data = json.decode(jsonStr);
-      _domiciliarioId = data['id'];
-      _nombre = data['nombre'];
-      _entregasHoy = data['entregasHoy'] ?? 0;
-      _entregasTotales = data['entregasTotales'] ?? 0;
-      notifyListeners();
-    } catch (_) {
-      await prefs.remove('domiciliario_sesion');
-    }
-  }
-
-  Future<void> _persistir() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('domiciliario_sesion', json.encode({
-      'id': _domiciliarioId,
-      'nombre': _nombre,
-      'entregasHoy': _entregasHoy,
-      'entregasTotales': _entregasTotales,
-    }));
-  }
-
-  // ── Login / Logout ──────────────────────────────────────────────────────
-
-  Future<void> login(String usuario, String clave) async {
-    final result = await _service.login(usuario, clave);
-    _domiciliarioId = result.usuario.id;
-    _nombre = result.usuario.nombre;
-    _entregasHoy = result.entregasHoy;
-    _entregasTotales = result.entregasTotales;
-    await _persistir();
-    iniciarPolling();
-    notifyListeners();
-  }
-
-  Future<void> logout() async {
-    detenerPolling();
-    _domiciliarioId = null;
-    _nombre = null;
-    _pedidos = [];
-    _entregasHoy = 0;
-    _entregasTotales = 0;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('domiciliario_sesion');
-    await Sesion.cerrar();
-    notifyListeners();
-  }
-
-  // ── Carga y acciones ────────────────────────────────────────────────────
-
-  Future<void> cargarPedidos({bool silencioso = false}) async {
-    if (_domiciliarioId == null) return;
+  Future<void> cargar({bool silencioso = false}) async {
     if (!silencioso) {
       _cargando = true;
-      _error = null;
       notifyListeners();
     }
     try {
-      _pedidos = await _service.obtenerPedidos(_domiciliarioId!);
+      final datos = await _api.get('$_base/pedidos') as List;
+      _pedidos = datos.map((e) => DomicilioDomiciliario.fromJson(e)).toList();
       _error = null;
-    } catch (e) {
-      _error = e.toString().replaceFirst('Exception: ', '');
+      _cargado = true;
+    } on ApiException catch (e) {
+      _error = e.mensaje;
     } finally {
       _cargando = false;
       notifyListeners();
     }
+    _refrescarEstadisticas();
   }
 
-  Future<void> marcarRecogido(int domicilioId) async {
-    await _service.marcarRecogido(_domiciliarioId!, domicilioId);
-    await cargarPedidos(silencioso: true);
-  }
-
-  Future<void> marcarEnCamino(int domicilioId) async {
-    await _service.marcarEnCamino(_domiciliarioId!, domicilioId);
-    await cargarPedidos(silencioso: true);
-  }
-
-  Future<void> marcarEntregado(int domicilioId) async {
-    await _service.marcarEntregado(_domiciliarioId!, domicilioId);
-    await refrescarEstadisticas();
-    await cargarPedidos(silencioso: true);
-  }
-
-  Future<void> refrescarEstadisticas() async {
-    if (_domiciliarioId == null) return;
+  Future<void> _refrescarEstadisticas() async {
     try {
-      final stats = await _service.obtenerEstadisticas(_domiciliarioId!);
+      final stats = await _api.get('$_base/estadisticas') as Map<String, dynamic>;
       _entregasHoy = stats['entregadosHoy'] ?? _entregasHoy;
-      _entregasTotales = stats['totalEntregados'] ?? _entregasTotales;
-      await _persistir();
       notifyListeners();
-    } catch (_) {/* no bloqueamos la UI por esto */}
+    } catch (_) {/* el contador no bloquea la operación */}
   }
 
-  // ── Polling (complementa al push de FCM) ────────────────────────────────
+  Future<void> recoger(int domicilioId) => _accion('recoger', domicilioId);
+  Future<void> salir(int domicilioId) => _accion('en-camino', domicilioId);
+  Future<void> entregar(int domicilioId) => _accion('entregar', domicilioId);
 
-  void iniciarPolling() {
-    _polling?.cancel();
-    _polling = Timer.periodic(_intervaloRefresco, (_) => cargarPedidos(silencioso: true));
-  }
-
-  void detenerPolling() {
-    _polling?.cancel();
-    _polling = null;
+  Future<void> _accion(String accion, int domicilioId) async {
+    await _api.put('$_base/pedidos/$domicilioId/$accion');
+    await cargar(silencioso: true);
   }
 
   @override
   void dispose() {
-    detenerPolling();
+    _suscripcion?.cancel();
+    _respaldo?.cancel();
     super.dispose();
   }
 }

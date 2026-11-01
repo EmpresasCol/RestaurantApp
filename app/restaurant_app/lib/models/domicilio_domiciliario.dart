@@ -85,9 +85,10 @@ class DomicilioDomiciliario {
   factory DomicilioDomiciliario.fromJson(Map<String, dynamic> json) => DomicilioDomiciliario(
         id: json['id'],
         estado: json['estado'] ?? 'EnPreparacion',
-        fechaPedido: DateTime.parse(json['fechaPedido']),
-        fechaRecogida: json['fechaRecogida'] != null ? DateTime.tryParse(json['fechaRecogida']) : null,
-        fechaEntrega: json['fechaEntrega'] != null ? DateTime.tryParse(json['fechaEntrega']) : null,
+        // La API guarda en UTC; se muestra en la hora del celular.
+        fechaPedido: DateTime.parse(json['fechaPedido']).toLocal(),
+        fechaRecogida: json['fechaRecogida'] != null ? DateTime.tryParse(json['fechaRecogida'])?.toLocal() : null,
+        fechaEntrega: json['fechaEntrega'] != null ? DateTime.tryParse(json['fechaEntrega'])?.toLocal() : null,
         clienteNombre: json['clienteNombre'] ?? '',
         clienteTelefono: json['clienteTelefono'] ?? '',
         direccionCompleta: json['direccionCompleta'] ?? '',
@@ -110,4 +111,16 @@ class DomicilioDomiciliario {
   bool get esMio => domiciliarioId != null;
   bool get puedeRecoger => estado == 'Listo';
   bool get puedeEntregar => estado == 'Recogido' || estado == 'EnCamino';
+
+  /// Lo que el domiciliario cobra al entregar (nada si lo pagaron por anticipado).
+  double get porCobrar => pagadoAnticipado ? 0 : total;
+
+  /// Etapa en palabras del domiciliario.
+  String get etapa => switch (estado) {
+        'Listo' => 'Listo para recoger',
+        'Recogido' => 'Recogido',
+        'EnCamino' => 'En camino',
+        'Entregado' => 'Entregado',
+        _ => estado,
+      };
 }

@@ -1,97 +1,122 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/usuario.dart';
-import '../services/auth_service.dart';
-import '../services/notification_service.dart';
-import '../services/sesion.dart';
-import '../config/api_config.dart';
 
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/usuario.dart';
+import '../services/api.dart';
+import '../services/notification_service.dart';
+import '../services/realtime.dart';
+import '../services/sesion.dart';
+
+/// Sesión de la app: un solo login para meseros y domiciliarios.
+/// La API tiene un login por rol; se prueba el del mesero y, si el usuario
+/// es de otro rol, el del domiciliario. Ningún otro rol entra a la app.
 class AuthProvider with ChangeNotifier {
-  final AuthService _authService = AuthService();
+  AuthProvider({Api? api}) : _api = api ?? Api.instancia {
+    _api.onSesionVencida = () => cerrarSesion(vencida: true);
+  }
+
+  static const _claveUsuario = 'usuario';
+
+  final Api _api;
   Usuario? _usuario;
+  bool _iniciando = true;
   bool _cargando = false;
+  bool _vencida = false;
 
   Usuario? get usuario => _usuario;
-  bool get estaAutenticado => _usuario != null;
+  bool get iniciando => _iniciando;
   bool get cargando => _cargando;
+  bool get estaAutenticado => _usuario != null;
+  bool get esMesero => _usuario?.rol == RolUsuario.mesero;
+  bool get esDomiciliario => _usuario?.rol == RolUsuario.domiciliario;
+  /// Se cerró sola por token vencido: el login lo explica.
+  bool get sesionVencida => _vencida;
 
   Future<void> cargarUsuario() async {
-    final prefs = await SharedPreferences.getInstance();
-    await Sesion.cargar();
-    final usuarioJson = prefs.getString('usuario');
-
-    // Sin token no hay sesión: la API rechazaría todas las peticiones.
-    if (usuarioJson != null && Sesion.token != null) {
-      final usuario = Usuario.fromJson(json.decode(usuarioJson));
-      if (usuario.rol == RolUsuario.mesero) {
-        _usuario = usuario;
-        notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await Sesion.cargar();
+      final guardado = prefs.getString(_claveUsuario);
+      // Sin token no hay sesión: la API rechazaría todas las peticiones.
+      if (guardado != null && Sesion.token != null) {
+        final usuario = Usuario.fromJson(json.decode(guardado));
+        if (usuario.rol == RolUsuario.mesero || usuario.rol == RolUsuario.domiciliario) {
+          _usuario = usuario;
+          Realtime.instancia.iniciar();
+        }
       }
+    } catch (_) {
+      // Datos guardados de una versión anterior: se pide login de nuevo.
     }
+    _iniciando = false;
+    notifyListeners();
   }
 
   Future<void> login(String usuario, String clave) async {
     _cargando = true;
+    _vencida = false;
     notifyListeners();
-
     try {
-      final user = await _authService.login(usuario, clave);
-
-      if (user.rol != RolUsuario.mesero) {
-        await Sesion.cerrar();
-        throw Exception('Solo usuarios con rol Mesero pueden acceder');
+      final credenciales = {'usuario': usuario.trim(), 'clave': clave};
+      Map<String, dynamic> datos;
+      RolUsuario rol;
+      try {
+        datos = await _api.post('usuarios/login-mobile', credenciales) as Map<String, dynamic>;
+        rol = RolUsuario.mesero;
+      } on ApiException catch (e) {
+        // La clave es correcta pero el usuario no es mesero: puede ser domiciliario.
+        if (e.status != 401 || !e.mensaje.contains('Mesero')) rethrow;
+        try {
+          datos = await _api.post('domiciliarios/login', credenciales) as Map<String, dynamic>;
+          rol = RolUsuario.domiciliario;
+        } on ApiException catch (d) {
+          if (d.status == 401 && d.mensaje.contains('omiciliario')) {
+            throw ApiException('Esta app es para meseros y domiciliarios. Tu usuario entra por la web.', 401);
+          }
+          rethrow;
+        }
       }
 
-      _usuario = user;
+      final token = datos['token'] as String?;
+      if (token == null || token.isEmpty) throw ApiException('El servidor no devolvió una sesión válida');
+      await Sesion.guardar(token);
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('usuario', json.encode({
-        'id': user.id,
-        'nombre': user.nombre,
-        'nombreUsuario': user.nombreUsuario,
-        'rol': user.rol.toString().split('.').last,
-      }));
-
-      await _enviarTokenFCM(user.id);
-
-      _cargando = false;
-      notifyListeners();
-    } catch (e) {
-      _cargando = false;
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  Future<void> _enviarTokenFCM(int usuarioId) async {
-    try {
-      final token = await NotificationService().getToken();
-      if (token == null) {
-        debugPrint('⚠️ No hay token FCM disponible');
-        return;
-      }
-
-      final response = await http.post(
-        Uri.parse('${ApiConfig.apiUrl}/usuarios/$usuarioId/fcm-token'),
-        headers: Sesion.encabezados(),
-        body: json.encode({'fcmToken': token}),
+      _usuario = Usuario(
+        id: datos['id'],
+        nombre: datos['nombre'] ?? '',
+        nombreUsuario: datos['nombreUsuario'] ?? usuario,
+        rol: rol,
       );
-
-      debugPrint(response.statusCode == 200
-          ? '✅ Token FCM registrado en el servidor'
-          : '❌ Error al registrar token FCM: ${response.statusCode}');
-    } catch (e) {
-      // No lanzar error: el login debe continuar
-      debugPrint('❌ Error enviando token FCM: $e');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_claveUsuario, json.encode(_usuario!.toJson()));
+      Realtime.instancia.iniciar();
+      if (rol == RolUsuario.mesero) _registrarPush(_usuario!.id);
+    } finally {
+      _cargando = false;
+      notifyListeners();
     }
   }
 
-  Future<void> logout() async {
+  /// Avisos de "pedido listo" en este celular. Si falla, el login sigue igual.
+  Future<void> _registrarPush(int usuarioId) async {
+    final token = await NotificationService().getToken();
+    if (token == null) return;
+    try {
+      await _api.post('usuarios/$usuarioId/fcm-token', {'fcmToken': token});
+    } catch (e) {
+      debugPrint('No se registró el token de notificaciones: $e');
+    }
+  }
+
+  Future<void> cerrarSesion({bool vencida = false}) async {
+    if (_usuario == null && !vencida) return;
+    Realtime.instancia.detener();
     _usuario = null;
+    _vencida = vencida;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('usuario');
+    await prefs.remove(_claveUsuario);
     await Sesion.cerrar();
     notifyListeners();
   }

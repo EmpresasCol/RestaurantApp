@@ -25,6 +25,7 @@ class Sesion {
 
   static Map<String, String> encabezados() => {
         'Content-Type': 'application/json; charset=UTF-8',
+        // Evita la página de advertencia si la API se sirve por un túnel de ngrok.
         'ngrok-skip-browser-warning': '69420',
         if (token != null) 'Authorization': 'Bearer $token',
       };

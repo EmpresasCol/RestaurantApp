@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
-import '../config/api_config.dart';
 
+import '../providers/auth_provider.dart';
+import '../services/api.dart';
+import '../theme/qpro_theme.dart';
+import '../widgets/q.dart';
+
+/// Un solo login: la app reconoce si el usuario es mesero o domiciliario.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -11,211 +15,102 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _usuarioController = TextEditingController();
-  final _claveController = TextEditingController();
-  final _urlController = TextEditingController(text: ApiConfig.baseUrl);
-  bool _obscurePassword = true;
+  final _form = GlobalKey<FormState>();
+  final _usuario = TextEditingController();
+  final _clave = TextEditingController();
+  bool _verClave = false;
+  String? _error;
 
   @override
   void dispose() {
-    _usuarioController.dispose();
-    _claveController.dispose();
-    _urlController.dispose();
+    _usuario.dispose();
+    _clave.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    ApiConfig.setBaseUrl(_urlController.text);
-    
+  Future<void> _entrar() async {
+    FocusScope.of(context).unfocus();
+    if (!_form.currentState!.validate()) return;
+    setState(() => _error = null);
     try {
-      await context.read<AuthProvider>().login(
-        _usuarioController.text,
-        _claveController.text,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      await context.read<AuthProvider>().login(_usuario.text, _clave.text);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.mensaje == 'Credenciales inválidas' ? 'Usuario o clave incorrectos' : e.mensaje);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final t = Theme.of(context).textTheme;
+
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color.fromRGBO(63, 41, 26, 1), Color.fromRGBO(115, 86, 61, 1)],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.restaurant_menu,
-                        size: 60,
-                        color: Color.fromRGBO(226, 141, 65, 1),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Restaurante Délice',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+      backgroundColor: QColors.white,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: AutofillGroup(
+                child: Form(
+                  key: _form,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    const Align(alignment: Alignment.centerLeft, child: LogoQpro(tamano: 64)),
+                    const SizedBox(height: 28),
+                    Text('Inicia sesión', style: t.headlineMedium?.copyWith(fontSize: 30)),
                     const SizedBox(height: 8),
-                    Text(
-                      'Sistema de Mesero',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.white.withOpacity(0.9),
+                    Text('Meseros y domiciliarios entran con el usuario que les dio el administrador.', style: t.bodyLarge?.copyWith(color: QColors.stone500)),
+                    if (auth.sesionVencida) ...[
+                      const SizedBox(height: 20),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: QColors.tealWash, borderRadius: BorderRadius.circular(QRadius.control)),
+                        child: const Row(children: [
+                          Icon(Icons.info_outline_rounded, color: QColors.tealDeep, size: 20),
+                          SizedBox(width: 10),
+                          Expanded(child: Text('Tu sesión venció. Entra de nuevo para seguir.', style: TextStyle(color: QColors.tealDeep, fontWeight: FontWeight.w600))),
+                        ]),
                       ),
+                    ],
+                    const SizedBox(height: 28),
+                    TextFormField(
+                      controller: _usuario,
+                      decoration: const InputDecoration(labelText: 'Usuario', prefixIcon: Icon(Icons.person_outline_rounded)),
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      autofillHints: const [AutofillHints.username],
+                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Escribe tu usuario' : null,
                     ),
-                    const SizedBox(height: 48),
-                    Card(
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          children: [
-                            TextFormField(
-                              controller: _urlController,
-                              decoration: InputDecoration(
-                                labelText: 'URL del Servidor',
-                                prefixIcon: const Icon(Icons.cloud),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Ingresa la URL del servidor';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _usuarioController,
-                              decoration: InputDecoration(
-                                labelText: 'Usuario',
-                                prefixIcon: const Icon(Icons.person),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Ingresa tu usuario';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _claveController,
-                              obscureText: _obscurePassword,
-                              decoration: InputDecoration(
-                                labelText: 'Contraseña',
-                                prefixIcon: const Icon(Icons.lock),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_obscurePassword 
-                                    ? Icons.visibility 
-                                    : Icons.visibility_off),
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Ingresa tu contraseña';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 24),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: Consumer<AuthProvider>(
-                                builder: (context, auth, _) {
-                                  return ElevatedButton(
-                                    onPressed: auth.cargando ? null : _login,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color.fromRGBO(63, 41, 26, 1),
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child: auth.cargando
-                                        ? const SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(
-                                                Colors.white,
-                                              ),
-                                            ),
-                                          )
-                                        : const Text(
-                                            'Iniciar Sesión',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _clave,
+                      obscureText: !_verClave,
+                      decoration: InputDecoration(
+                        labelText: 'Clave',
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        suffixIcon: IconButton(
+                          tooltip: _verClave ? 'Ocultar clave' : 'Mostrar clave',
+                          icon: Icon(_verClave ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                          onPressed: () => setState(() => _verClave = !_verClave),
                         ),
                       ),
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.password],
+                      onFieldSubmitted: (_) => _entrar(),
+                      validator: (v) => (v == null || v.isEmpty) ? 'Escribe tu clave' : null,
                     ),
-                  ],
+                    if (_error != null) ...[
+                      const SizedBox(height: 14),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(_error!, style: const TextStyle(color: QColors.dangerDeep, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                    QBoton(texto: 'Entrar', onPressed: _entrar, cargando: auth.cargando, alto: 56, expandir: true),
+                  ]),
                 ),
               ),
             ),
