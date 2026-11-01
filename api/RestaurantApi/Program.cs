@@ -1,7 +1,9 @@
-﻿using System.Threading.RateLimiting;
+﻿using System.IO.Compression;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -81,6 +83,16 @@ builder.Services.AddRateLimiter(options =>
 });
 
 builder.Services.AddControllers();
+
+// JSON comprimido (Brotli o gzip): las listas de inventario y la carta viajan varias veces más livianas.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o => o.Level = CompressionLevel.Fastest);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -152,6 +164,7 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("EnableS
     app.UseSwaggerUI();
 }
 
+app.UseResponseCompression();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseRateLimiter();

@@ -176,6 +176,90 @@ public class ComprasTests
     }
 
     [Fact]
+    public async Task Cada_linea_de_la_recepcion_va_a_su_almacen()
+    {
+        using var ctx = Crear();
+        ctx.Almacenes.Add(new Almacen { Id = 2, Codigo = "ALM-02", Nombre = "Bodega", Descripcion = "-", Ubicacion = "-", Tipo = "Principal" });
+        ctx.SaveChanges();
+        ctx.ChangeTracker.Clear();
+
+        var r = await Compras(ctx).Recibir(Recepcion(
+            new RecepcionLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 4 },
+            new RecepcionLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 6, AlmacenId = 2 }));
+
+        Assert.IsType<OkObjectResult>(r.Result);
+        Assert.Equal(TestDb.StockInicialCarne + 4m, ctx.Stock.AsNoTracking().Single(s => s.AlmacenId == TestDb.AlmacenId).Cantidad);
+        Assert.Equal(6m, ctx.Stock.AsNoTracking().Single(s => s.AlmacenId == 2).Cantidad);
+        Assert.Equal(new[] { 1, 2 }, ctx.Lotes.AsNoTracking().OrderBy(l => l.AlmacenId).Select(l => l.AlmacenId).ToArray());
+        Assert.All(ctx.MovimientosInventario.AsNoTracking().ToList(), m => Assert.NotNull(m.LoteId));
+    }
+
+    [Fact]
+    public async Task Producto_sin_vencimiento_entra_sin_fecha_y_el_insumo_deja_de_exigirla()
+    {
+        using var ctx = Crear();
+        var carne = ctx.ProductosInventario.Single();
+        carne.RequiereCaducidad = true;
+        carne.DiasVencimiento = 4;
+        ctx.SaveChanges();
+        ctx.ChangeTracker.Clear();
+
+        var r = await Compras(ctx).Recibir(Recepcion(new RecepcionLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 2, NoVence = true }));
+
+        Assert.Contains("Carne de res", Valor<List<string>>(r, "SinVencimiento"));
+        Assert.Null(ctx.Lotes.AsNoTracking().Single().FechaVencimiento);
+        var guardado = ctx.ProductosInventario.AsNoTracking().Single();
+        Assert.False(guardado.RequiereCaducidad);
+        Assert.Null(guardado.DiasVencimiento);
+    }
+
+    [Fact]
+    public async Task La_recepcion_guarda_proveedor_factura_y_fotos_de_evidencia()
+    {
+        using var ctx = Crear();
+        const string foto = "data:image/jpeg;base64,AAAA";
+        var dto = Recepcion(new RecepcionLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 1 });
+        dto.Documento = "FV-881";
+        dto.Fotos = new() { foto, foto };
+
+        var r = await Compras(ctx).Recibir(dto);
+
+        var id = Valor<int>(r, "RecepcionId");
+        var recepcion = ctx.Recepciones.AsNoTracking().Include(x => x.Fotos).Single();
+        Assert.Equal(id, recepcion.Id);
+        Assert.Equal(ProveedorId, recepcion.ProveedorId);
+        Assert.Equal("FV-881", recepcion.Documento);
+        Assert.Equal(2, recepcion.Fotos.Count);
+        var mov = ctx.MovimientosInventario.AsNoTracking().Single();
+        Assert.Equal($"Recepción R-{id} · FV-881", mov.Referencia);
+        Assert.Contains("Carnes del Sinú", mov.Motivo);
+
+        ctx.ChangeTracker.Clear();
+        var mas = await Compras(ctx).AgregarFotos(id, new FotosRecepcionDto { Fotos = { foto } });
+        Assert.IsType<OkObjectResult>(mas.Result);
+        Assert.Equal(3, ctx.RecepcionFotos.Count());
+
+        var mala = Recepcion(new RecepcionLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 1 });
+        mala.Fotos = new() { "no-es-imagen" };
+        Assert.Contains("foto", Mensaje((await Compras(ctx).Recibir(mala)).Result));
+    }
+
+    [Fact]
+    public async Task Una_orden_enviada_no_vuelve_a_por_enviar()
+    {
+        using var ctx = Crear();
+        var creada = await Compras(ctx).CrearOrden(new CrearOrdenCompraDto
+        {
+            ProveedorId = ProveedorId, AlmacenDestinoId = TestDb.AlmacenId,
+            Lineas = { new OrdenCompraLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 5, PrecioUnitario = 20000m } }
+        });
+        var id = Valor<int>(creada, "Id");
+        await Compras(ctx).CambiarEstadoOrden(id, new EstadoOrdenCompraDto { Estado = "Aprobada" });
+
+        Assert.IsType<BadRequestObjectResult>(await Compras(ctx).CambiarEstadoOrden(id, new EstadoOrdenCompraDto { Estado = "Pendiente" }));
+    }
+
+    [Fact]
     public async Task Reposicion_sugiere_cajas_completas_y_descuenta_lo_ya_pedido()
     {
         using var ctx = Crear();

@@ -337,6 +337,29 @@ CREATE TABLE DetallesOrdenCompra (
     FOREIGN KEY (ProductoId) REFERENCES ProductosInventario(Id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
+-- Cada entrada de mercancía y sus fotos de evidencia (ver migraciones/2026-11-05_recepciones_fotos.sql).
+CREATE TABLE Recepciones (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    Fecha DATETIME NOT NULL,
+    UsuarioId INT NULL,
+    ProveedorId INT NULL,
+    OrdenCompraId INT NULL,
+    Documento VARCHAR(60) NULL,
+    Lineas INT NOT NULL DEFAULT 0,
+    Total DECIMAL(12,2) NOT NULL DEFAULT 0,
+    INDEX idx_recepciones_fecha (Fecha),
+    INDEX idx_recepciones_orden (OrdenCompraId)
+) ENGINE=InnoDB;
+
+CREATE TABLE RecepcionFotos (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    RecepcionId INT NOT NULL,
+    Foto MEDIUMTEXT NOT NULL,
+    Fecha DATETIME NOT NULL,
+    INDEX idx_fotos_recepcion (RecepcionId),
+    FOREIGN KEY (RecepcionId) REFERENCES Recepciones(Id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 -- Producto de compra (ver migraciones/2026-10-31_presentaciones_compra.sql).
 CREATE TABLE PresentacionesCompra (
     Id INT AUTO_INCREMENT PRIMARY KEY,

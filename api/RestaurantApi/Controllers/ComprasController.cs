@@ -226,16 +226,33 @@ namespace RestaurantApi.Controllers
 
         // ==================== RECEPCIÓN DE MERCANCÍA ====================
 
+        /// <summary>Fotos de evidencia por recepción y tamaño máximo de cada data URI (una foto reducida pesa ~300 KB).</summary>
+        public const int MaximoFotos = 10;
+        public const int MaximoFoto = 2_000_000;
+
+        private static string? ValidarFotos(List<string> fotos, int yaGuardadas)
+        {
+            if (fotos.Count + yaGuardadas > MaximoFotos) return $"Máximo {MaximoFotos} fotos por recepción";
+            return fotos.Any(f => string.IsNullOrWhiteSpace(f) || !f.StartsWith("data:image/") || f.Length > MaximoFoto)
+                ? "Una de las fotos no es una imagen válida o pesa demasiado"
+                : null;
+        }
+
         /// <summary>
-        /// Registra lo que llegó: crea un lote por línea (con su vencimiento), sube el stock con
-        /// costo promedio y, si viene de una orden de compra, marca lo recibido.
+        /// Registra lo que llegó: crea un lote por línea (con su vencimiento) en el almacén de esa
+        /// línea, sube el stock con costo promedio, guarda las fotos de evidencia y, si viene de
+        /// una orden de compra, marca lo recibido. Todo en una sola transacción.
         /// </summary>
         [HttpPost("recepciones")]
         public async Task<ActionResult<object>> Recibir([FromBody] RecepcionDto dto)
         {
             if (dto.Lineas.Count == 0) return BadRequest(new { message = "Agrega al menos un insumo" });
-            if (!await _context.Almacenes.AnyAsync(a => a.Id == dto.AlmacenId))
-                return BadRequest(new { message = "El almacén no existe" });
+            var errorFotos = ValidarFotos(dto.Fotos, 0);
+            if (errorFotos != null) return BadRequest(new { message = errorFotos });
+
+            var almacenIds = dto.Lineas.Select(l => l.AlmacenId ?? dto.AlmacenId).Append(dto.AlmacenId).Distinct().ToList();
+            var almacenes = await _context.Almacenes.Where(a => almacenIds.Contains(a.Id)).Select(a => a.Id).ToListAsync();
+            if (almacenes.Count != almacenIds.Count) return BadRequest(new { message = "El almacén no existe" });
 
             OrdenCompra? orden = null;
             if (dto.OrdenCompraId.HasValue)
@@ -246,6 +263,15 @@ namespace RestaurantApi.Controllers
                     return Conflict(new { message = $"La orden {orden.NumeroOrden} está {orden.Estado} y no admite recepciones" });
             }
 
+            // El proveedor de la orden manda; en compra directa, el que se eligió (antes se perdía).
+            var proveedorId = orden?.ProveedorId ?? dto.ProveedorId;
+            string? proveedor = null;
+            if (proveedorId.HasValue)
+            {
+                proveedor = await _context.Proveedores.Where(p => p.Id == proveedorId).Select(p => p.Nombre).FirstOrDefaultAsync();
+                if (proveedor == null) return BadRequest(new { message = "El proveedor no existe" });
+            }
+
             var ids = dto.Lineas.Select(l => l.ProductoId).Distinct().ToList();
             var productos = await _context.ProductosInventario.Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
             var presIds = dto.Lineas.Where(l => l.PresentacionId.HasValue).Select(l => l.PresentacionId!.Value).Distinct().ToList();
@@ -253,7 +279,7 @@ namespace RestaurantApi.Controllers
             var hoy = Hoy;
 
             // Validar todo antes de tocar el stock.
-            var lineas = new List<(RecepcionLineaDto Dto, ProductoInventario Producto, PresentacionCompra? Pres, decimal Cantidad, decimal Costo, DateTime? Vence)>();
+            var lineas = new List<(RecepcionLineaDto Dto, ProductoInventario Producto, PresentacionCompra? Pres, int AlmacenId, decimal Cantidad, decimal Costo, DateTime? Vence)>();
             foreach (var l in dto.Lineas)
             {
                 if (!productos.TryGetValue(l.ProductoId, out var producto))
@@ -270,28 +296,54 @@ namespace RestaurantApi.Controllers
                     ? l.CostoUnitario.Value / factor
                     : (pres?.CostoReferencia / factor) ?? producto.PrecioCosto;
 
-                var vence = l.FechaVencimiento?.Date
-                            ?? (producto.DiasVencimiento > 0 ? hoy.AddDays(producto.DiasVencimiento.Value) : (DateTime?)null);
-                if (producto.RequiereCaducidad && vence == null)
-                    return BadRequest(new { message = $"{producto.Nombre}: indica la fecha de vencimiento" });
+                // "No vence": el producto no trae fecha (sal, aceite, enlatado sin fecha visible).
+                var vence = l.NoVence
+                    ? null
+                    : l.FechaVencimiento?.Date ?? (producto.DiasVencimiento > 0 ? hoy.AddDays(producto.DiasVencimiento.Value) : (DateTime?)null);
+                if (!l.NoVence && producto.RequiereCaducidad && vence == null)
+                    return BadRequest(new { message = $"{producto.Nombre}: indica la fecha de vencimiento o marca que no vence" });
                 if (vence < hoy)
                     return BadRequest(new { message = $"{producto.Nombre}: la fecha de vencimiento ya pasó" });
 
-                lineas.Add((l, producto, pres, Math.Round(l.Cantidad * factor, 2), Math.Round(costoBase, 2), vence));
+                lineas.Add((l, producto, pres, l.AlmacenId ?? dto.AlmacenId, Math.Round(l.Cantidad * factor, 2), Math.Round(costoBase, 2), vence));
             }
 
             using var tx = await _context.Database.BeginTransactionAsync();
-            var referencia = orden != null ? $"Recepción {orden.NumeroOrden}" : $"Recepción {dto.Documento ?? hoy.ToString("yyyy-MM-dd")}";
-            var consecutivo = await _context.Lotes.CountAsync() + 1;
-            decimal total = 0;
 
-            foreach (var (l, producto, pres, cantidad, costo, vence) in lineas)
+            var documento = string.IsNullOrWhiteSpace(dto.Documento) ? null : dto.Documento.Trim();
+            var recepcion = new Recepcion
             {
-                var stock = await _context.Stock.FirstOrDefaultAsync(s => s.ProductoId == producto.Id && s.AlmacenId == dto.AlmacenId);
-                if (stock == null)
+                Fecha = DateTime.UtcNow,
+                UsuarioId = UsuarioId,
+                ProveedorId = proveedorId,
+                OrdenCompraId = orden?.Id,
+                Documento = documento,
+                Lineas = lineas.Count,
+                Fotos = dto.Fotos.Select(f => new RecepcionFoto { Foto = f, Fecha = DateTime.UtcNow }).ToList()
+            };
+            _context.Recepciones.Add(recepcion);
+            await _context.SaveChangesAsync(); // el Id numera los lotes y va en la referencia
+
+            var referencia = string.Join(" · ", new[] { $"Recepción R-{recepcion.Id}", orden?.NumeroOrden, documento }.Where(x => x != null));
+            if (referencia.Length > 100) referencia = referencia[..100];
+            var motivoBase = proveedor != null ? $"Compra a {proveedor}" : "Compra directa";
+
+            // Un solo viaje a la base para todo el stock que se toca.
+            var stocks = await _context.Stock
+                .Where(s => ids.Contains(s.ProductoId) && almacenIds.Contains(s.AlmacenId))
+                .ToDictionaryAsync(s => (s.ProductoId, s.AlmacenId));
+
+            var consecutivo = 1;
+            decimal total = 0;
+            var sinVencimiento = new List<string>();
+
+            foreach (var (l, producto, pres, almacenId, cantidad, costo, vence) in lineas)
+            {
+                if (!stocks.TryGetValue((producto.Id, almacenId), out var stock))
                 {
-                    stock = new Stock { ProductoId = producto.Id, AlmacenId = dto.AlmacenId, Cantidad = 0, CostoPromedio = costo };
+                    stock = new Stock { ProductoId = producto.Id, AlmacenId = almacenId, Cantidad = 0, CostoPromedio = costo };
                     _context.Stock.Add(stock);
+                    stocks[(producto.Id, almacenId)] = stock;
                 }
                 stock.CostoPromedio = stock.Cantidad > 0
                     ? Math.Round((stock.Cantidad * stock.CostoPromedio + cantidad * costo) / (stock.Cantidad + cantidad), 2)
@@ -302,8 +354,8 @@ namespace RestaurantApi.Controllers
                 var lote = new Lote
                 {
                     ProductoId = producto.Id,
-                    AlmacenId = dto.AlmacenId,
-                    NumeroLote = string.IsNullOrWhiteSpace(l.NumeroLote) ? $"R{hoy:yyMMdd}-{consecutivo++}" : l.NumeroLote.Trim(),
+                    AlmacenId = almacenId,
+                    NumeroLote = string.IsNullOrWhiteSpace(l.NumeroLote) ? $"R{recepcion.Id}-{consecutivo++}" : l.NumeroLote.Trim(),
                     FechaIngreso = hoy,
                     FechaVencimiento = vence,
                     CantidadInicial = cantidad,
@@ -312,17 +364,16 @@ namespace RestaurantApi.Controllers
                     Estado = "Activo"
                 };
                 _context.Lotes.Add(lote);
-                await _context.SaveChangesAsync();
 
                 _context.MovimientosInventario.Add(new MovimientoInventario
                 {
                     ProductoId = producto.Id,
-                    AlmacenId = dto.AlmacenId,
-                    LoteId = lote.Id,
+                    AlmacenId = almacenId,
+                    Lote = lote,
                     TipoMovimiento = "Entrada",
                     Cantidad = cantidad,
                     CostoUnitario = costo,
-                    Motivo = pres != null ? $"Compra: {l.Cantidad:0.##} × {pres.Nombre}" : "Compra",
+                    Motivo = pres != null ? $"{motivoBase}: {l.Cantidad:0.##} × {pres.Nombre}" : motivoBase,
                     Referencia = referencia,
                     UsuarioId = UsuarioId,
                     Fecha = DateTime.UtcNow
@@ -332,6 +383,14 @@ namespace RestaurantApi.Controllers
                 producto.PrecioCosto = costo;
                 if (pres != null) pres.CostoReferencia = Math.Round(costo * pres.Factor, 2);
                 total += cantidad * costo;
+
+                // Si dijeron que no vence, el insumo deja de pedir la fecha en las próximas entradas.
+                if (l.NoVence && (producto.RequiereCaducidad || producto.DiasVencimiento > 0))
+                {
+                    producto.RequiereCaducidad = false;
+                    producto.DiasVencimiento = null;
+                    sinVencimiento.Add(producto.Nombre);
+                }
 
                 var detalle = orden?.Detalles.FirstOrDefault(d => d.ProductoId == producto.Id && d.CantidadRecibida < d.Cantidad)
                               ?? orden?.Detalles.FirstOrDefault(d => d.ProductoId == producto.Id);
@@ -345,16 +404,60 @@ namespace RestaurantApi.Controllers
                 orden.FechaActualizacion = DateTime.UtcNow;
             }
 
+            recepcion.Total = Math.Round(total, 2);
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
             return Ok(new
             {
-                message = $"Se recibieron {lineas.Count} insumo(s)",
+                message = $"Se recibieron {lineas.Count} insumo(s)" + (dto.Fotos.Count > 0 ? $" con {dto.Fotos.Count} foto(s)" : ""),
+                RecepcionId = recepcion.Id,
                 Lineas = lineas.Count,
                 Total = Math.Round(total, 0),
-                OrdenEstado = orden?.Estado.ToString()
+                OrdenEstado = orden?.Estado.ToString(),
+                SinVencimiento = sinVencimiento
             });
+        }
+
+        /// <summary>Últimas entradas de mercancía (o las de una orden), con los Id de sus fotos.</summary>
+        [HttpGet("recepciones")]
+        public async Task<ActionResult<object>> GetRecepciones([FromQuery] int? ordenId, [FromQuery] int limite = 15)
+            => Ok(await _context.Recepciones.AsNoTracking()
+                .Where(r => ordenId == null || r.OrdenCompraId == ordenId)
+                .OrderByDescending(r => r.Id)
+                .Take(Math.Clamp(limite, 1, 100))
+                .Select(r => new
+                {
+                    r.Id, r.Fecha, r.ProveedorId, Proveedor = r.Proveedor != null ? r.Proveedor.Nombre : null,
+                    r.OrdenCompraId, NumeroOrden = r.OrdenCompra != null ? r.OrdenCompra.NumeroOrden : null,
+                    r.Documento, r.Lineas, r.Total,
+                    Fotos = r.Fotos.OrderBy(f => f.Id).Select(f => f.Id).ToList()
+                })
+                .ToListAsync());
+
+        [HttpGet("recepciones/fotos/{id:int}")]
+        public async Task<IActionResult> GetFotoRecepcion(int id)
+        {
+            var foto = await _context.RecepcionFotos.Where(f => f.Id == id).Select(f => f.Foto).FirstOrDefaultAsync();
+            if (foto == null) return NotFound(new { message = "Foto no encontrada" });
+            // La foto no cambia nunca: el navegador puede guardarla.
+            Response.Headers.CacheControl = "private, max-age=86400";
+            return Ok(new { foto });
+        }
+
+        /// <summary>Fotos que se toman después de registrar la entrada (la factura llegó luego, un daño se vio al abrir).</summary>
+        [HttpPost("recepciones/{id:int}/fotos")]
+        public async Task<ActionResult<object>> AgregarFotos(int id, [FromBody] FotosRecepcionDto dto)
+        {
+            if (!await _context.Recepciones.AnyAsync(r => r.Id == id)) return NotFound(new { message = "Recepción no encontrada" });
+            if (dto.Fotos.Count == 0) return BadRequest(new { message = "Agrega al menos una foto" });
+            var error = ValidarFotos(dto.Fotos, await _context.RecepcionFotos.CountAsync(f => f.RecepcionId == id));
+            if (error != null) return BadRequest(new { message = error });
+
+            var nuevas = dto.Fotos.Select(f => new RecepcionFoto { RecepcionId = id, Foto = f, Fecha = DateTime.UtcNow }).ToList();
+            _context.RecepcionFotos.AddRange(nuevas);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = $"Se agregaron {nuevas.Count} foto(s)", Fotos = nuevas.Select(f => f.Id) });
         }
 
         // ==================== REPOSICIÓN Y ÓRDENES ====================
@@ -449,7 +552,7 @@ namespace RestaurantApi.Controllers
                 Estado = o.Estado.ToString(), o.Subtotal, o.Total, o.Notas,
                 Detalles = o.Detalles.Select(d => new
                 {
-                    d.Id, d.ProductoId, Insumo = d.Producto?.Nombre, d.Producto?.UnidadMedida, d.Producto?.RequiereCaducidad,
+                    d.Id, d.ProductoId, Insumo = d.Producto?.Nombre, d.Producto?.UnidadMedida, d.Producto?.RequiereCaducidad, d.Producto?.DiasVencimiento,
                     d.Cantidad, d.PrecioUnitario, d.CantidadRecibida, Pendiente = Math.Max(d.Cantidad - d.CantidadRecibida, 0),
                     Presentaciones = presentaciones.GetValueOrDefault(d.ProductoId)
                 })
@@ -504,8 +607,12 @@ namespace RestaurantApi.Controllers
         {
             var orden = await _context.OrdenesCompra.FindAsync(id);
             if (orden == null) return NotFound(new { message = "Orden no encontrada" });
-            if (!Enum.TryParse<EstadoOrdenCompra>(dto.Estado, true, out var nuevo) || nuevo == EstadoOrdenCompra.Recibida)
+            // Recibida solo por recepción; una orden enviada no vuelve a "por enviar".
+            if (!Enum.TryParse<EstadoOrdenCompra>(dto.Estado, true, out var nuevo)
+                || nuevo is EstadoOrdenCompra.Recibida or EstadoOrdenCompra.Pendiente)
                 return BadRequest(new { message = "Estado inválido" });
+            if (orden.Estado == EstadoOrdenCompra.EnTransito && nuevo == EstadoOrdenCompra.Aprobada)
+                return NoContent(); // reenviar una orden con parte recibida no la cambia
             if (!EstadosAbiertos.Contains(orden.Estado))
                 return Conflict(new { message = $"La orden ya está {orden.Estado}" });
 
@@ -719,7 +826,7 @@ namespace RestaurantApi.Controllers
             int Id, string? Codigo, string Nombre, string UnidadMedida, string? Categoria, int? ProveedorId, string? Proveedor,
             decimal Stock, decimal StockMinimo, decimal PuntoReorden, decimal? StockMaximo, decimal Valor, string Estado,
             decimal ConsumoDiario, decimal? DiasCobertura, decimal Pedido, DateTime? ProximoVencimiento, bool RequiereCaducidad, bool Activo,
-            decimal PrecioCosto, decimal Vencido);
+            decimal PrecioCosto, decimal Vencido, int? DiasVencimiento);
 
         /// <summary>
         /// Stock, consumo diario (ventas de los últimos 14 días), cobertura y lo ya pedido de
@@ -727,7 +834,7 @@ namespace RestaurantApi.Controllers
         /// </summary>
         private async Task<List<EstadoInsumo>> EstadoInsumosAsync(int? soloId = null)
         {
-            var productos = await _context.ProductosInventario
+            var productos = await _context.ProductosInventario.AsNoTracking()
                 .Include(p => p.Categoria).Include(p => p.Proveedor)
                 .Where(p => soloId == null ? p.Activo : p.Id == soloId)
                 .OrderBy(p => p.Nombre)
@@ -736,35 +843,34 @@ namespace RestaurantApi.Controllers
 
             var vencido = await LotesInventario.VencidoAsync(_context, ids);
             // Cantidad = lo utilizable (sin vencidos); Valor = todo lo que hay en bodega.
-            var stock = (await _context.Stock.Where(s => ids.Contains(s.ProductoId)).ToListAsync())
+            var stock = (await _context.Stock.AsNoTracking().Where(s => ids.Contains(s.ProductoId))
+                    .Select(s => new { s.ProductoId, s.AlmacenId, s.Cantidad, s.CostoPromedio }).ToListAsync())
                 .GroupBy(s => s.ProductoId)
                 .ToDictionary(g => g.Key, g => (
                     Cantidad: g.Sum(s => Math.Max(0, s.Cantidad - vencido.GetValueOrDefault((s.ProductoId, s.AlmacenId)))),
                     Valor: g.Sum(s => Math.Max(s.Cantidad, 0) * s.CostoPromedio),
                     Vencido: g.Sum(s => Math.Min(Math.Max(s.Cantidad, 0), vencido.GetValueOrDefault((s.ProductoId, s.AlmacenId))))));
 
+            // Consumo, pedido y vencimientos se agregan en la base: viaja una fila por insumo, no cada movimiento.
             var desde = DateTime.UtcNow.AddDays(-DiasConsumo);
-            var consumo = (await _context.MovimientosInventario
-                    .Where(m => ids.Contains(m.ProductoId) && m.Fecha >= desde && m.Referencia != null
-                                && (m.Referencia.StartsWith("Pedido #") || m.Referencia.StartsWith("Domicilio #") || m.Referencia.StartsWith("Ajuste Pedido #") || m.Referencia.StartsWith("Ajuste Domicilio #")))
-                    .Select(m => new { m.ProductoId, m.TipoMovimiento, m.Cantidad })
-                    .ToListAsync())
+            var consumo = await _context.MovimientosInventario
+                .Where(m => ids.Contains(m.ProductoId) && m.Fecha >= desde && m.Referencia != null
+                            && (m.Referencia.StartsWith("Pedido #") || m.Referencia.StartsWith("Domicilio #") || m.Referencia.StartsWith("Ajuste Pedido #") || m.Referencia.StartsWith("Ajuste Domicilio #")))
                 .GroupBy(m => m.ProductoId)
-                .ToDictionary(g => g.Key, g => Math.Max(0, g.Sum(m => m.TipoMovimiento == "Salida" ? m.Cantidad : -m.Cantidad)) / DiasConsumo);
+                .Select(g => new { g.Key, Neto = g.Sum(m => m.TipoMovimiento == "Salida" ? m.Cantidad : -m.Cantidad) })
+                .ToDictionaryAsync(x => x.Key, x => Math.Max(0, x.Neto) / DiasConsumo);
 
-            var pedido = (await _context.DetallesOrdenCompra
-                    .Where(d => ids.Contains(d.ProductoId) && EstadosAbiertos.Contains(d.OrdenCompra!.Estado))
-                    .Select(d => new { d.ProductoId, Pendiente = d.Cantidad - d.CantidadRecibida })
-                    .ToListAsync())
+            var pedido = await _context.DetallesOrdenCompra
+                .Where(d => ids.Contains(d.ProductoId) && EstadosAbiertos.Contains(d.OrdenCompra!.Estado) && d.Cantidad > d.CantidadRecibida)
                 .GroupBy(d => d.ProductoId)
-                .ToDictionary(g => g.Key, g => g.Sum(d => Math.Max(d.Pendiente, 0)));
+                .Select(g => new { g.Key, Pendiente = g.Sum(d => d.Cantidad - d.CantidadRecibida) })
+                .ToDictionaryAsync(x => x.Key, x => x.Pendiente);
 
-            var vencimientos = (await _context.Lotes
-                    .Where(l => ids.Contains(l.ProductoId) && l.CantidadActual > 0 && l.FechaVencimiento != null)
-                    .Select(l => new { l.ProductoId, l.FechaVencimiento })
-                    .ToListAsync())
+            var vencimientos = await _context.Lotes
+                .Where(l => ids.Contains(l.ProductoId) && l.CantidadActual > 0 && l.FechaVencimiento != null)
                 .GroupBy(l => l.ProductoId)
-                .ToDictionary(g => g.Key, g => g.Min(l => l.FechaVencimiento));
+                .Select(g => new { g.Key, Proximo = g.Min(l => l.FechaVencimiento) })
+                .ToDictionaryAsync(x => x.Key, x => x.Proximo);
 
             return productos.Select(p =>
             {
@@ -776,7 +882,7 @@ namespace RestaurantApi.Controllers
                     p.Id, p.Codigo, p.Nombre, p.UnidadMedida, p.Categoria?.Nombre, p.ProveedorId, p.Proveedor?.Nombre,
                     Math.Round(cantidad, 2), p.StockMinimo, punto, p.StockMaximo, Math.Round(valor, 0), estado,
                     diario, diario > 0 ? Math.Round(cantidad / diario, 1) : null, Math.Round(pedido.GetValueOrDefault(p.Id), 2),
-                    vencimientos.GetValueOrDefault(p.Id), p.RequiereCaducidad, p.Activo, p.PrecioCosto, Math.Round(cantidadVencida, 2));
+                    vencimientos.GetValueOrDefault(p.Id), p.RequiereCaducidad, p.Activo, p.PrecioCosto, Math.Round(cantidadVencida, 2), p.DiasVencimiento);
             }).ToList();
         }
 

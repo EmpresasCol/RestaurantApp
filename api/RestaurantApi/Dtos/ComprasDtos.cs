@@ -22,6 +22,8 @@ namespace RestaurantApi.Dtos
         /// <summary>Número de factura o remisión del proveedor.</summary>
         [StringLength(60)] public string? Documento { get; set; }
         public List<RecepcionLineaDto> Lineas { get; set; } = new();
+        /// <summary>Fotos de evidencia de lo que llegó (data URI JPEG).</summary>
+        public List<string> Fotos { get; set; } = new();
     }
 
     public class RecepcionLineaDto
@@ -33,6 +35,15 @@ namespace RestaurantApi.Dtos
         [Range(0, 999999999)] public decimal? CostoUnitario { get; set; }
         public DateTime? FechaVencimiento { get; set; }
         [StringLength(50)] public string? NumeroLote { get; set; }
+        /// <summary>Almacén de esta línea; si no viene, el de la recepción.</summary>
+        public int? AlmacenId { get; set; }
+        /// <summary>El producto no trae vencimiento: entra sin fecha y el insumo deja de exigirla.</summary>
+        public bool NoVence { get; set; }
+    }
+
+    public class FotosRecepcionDto
+    {
+        public List<string> Fotos { get; set; } = new();
     }
 
     /// <summary>Corrige un lote registrado con datos equivocados.</summary>

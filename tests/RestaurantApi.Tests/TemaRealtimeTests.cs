@@ -18,6 +18,8 @@ public class TemaRealtimeTests
     [InlineData("/api/domiciliarios/1/pedidos/4/recoger", "domicilios")]
     [InlineData("/api/admin/domiciliarios", "domicilios")]
     [InlineData("/api/publico/domicilios/seguimiento/abc", "domicilios")]
+    [InlineData("/api/compras/recepciones", "inventario")]
+    [InlineData("/api/inventario/movimientos", "inventario")]
     public void Ruta_de_escritura_da_su_tema(string ruta, string esperado)
         => Assert.Equal(esperado, TemaRealtime.Desde(ruta));
 
@@ -25,7 +27,7 @@ public class TemaRealtimeTests
     [InlineData("/api/domiciliarios/login")]
     [InlineData("/api/usuarios/login")]
     [InlineData("/api/platillos")]
-    [InlineData("/api/inventario/sincronizar")]
+    [InlineData("/api/reportes/cierre")]
     [InlineData("/health")]
     [InlineData("")]
     [InlineData(null)]

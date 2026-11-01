@@ -69,6 +69,8 @@ namespace RestaurantApi
         public DbSet<OrdenCompra> OrdenesCompra { get; set; }
         public DbSet<DetalleOrdenCompra> DetallesOrdenCompra { get; set; }
         public DbSet<AlertaInventario> AlertasInventario { get; set; }
+        public DbSet<Recepcion> Recepciones { get; set; }
+        public DbSet<RecepcionFoto> RecepcionFotos { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -477,6 +479,24 @@ namespace RestaurantApi
                 // Subtotal es columna GENERADA en MySQL; el modelo no la mapea.
                 entity.ToTable("DetallesOrdenCompra");
                 entity.HasOne(e => e.Producto).WithMany().HasForeignKey(e => e.ProductoId);
+            });
+
+            modelBuilder.Entity<Recepcion>(entity =>
+            {
+                entity.ToTable("Recepciones");
+                entity.Property(e => e.Documento).HasMaxLength(60);
+                entity.Property(e => e.Total).HasColumnType("decimal(12,2)");
+                entity.HasIndex(e => e.Fecha);
+                entity.HasOne(e => e.Proveedor).WithMany().HasForeignKey(e => e.ProveedorId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.OrdenCompra).WithMany().HasForeignKey(e => e.OrdenCompraId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(e => e.Fotos).WithOne(f => f.Recepcion).HasForeignKey(f => f.RecepcionId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<RecepcionFoto>(entity =>
+            {
+                entity.ToTable("RecepcionFotos");
+                entity.Property(e => e.Foto).HasColumnType("mediumtext").IsRequired();
+                entity.HasIndex(e => e.RecepcionId);
             });
 
             modelBuilder.Entity<AlertaInventario>(entity =>

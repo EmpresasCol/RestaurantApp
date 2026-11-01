@@ -9,6 +9,7 @@ namespace RestaurantApi.Services
         public const string Pedidos = "pedidos";
         public const string Mesas = "mesas";
         public const string Domicilios = "domicilios";
+        public const string Inventario = "inventario";
 
         public static string? Desde(string? path)
         {
@@ -25,6 +26,7 @@ namespace RestaurantApi.Services
                 "pedidos" or "pedidodetalles" or "pagos" or "facturas" or "cuentas" => Pedidos,
                 "mesas" => Mesas,
                 "domicilios" or "domiciliarios" => Domicilios,
+                "compras" or "inventario" => Inventario,
                 _ => null
             };
         }
