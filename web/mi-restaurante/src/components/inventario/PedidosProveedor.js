@@ -1,12 +1,13 @@
 // Pedidos a proveedores: el sistema sugiere qué pedir (lo que bajó de su nivel), el encargado
 // ajusta, crea la orden y la envía por WhatsApp; luego la recibe escaneando.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, MessageCircle, PackageCheck, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { CheckCircle2, Images, MessageCircle, PackageCheck, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { compras, getAlmacenes, getProveedores, mensajeError } from '../../services/inventarioApi';
 import {
   enlaceWhatsApp, fechaISO, formatearCantidad, formatearCOP, formatearFecha, textoPedidoProveedor,
 } from '../../utils/inventario';
 import BuscadorInsumo from './BuscadorInsumo';
+import { PanelEntradasOrden } from './FotosRecepcion';
 import { Boton, BotonConfirmar, Campo, Cargando, Chip, ChipEstado, Lista, Panel, Selector, useAviso, Vacio } from './ui';
 
 const ESTADO_ORDEN = {
@@ -129,7 +130,7 @@ function GrupoSugerido({ grupo, proveedores, almacenId, onCreada, onAbrirInsumo,
         <Campo label="Entrega esperada" type="date" min={fechaISO()} value={entrega} onChange={(e) => setEntrega(e.target.value)} className="w-44" />
         <div className="flex items-center gap-4">
           <p className="tabular text-[18px] font-extrabold text-espresso">{formatearCOP(total)}</p>
-          <Boton onClick={crear} disabled={creando || elegidos.length === 0}>
+          <Boton onClick={crear} disabled={creando || elegidos.length === 0 || !almacenId}>
             <ShoppingCart size={18} aria-hidden="true" /> {creando ? 'Creando…' : 'Crear orden'}
           </Boton>
         </div>
@@ -185,7 +186,7 @@ function OrdenManual({ abierto, onCerrar, proveedores, insumos, almacenId, produ
       pie={
         <div className="flex items-center gap-3">
           <p className="tabular flex-1 text-[20px] font-extrabold text-espresso">{formatearCOP(total)}</p>
-          <Boton tamano="lg" onClick={crear} disabled={creando || lineas.length === 0}>{creando ? 'Creando…' : 'Crear orden'}</Boton>
+          <Boton tamano="lg" onClick={crear} disabled={creando || lineas.length === 0 || !almacenId || lineas.some((l) => !(Number(l.cantidad) > 0))}>{creando ? 'Creando…' : 'Crear orden'}</Boton>
         </div>
       }
     >
@@ -232,7 +233,11 @@ export default function PedidosProveedor({ onRecibirOrden, onAbrirInsumo, produc
   const [manual, setManual] = useState(false);
   const [recienCreada, setRecienCreada] = useState(null);
   const [verTodas, setVerTodas] = useState(false);
+  const [entradasDe, setEntradasDe] = useState(null);
   const [aviso, mostrar] = useAviso();
+
+  // La lista cambia al instante; la recarga de la API solo confirma.
+  const cambiarOrden = (id, cambios) => setOrdenes((os) => os?.map((o) => (o.id === id ? { ...o, ...cambios } : o)));
 
   const cargar = useCallback(() => {
     compras.reposicion().then(setSugerencias).catch((e) => mostrar(mensajeError(e, 'No se pudieron cargar las sugerencias'), 'error'));
@@ -269,6 +274,7 @@ export default function PedidosProveedor({ onRecibirOrden, onAbrirInsumo, produc
   const enviar = async (id) => {
     try {
       await enviarPorWhatsApp(id);
+      setOrdenes((os) => os?.map((o) => (o.id === id && o.estado === 'Pendiente' ? { ...o, estado: 'Aprobada' } : o)));
       cargar();
     } catch (e) {
       mostrar(mensajeError(e, 'No se pudo preparar el mensaje'), 'error');
@@ -276,13 +282,15 @@ export default function PedidosProveedor({ onRecibirOrden, onAbrirInsumo, produc
   };
 
   const cancelar = async (o) => {
+    cambiarOrden(o.id, { estado: 'Cancelada' });
     try {
       await compras.estadoOrden(o.id, 'Cancelada');
-      mostrar(`Orden ${o.numeroOrden} cancelada`);
-      cargar();
+      mostrar(o.estado === 'EnTransito' ? `Orden ${o.numeroOrden} cerrada con lo que llegó` : `Orden ${o.numeroOrden} cancelada`);
     } catch (e) {
+      cambiarOrden(o.id, { estado: o.estado });
       mostrar(mensajeError(e, 'No se pudo cancelar'), 'error');
     }
+    cargar();
   };
 
   const ordenesVisibles = useMemo(() => (ordenes ?? []).filter((o) => verTodas || abierta(o.estado)), [ordenes, verTodas]);
@@ -359,14 +367,20 @@ export default function PedidosProveedor({ onRecibirOrden, onAbrirInsumo, produc
                     </p>
                   </div>
                   <span className="tabular text-[15px] font-bold text-espresso">{formatearCOP(o.total)}</span>
-                  {abierta(o.estado) && (
-                    <div className="flex flex-wrap gap-2">
-                      {o.estado === 'Pendiente' && <Boton variante="secundario" tamano="sm" onClick={() => enviar(o.id)}><MessageCircle size={15} aria-hidden="true" /> Enviar</Boton>}
-                      {o.estado !== 'Pendiente' && <Boton variante="secundario" tamano="sm" onClick={() => enviar(o.id)}><MessageCircle size={15} aria-hidden="true" /> Reenviar</Boton>}
-                      <Boton tamano="sm" onClick={() => onRecibirOrden(o.id)}><PackageCheck size={15} aria-hidden="true" /> Recibir</Boton>
-                      <BotonConfirmar onConfirmar={() => cancelar(o)}>Cancelar</BotonConfirmar>
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {o.recibido > 0 && (
+                      <Boton variante="fantasma" tamano="sm" onClick={() => setEntradasDe(o)}><Images size={15} aria-hidden="true" /> Entradas</Boton>
+                    )}
+                    {abierta(o.estado) && (
+                      <>
+                        {o.estado === 'Pendiente' && <Boton variante="secundario" tamano="sm" onClick={() => enviar(o.id)}><MessageCircle size={15} aria-hidden="true" /> Enviar</Boton>}
+                        {o.estado === 'Aprobada' && <Boton variante="secundario" tamano="sm" onClick={() => enviar(o.id)}><MessageCircle size={15} aria-hidden="true" /> Reenviar</Boton>}
+                        <Boton tamano="sm" onClick={() => onRecibirOrden(o.id)}><PackageCheck size={15} aria-hidden="true" /> {o.estado === 'EnTransito' ? 'Recibir el resto' : 'Recibir'}</Boton>
+                        {/* Con una parte recibida no se cancela: se cierra y deja de contar lo que falta. */}
+                        <BotonConfirmar onConfirmar={() => cancelar(o)}>{o.estado === 'EnTransito' ? 'Cerrar sin el resto' : 'Cancelar'}</BotonConfirmar>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -384,6 +398,7 @@ export default function PedidosProveedor({ onRecibirOrden, onAbrirInsumo, produc
         onCreada={alCrear}
         mostrar={mostrar}
       />
+      <PanelEntradasOrden orden={entradasDe} onCerrar={() => setEntradasDe(null)} mostrar={mostrar} />
       {aviso}
     </div>
   );

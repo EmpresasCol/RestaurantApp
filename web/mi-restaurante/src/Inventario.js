@@ -1,12 +1,13 @@
 // Inventario organizado por lo que hace el encargado en el día: revisar, recibir, pedir,
 // controlar vencimientos y contar. El catálogo (recetas, categorías, almacenes, proveedores)
 // queda en Configuración. Tocar un insumo en cualquier pantalla abre su ficha.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   CalendarClock, ClipboardCheck, History, Home, Package, PackagePlus, Settings, ShoppingCart,
 } from 'lucide-react';
 import { getProveedores } from './services/inventarioApi';
+import { useCambios } from './services/realtime';
 import ConteoFisico from './components/inventario/ConteoFisico';
 import FichaInsumo from './components/inventario/FichaInsumo';
 import CatalogoInsumos from './components/inventario/CatalogoInsumos';
@@ -61,7 +62,16 @@ function Inventario() {
   const [proveedores, setProveedores] = useState([]);
   // Sube cada vez que algo cambia el stock para que las demás vistas recarguen.
   const [version, setVersion] = useState(0);
-  const cambio = useCallback(() => setVersion((v) => v + 1), []);
+  const ultimoCambioPropio = useRef(0);
+  const cambio = useCallback(() => {
+    ultimoCambioPropio.current = Date.now();
+    setVersion((v) => v + 1);
+  }, []);
+  // Lo que se registra desde otro equipo (otro celular recibiendo, la caja) se ve sin recargar.
+  // El eco de un cambio propio ya se recargó: se ignora.
+  useCambios('inventario', () => {
+    if (Date.now() - ultimoCambioPropio.current > 2000) setVersion((v) => v + 1);
+  });
 
   useEffect(() => {
     getProveedores().then((p) => setProveedores(p.filter((x) => x.activo !== false))).catch(() => {});

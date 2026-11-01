@@ -1,18 +1,24 @@
-// Recibir mercancía: escanear (o buscar) lo que llegó, poner cantidad, precio y vencimiento,
-// y registrar todo en una sola entrada. Puede venir de una orden de compra o ser compra directa.
+// Recibir mercancía: escanear (o buscar) lo que llegó, poner cantidad, precio, vencimiento y a
+// qué almacén va cada cosa, tomar fotos de evidencia y registrar todo en una sola entrada.
+// Puede venir de una orden de compra o ser compra directa.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { CalendarClock, Minus, PackageCheck, Plus, Trash2, Truck, X } from 'lucide-react';
+import { CalendarClock, CalendarOff, Minus, PackageCheck, Plus, Trash2, Truck, X } from 'lucide-react';
 import { compras, getAlmacenes, getProveedores, mensajeError } from '../../services/inventarioApi';
 import { fechaISO, formatearCantidad, formatearCOP } from '../../utils/inventario';
 import AsociarCodigo from './AsociarCodigo';
 import BuscadorInsumo from './BuscadorInsumo';
 import EscanerCodigo from './EscanerCodigo';
 import FormularioInsumo from './FormularioInsumo';
+import { BotonesFoto, EntradasRecientes, MAXIMO_FOTOS, MiniaturasFotos, VisorFotos } from './FotosRecepcion';
 import { Boton, Campo, Chip, ease, Selector, useAviso, Vacio } from './ui';
 
 let secuencia = 0;
 const clave = () => `l${++secuencia}`;
+
+/** Vencimiento que se propone: el que trae el código o hoy + los días de vida del insumo. */
+const vencimientoPropuesto = (sugerido, dias) =>
+  sugerido ? String(sugerido).slice(0, 10) : dias > 0 ? fechaISO(dias) : '';
 
 const almacenPorDefecto = (almacenes) =>
   (almacenes.find((a) => a.tipo === 'Principal') ?? almacenes.find((a) => a.tipo === 'Cocina') ?? almacenes[0])?.id ?? '';
@@ -31,6 +37,9 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
   const [creandoConCodigo, setCreandoConCodigo] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [fotos, setFotos] = useState([]);
+  const [fotoAbierta, setFotoAbierta] = useState(null);
+  const [entradas, setEntradas] = useState(0);
   const [aviso, mostrar] = useAviso();
   const productoUsado = useRef(null);
 
@@ -64,8 +73,11 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
             presentacion: pres ? { id: pres.id, nombre: pres.nombre, factor: pres.factor } : null,
             cantidad: pres ? d.pendiente / pres.factor : d.pendiente,
             costo: pres ? d.precioUnitario * pres.factor : d.precioUnitario,
-            fechaVencimiento: '',
+            fechaVencimiento: vencimientoPropuesto(null, d.diasVencimiento),
             requiereCaducidad: d.requiereCaducidad,
+            diasVencimiento: d.diasVencimiento,
+            noVence: false,
+            almacenId: '',
             numeroLote: '',
           };
         }));
@@ -93,8 +105,12 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
     presentacion: presentacion ? { id: presentacion.id, nombre: presentacion.nombre, factor: presentacion.factor } : null,
     cantidad: 1,
     costo: presentacion?.costoReferencia ?? Math.round((insumo.precioCosto ?? 0) * (presentacion?.factor ?? 1)),
-    fechaVencimiento: vencimientoSugerido ? String(vencimientoSugerido).slice(0, 10) : '',
+    fechaVencimiento: vencimientoPropuesto(vencimientoSugerido, insumo.diasVencimiento),
     requiereCaducidad: insumo.requiereCaducidad,
+    diasVencimiento: insumo.diasVencimiento,
+    noVence: false,
+    // '' = va al almacén general de la entrada; un Id = este insumo va a otro almacén.
+    almacenId: '',
     numeroLote: '',
   });
 
@@ -133,10 +149,22 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
   const quitar = (key) => setLineas((ls) => ls.filter((l) => l.key !== key));
 
   const total = useMemo(() => lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.costo) || 0), 0), [lineas]);
-  const faltaFecha = lineas.some((l) => l.requiereCaducidad && !l.fechaVencimiento);
+  const faltaFecha = lineas.some((l) => l.requiereCaducidad && !l.noVence && !l.fechaVencimiento);
+  const faltaCantidad = lineas.some((l) => !(Number(l.cantidad) > 0));
+  const variosAlmacenes = almacenes.length > 1;
+
+  // Salir de la orden descarta sus líneas: si no, se registraban como compra directa y la orden
+  // nunca quedaba recibida.
+  const salirDeOrden = () => {
+    setLineas([]);
+    setProveedorId('');
+    setDocumento('');
+    onSalirDeOrden?.();
+  };
 
   const registrar = async () => {
     if (!almacenId) return mostrar('Elige el almacén donde se guarda', 'error');
+    if (faltaCantidad) return mostrar('Cada insumo necesita una cantidad mayor que cero', 'error');
     setGuardando(true);
     try {
       const r = await compras.recibir({
@@ -144,18 +172,24 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
         proveedorId: proveedorId ? Number(proveedorId) : null,
         ordenCompraId: orden?.id ?? null,
         documento: documento.trim() || null,
+        fotos,
         lineas: lineas.map((l) => ({
           productoId: l.productoId,
           presentacionId: l.presentacion?.id ?? null,
+          almacenId: Number(l.almacenId || almacenId),
           cantidad: Number(l.cantidad),
           costoUnitario: l.costo === '' ? null : Number(l.costo),
-          fechaVencimiento: l.fechaVencimiento || null,
+          fechaVencimiento: l.noVence ? null : l.fechaVencimiento || null,
+          noVence: l.noVence,
           numeroLote: l.numeroLote.trim() || null,
         })),
       });
-      mostrar(r.ordenEstado === 'Recibida' ? `${r.message}. Orden completa.` : r.message);
+      const sinFecha = r.sinVencimiento?.length ? ` ${r.sinVencimiento.join(', ')} ya no pedirá vencimiento.` : '';
+      mostrar((r.ordenEstado === 'Recibida' ? `${r.message}. Orden completa.` : r.message) + sinFecha);
       setLineas([]);
       setDocumento('');
+      setFotos([]);
+      setEntradas((v) => v + 1);
       compras.insumos().then(setInsumos).catch(() => {});
       onListo?.();
       if (orden) onSalirDeOrden?.();
@@ -174,7 +208,7 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
           <p className="min-w-0 flex-1 text-[14px] text-purple-800">
             Recibiendo la orden <span className="tabular font-bold">{orden.numeroOrden}</span> de <span className="font-bold">{orden.proveedor}</span>. Ajusta lo que realmente llegó.
           </p>
-          <button type="button" onClick={onSalirDeOrden} className="grid h-9 w-9 place-items-center rounded-full text-purple-700 hover:bg-purple-100" aria-label="Recibir sin orden">
+          <button type="button" onClick={salirDeOrden} className="grid h-9 w-9 place-items-center rounded-full text-purple-700 hover:bg-purple-100" aria-label="Recibir sin orden">
             <X size={18} />
           </button>
         </div>
@@ -192,7 +226,7 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
       </section>
 
       <section className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Selector label="Se guarda en" value={almacenId} onChange={(e) => setAlmacenId(e.target.value)}>
+        <Selector label={variosAlmacenes ? 'Se guarda en (general)' : 'Se guarda en'} value={almacenId} onChange={(e) => setAlmacenId(e.target.value)}>
           {almacenes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
         </Selector>
         <Selector label="Proveedor" value={proveedorId} onChange={(e) => setProveedorId(e.target.value)} disabled={!!orden}>
@@ -257,19 +291,53 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
                       label={l.presentacion ? 'Precio por caja' : `Precio por ${l.unidad}`}
                       type="number" min="0" step="any" inputMode="decimal"
                       value={l.costo} onChange={(e) => cambiar(l.key, 'costo', e.target.value)}
-                      className="tabular"
+                      className="tabular col-span-2 sm:col-span-1"
                     />
-                    <Campo
-                      label={<span className="inline-flex items-center gap-1.5">Vence {l.requiereCaducidad && <Chip tono="aviso">Obligatorio</Chip>}</span>}
-                      type="date" min={fechaISO()}
-                      value={l.fechaVencimiento} onChange={(e) => cambiar(l.key, 'fechaVencimiento', e.target.value)}
-                    />
+                    {l.noVence ? (
+                      <div className="col-span-2 sm:col-span-1">
+                        <span className="mb-1.5 block text-[13px] font-semibold text-gray-600">Vence</span>
+                        <div className="flex h-11 items-center gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3">
+                          <CalendarOff size={16} className="shrink-0 text-gray-500" aria-hidden="true" />
+                          <span className="min-w-0 flex-1 truncate text-[14px] text-gray-600">No tiene vencimiento</span>
+                          <button type="button" onClick={() => cambiar(l.key, 'noVence', false)} className="shrink-0 text-[13px] font-bold text-orange-700 hover:underline">Poner fecha</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="col-span-2 sm:col-span-1">
+                        <Campo
+                          label={<span className="inline-flex items-center gap-1.5">Vence {l.requiereCaducidad ? <Chip tono="aviso">Obligatorio</Chip> : <span className="font-normal text-gray-500">(opcional)</span>}</span>}
+                          type="date" min={fechaISO()}
+                          value={l.fechaVencimiento} onChange={(e) => cambiar(l.key, 'fechaVencimiento', e.target.value)}
+                        />
+                        {(l.requiereCaducidad || l.diasVencimiento > 0) && (
+                          <button type="button" onClick={() => cambiar(l.key, 'noVence', true)} className="mt-1 text-[12px] font-bold text-orange-700 hover:underline">
+                            Este producto no trae vencimiento
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+                  {l.noVence && l.requiereCaducidad && (
+                    <p className="mt-2 text-[12px] text-gray-500">Entra sin fecha y {l.insumo} deja de pedir vencimiento en las próximas entradas.</p>
+                  )}
 
-                  <details className="mt-2">
-                    <summary className="cursor-pointer select-none text-[13px] font-bold text-orange-700">Número de lote</summary>
-                    <Campo className="mt-2" value={l.numeroLote} onChange={(e) => cambiar(l.key, 'numeroLote', e.target.value)} placeholder="Se genera solo si lo dejas vacío" />
-                  </details>
+                  <div className="mt-3 flex flex-wrap items-start gap-x-4 gap-y-2">
+                    {variosAlmacenes && (
+                      <Selector
+                        label="Este insumo va a"
+                        value={l.almacenId || almacenId}
+                        onChange={(e) => cambiar(l.key, 'almacenId', e.target.value === String(almacenId) ? '' : e.target.value)}
+                        className="w-full sm:w-64"
+                        aria-label={`Almacén de ${l.insumo}`}
+                      >
+                        {almacenes.map((a) => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                      </Selector>
+                    )}
+                    <details className="min-w-0 flex-1 sm:pt-8">
+                      <summary className="cursor-pointer select-none text-[13px] font-bold text-orange-700">Número de lote</summary>
+                      <Campo className="mt-2" value={l.numeroLote} onChange={(e) => cambiar(l.key, 'numeroLote', e.target.value)} placeholder="Se genera solo si lo dejas vacío" />
+                    </details>
+                  </div>
                 </motion.li>
               ))}
             </AnimatePresence>
@@ -277,17 +345,47 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
         )}
       </section>
 
+      <section className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 sm:p-5" aria-label="Fotos de evidencia">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-[16px] font-bold text-espresso">Fotos de lo que llegó <span className="font-normal text-gray-500">(opcional)</span></h3>
+            <p className="text-[13px] text-gray-500">La factura, las cajas o algo que llegó dañado. Hasta {MAXIMO_FOTOS} fotos.</p>
+          </div>
+          <BotonesFoto
+            disponibles={MAXIMO_FOTOS - fotos.length}
+            onFotos={(nuevas) => setFotos((f) => [...f, ...nuevas].slice(0, MAXIMO_FOTOS))}
+            onError={(m) => mostrar(m, 'error')}
+          />
+        </div>
+        <MiniaturasFotos fotos={fotos} onQuitar={(i) => setFotos((f) => f.filter((_, j) => j !== i))} onVer={setFotoAbierta} />
+      </section>
+
+      <section className="mt-8" aria-label="Entradas recientes">
+        <h2 className="mb-3 text-[18px] font-extrabold tracking-[-0.02em] text-espresso">Entradas recientes</h2>
+        <EntradasRecientes
+          version={entradas}
+          mostrar={mostrar}
+          vacio={<p className="rounded-2xl border border-gray-200 bg-white px-4 py-5 text-[14px] text-gray-500">Aún no hay entradas registradas.</p>}
+        />
+      </section>
+
       {lineas.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur">
           <div className="mx-auto flex max-w-3xl items-center gap-4">
             <div className="min-w-0 flex-1">
-              <p className="text-[13px] text-gray-500">{lineas.length} insumo{lineas.length === 1 ? '' : 's'}</p>
+              <p className="text-[13px] text-gray-500">
+                {lineas.length} insumo{lineas.length === 1 ? '' : 's'}
+                {fotos.length > 0 && ` · ${fotos.length} foto${fotos.length === 1 ? '' : 's'}`}
+              </p>
               <p className="tabular text-[22px] font-extrabold text-espresso">{formatearCOP(total)}</p>
               {faltaFecha && (
-                <p className="flex items-center gap-1 text-[12px] font-semibold text-amber-800"><CalendarClock size={14} aria-hidden="true" /> Falta la fecha de vencimiento de un perecedero</p>
+                <p className="flex items-center gap-1 text-[12px] font-semibold text-amber-800"><CalendarClock size={14} aria-hidden="true" /> Falta un vencimiento: pon la fecha o marca que no trae</p>
+              )}
+              {!faltaFecha && faltaCantidad && (
+                <p className="text-[12px] font-semibold text-amber-800">Hay un insumo sin cantidad</p>
               )}
             </div>
-            <Boton tamano="lg" onClick={registrar} disabled={guardando || faltaFecha} className="min-w-[180px]">
+            <Boton tamano="lg" onClick={registrar} disabled={guardando || faltaFecha || faltaCantidad} className="min-w-[180px]">
               <PackageCheck size={20} aria-hidden="true" /> {guardando ? 'Registrando…' : 'Registrar entrada'}
             </Boton>
           </div>
@@ -320,6 +418,7 @@ export default function RecibirMercancia({ ordenId = null, productoInicial = nul
           if (codigo) alEscanear(codigo);
         }}
       />
+      {fotoAbierta !== null && <VisorFotos fotos={fotos} inicio={fotoAbierta} onCerrar={() => setFotoAbierta(null)} />}
       {aviso}
     </div>
   );

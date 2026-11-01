@@ -9,6 +9,7 @@ import { Boton, BotonConfirmar, Campo, Cargando, Chip, Panel, useAviso, Vacio } 
 import { categoriasDisponibles, coincide, estadoPlatillo, validarPlatillo } from './utils/administracion';
 import { etiquetaImpuesto, impuestoIncluido } from './utils/impuestos';
 import { formatearCOP } from './utils/inventario';
+import { reducirImagen } from './utils/imagenes';
 
 const FORM_VACIO = { nombre: '', descripcion: '', precio: '', categoria: 'Platos Principales', imagenUrl: '' };
 
@@ -18,30 +19,6 @@ const FILTROS = [
   { id: 'sin-receta', label: 'Sin receta' },
   { id: 'oculto', label: 'Ocultos' },
 ];
-
-/** Reduce la foto a 1000 px como máximo antes de guardarla en Base64: la carta carga más rápido. */
-const reducirImagen = (archivo, maximo = 1000) =>
-  new Promise((resolve, reject) => {
-    const lector = new FileReader();
-    lector.onerror = reject;
-    lector.onload = () => {
-      const img = new Image();
-      img.onerror = () => resolve(lector.result);
-      img.onload = () => {
-        const escala = Math.min(1, maximo / Math.max(img.width, img.height));
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.round(img.width * escala);
-        canvas.height = Math.round(img.height * escala);
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#fff'; // una PNG transparente no queda con fondo negro en JPEG
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
-      };
-      img.src = lector.result;
-    };
-    lector.readAsDataURL(archivo);
-  });
 
 function Foto({ src, alt, className = '' }) {
   const [fallo, setFallo] = useState(false);
