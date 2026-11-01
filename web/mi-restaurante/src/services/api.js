@@ -335,9 +335,10 @@ export const getFacturas = async (fecha) => {
 };
 
 /**
- * Cobra la cuenta de una mesa (uno o varios pedidos) con una sola factura.
- * cobro: { pedidoIds, metodoPago, propina, recibido?, nitCliente?, nombreCliente? }
- * Responde { factura, recibido, cambio }.
+ * Cobra la cuenta de una mesa con una sola factura.
+ * cobro: { pedidoIds | lineas: [{ detalleId, cantidad }], propina,
+ *          pagos: [{ metodoPago, monto, recibido?, avisoId? }], nitCliente?, nombreCliente? }
+ * Responde { factura, recibido, cambio, cuentaSaldada, pendiente }.
  */
 export const cobrarCuenta = async (cobro) => {
   const response = await fetchWithHeaders(`${API_URL}/pagos/cobro`, {
@@ -348,16 +349,27 @@ export const cobrarCuenta = async (cobro) => {
   return await response.json();
 };
 
-/** Cuentas que pidió el mesero desde la app: [{ id, mesaId, mesaNumero, meseroNombre, metodoPago, tieneComprobante }]. */
+/**
+ * Cuentas que pidió el mesero desde la app, con los pagos que avisó:
+ * [{ id, mesaId, mesaNumero, meseroNombre, metodoPago, propina, pagos: [{ id, metodoPago, monto, tieneComprobante }],
+ *    totalAvisado, porCobrar, cuadra }].
+ */
 export const getSolicitudesCuenta = async () => {
   const response = await fetchWithHeaders(`${API_URL}/cuentas/solicitudes`);
   if (!response.ok) throw await errorDe(response, 'No se pudieron cargar las cuentas pedidas');
   return await response.json();
 };
 
-/** Foto de la transferencia (data URI) que tomó el mesero. */
+/** Foto de la transferencia (data URI) que tomó el mesero (versión anterior: una por cuenta). */
 export const getComprobanteCuenta = async (solicitudId) => {
   const response = await fetchWithHeaders(`${API_URL}/cuentas/solicitudes/${solicitudId}/comprobante`);
+  if (!response.ok) throw await errorDe(response, 'No se pudo cargar el comprobante');
+  return (await response.json()).comprobante;
+};
+
+/** Foto de una transferencia avisada por el mesero (cada pago trae la suya). */
+export const getComprobantePagoAvisado = async (pagoId) => {
+  const response = await fetchWithHeaders(`${API_URL}/cuentas/pagos/${pagoId}/comprobante`);
   if (!response.ok) throw await errorDe(response, 'No se pudo cargar el comprobante');
   return (await response.json()).comprobante;
 };
@@ -367,6 +379,26 @@ export const getCierreCaja = async (fecha) => {
   const response = await fetchWithHeaders(`${API_URL}/reportes/cierre${fecha ? `?fecha=${fecha}` : ''}`);
   if (!response.ok) throw await errorDe(response, 'No se pudo cargar el cierre de caja');
   return await response.json();
+};
+
+/** Abre la caja del día con la base (efectivo para dar cambio). */
+export const abrirCaja = async (fecha, base) => {
+  const response = await fetchWithHeaders(`${API_URL}/reportes/cierre/apertura`, { method: 'PUT', body: JSON.stringify({ fecha, base }) });
+  if (!response.ok) throw await errorDe(response, 'No se pudo abrir la caja');
+  return await response.json();
+};
+
+/** Cierra la caja con el arqueo: { fecha, efectivoContado, propinasPagadas, retiros, tarjetaDatafono?, transferenciasBanco?, observaciones? }. */
+export const cerrarCaja = async (arqueo) => {
+  const response = await fetchWithHeaders(`${API_URL}/reportes/cierre`, { method: 'POST', body: JSON.stringify(arqueo) });
+  if (!response.ok) throw await errorDe(response, 'No se pudo cerrar la caja');
+  return await response.json();
+};
+
+/** Solo el administrador: reabre la caja de un día cerrado. */
+export const reabrirCaja = async (fecha) => {
+  const response = await fetchWithHeaders(`${API_URL}/reportes/cierre?fecha=${fecha}`, { method: 'DELETE' });
+  if (!response.ok) throw await errorDe(response, 'No se pudo reabrir la caja');
 };
 
 export const getReporteVentas = async (desde, hasta) => {

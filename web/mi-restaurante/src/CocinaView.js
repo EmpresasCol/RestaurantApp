@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { POLLING_DOMICILIOS_MS, ordenarPorPrioridad, transformarDomicilios } from "./utils/kds"
-import { AlertCircle, Check, ChefHat, Clock, LogOut, MapPin, MessageSquareText, Phone, Truck, User } from "lucide-react"
+import { POLLING_DOMICILIOS_MS, ordenarPorPrioridad, separarListos, transformarDomicilios } from "./utils/kds"
+import { AlertCircle, BellRing, Check, ChefHat, Clock, LogOut, MapPin, MessageSquareText, PencilLine, Phone, Truck, User } from "lucide-react"
 import { useAuth } from "./context/AuthContext"
 import { useCambios } from "./services/realtime"
 import * as api from "./services/api"
-import { getDomiciliosActivos, actualizarEstadoDomicilio } from "./services/domiciliosApi"
+import { getDomiciliosActivos, actualizarEstadoDomicilio, prepararDomicilio } from "./services/domiciliosApi"
 import logo from "./components/logo.jpg"
 
 const ease = [0.16, 1, 0.3, 1]
@@ -20,18 +20,18 @@ const tonoEspera = (minutos) =>
       ? { borde: "ring-amber-400/60", chip: "bg-amber-400 text-espresso", texto: "Demorado" }
       : { borde: "ring-white/10", chip: "bg-white/10 text-orange-100", texto: "A tiempo" }
 
+const horaCorta = (fecha) => new Date(fecha).toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" })
+
 function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
   const [confirmando, setConfirmando] = useState(false)
   const temporizador = useRef(null)
   const esDomicilio = pedido.tipo === "domicilio"
   const idVisible = esDomicilio ? pedido.domicilioId : pedido.id
-  // Mientras la cocina no lo empieza, el mesero todavía puede cambiarlo desde la app.
-  const porEmpezar = !esDomicilio && pedido.estado === "EnProceso" && !pedido.empezado
-  // Un pedido ya listo (vista del administrador) pasa a Entregado.
-  const siguiente = pedido.estado === "Listo" ? "Entregado" : "Listo"
-  const tono = pedido.estado === "Listo"
-    ? { borde: "ring-green-500/60", chip: "bg-green-700 text-white", texto: "Listo" }
-    : tonoEspera(minutos)
+  // Mientras la cocina no lo empieza, el mesero (o el cliente del domicilio) todavía puede cambiarlo.
+  const porEmpezar = !pedido.empezado
+  // El mesero lo cambió: la cocina debe volver a leerlo.
+  const editado = !esDomicilio && pedido.editado
+  const tono = tonoEspera(minutos)
 
   useEffect(() => () => clearTimeout(temporizador.current), [])
 
@@ -49,7 +49,7 @@ function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
     }
     clearTimeout(temporizador.current)
     setConfirmando(false)
-    onListo(pedido, siguiente)
+    onListo(pedido)
   }
 
   return (
@@ -59,8 +59,14 @@ function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, scale: 0.94, filter: "blur(4px)" }}
       transition={{ duration: 0.45, ease }}
-      className={`flex flex-col overflow-hidden rounded-[22px] bg-[#3a2a20] ring-2 ${tono.borde}`}
+      className={`flex flex-col overflow-hidden rounded-[22px] bg-[#3a2a20] ring-2 ${editado ? "ring-amber-300" : tono.borde}`}
     >
+      {editado && (
+        <p className="flex items-center gap-2 bg-amber-300 px-5 py-2 text-[14px] font-extrabold text-espresso" role="status">
+          <PencilLine size={16} aria-hidden="true" />
+          El mesero cambió este pedido a las {horaCorta(pedido.editado)}
+        </p>
+      )}
       <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-[26px] font-extrabold leading-tight tracking-[-0.02em] text-white">
@@ -115,14 +121,12 @@ function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
           type="button"
           onClick={alTocar}
           disabled={enCarga}
-          aria-label={porEmpezar ? `Empezar a preparar la orden ${idVisible}` : confirmando ? `Confirmar orden ${idVisible} como ${siguiente.toLowerCase()}` : `Marcar orden ${idVisible} como ${siguiente.toLowerCase()}`}
+          aria-label={porEmpezar ? `Empezar a preparar la orden ${idVisible}` : confirmando ? `Confirmar orden ${idVisible} como listo` : `Marcar orden ${idVisible} como listo`}
           className={`flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl text-[17px] font-extrabold transition-[background-color,transform] active:scale-[0.98] disabled:cursor-wait disabled:bg-white/10 disabled:text-white/60 ${
             porEmpezar
               ? "bg-white/[0.08] text-orange-200 ring-1 ring-orange-300/40 hover:bg-orange-500 hover:text-espresso"
               : confirmando
-              ? "bg-white text-espresso"
-              : siguiente === "Entregado"
-                ? "bg-white/[0.08] text-orange-200 ring-1 ring-orange-300/40 hover:bg-orange-500 hover:text-espresso"
+                ? "bg-white text-espresso"
                 : "bg-white/[0.08] text-green-300 ring-1 ring-green-400/40 hover:bg-green-700 hover:text-white"
           }`}
         >
@@ -141,7 +145,7 @@ function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
           ) : (
             <>
               <Check size={22} strokeWidth={3} />
-              {siguiente}
+              Listo
             </>
           )}
         </button>
@@ -150,8 +154,56 @@ function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
   )
 }
 
-// `incrustada`: vista del administrador dentro de su barra (filtro por mesa y
-// pedidos listos por entregar); sin ella es la pantalla completa del rol Cocina.
+/** Lo que ya salió de cocina y espera al mesero o al domiciliario: aparte, sin acciones. */
+function Listos({ pedidos, minutosDe }) {
+  return (
+    <section aria-label="Listos para entregar" className="rounded-[22px] bg-black/20 p-4 lg:sticky lg:top-24">
+      <h2 className="flex items-center gap-2 text-[17px] font-extrabold text-green-300">
+        <BellRing size={18} aria-hidden="true" />
+        Listos para entregar
+        <span className="tabular ml-auto rounded-full bg-green-700 px-2.5 py-0.5 text-[13px] text-white">{pedidos.length}</span>
+      </h2>
+      <p className="mt-1 text-[13px] text-orange-100/80">Desaparecen cuando el mesero los sirve o el domiciliario los recoge.</p>
+      {pedidos.length === 0 ? (
+        <p className="mt-4 text-[14px] text-orange-100/60">Nada esperando.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          <AnimatePresence initial={false}>
+            {pedidos.map((p) => {
+              const esDomicilio = p.tipo === "domicilio"
+              return (
+                <motion.li
+                  key={p.id}
+                  layout
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 16 }}
+                  transition={{ duration: 0.35, ease }}
+                  className="rounded-xl bg-[#3a2a20] px-3 py-2.5 ring-1 ring-green-500/40"
+                >
+                  <div className="flex items-center gap-2">
+                    {esDomicilio && <Truck size={15} className="text-purple-300" aria-hidden="true" />}
+                    <span className="text-[16px] font-extrabold text-white">{esDomicilio ? `Domicilio #${p.domicilioId}` : `Mesa ${p.mesa}`}</span>
+                    <span className="tabular ml-auto text-[13px] font-semibold text-orange-200">{minutosDe(p.hora)} min</span>
+                  </div>
+                  <p className="mt-0.5 truncate text-[13px] text-orange-100/80">
+                    {p.items.map((i) => `${i.cantidad} ${i.nombre}`).join(" · ")}
+                  </p>
+                  <p className="mt-0.5 text-[12px] font-semibold text-green-300">
+                    {esDomicilio ? (p.domiciliario ? `Lo recoge ${p.domiciliario}` : "Esperando domiciliario") : "Esperando al mesero"}
+                  </p>
+                </motion.li>
+              )
+            })}
+          </AnimatePresence>
+        </ul>
+      )}
+    </section>
+  )
+}
+
+// `incrustada`: vista del administrador dentro de su barra (filtro por mesa);
+// sin ella es la pantalla completa del rol Cocina. Servir es del mesero: aquí solo se marca listo.
 function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
   const { usuario, logout } = useAuth()
 
@@ -194,12 +246,19 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
 
   const calcularTiempoTranscurrido = (horaInicio) => Math.max(0, Math.floor((horaActual - horaInicio) / 60000))
 
+  const recargar = async () => {
+    if (onActualizarPedidos) await onActualizarPedidos()
+    await cargarTodosLosDatos()
+  }
+
   const empezar = async (pedido) => {
-    setCargandoEstado(pedido.id)
+    const esDomicilio = pedido.tipo === "domicilio"
+    setCargandoEstado(esDomicilio ? pedido.domicilioId : pedido.id)
     try {
-      await api.prepararPedido(pedido.id)
-      if (onActualizarPedidos) await onActualizarPedidos()
-      setAviso({ tipo: "exito", texto: `Mesa ${pedido.mesa} en preparación` })
+      if (esDomicilio) await prepararDomicilio(pedido.domicilioId)
+      else await api.prepararPedido(pedido.id)
+      await recargar()
+      setAviso({ tipo: "exito", texto: esDomicilio ? `Domicilio #${pedido.domicilioId} en preparación` : `Mesa ${pedido.mesa} en preparación` })
     } catch (error) {
       setAviso({ tipo: "error", texto: error.message || "No se pudo empezar el pedido." })
     } finally {
@@ -207,28 +266,15 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
     }
   }
 
-  // Listo para cocina; Entregado solo aparece en la vista del administrador.
-  const marcarComoListo = async (pedido, nuevoEstado = "Listo") => {
-    const pedidoId = pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
+  const marcarComoListo = async (pedido) => {
+    const esDomicilio = pedido.tipo === "domicilio"
+    const pedidoId = esDomicilio ? pedido.domicilioId : pedido.id
     setCargandoEstado(pedidoId)
     try {
-      if (pedido.tipo === "domicilio") {
-        await actualizarEstadoDomicilio(pedido.domicilioId, "Listo")
-      } else {
-        await api.actualizarEstadoPedido(pedidoId, nuevoEstado)
-      }
-
-      if (onActualizarPedidos) await onActualizarPedidos()
-      await cargarTodosLosDatos()
-
-      setAviso({
-        tipo: "exito",
-        texto: pedido.tipo === "domicilio"
-          ? `Domicilio #${pedidoId} listo para envío`
-          : nuevoEstado === "Entregado"
-            ? `Mesa ${pedido.mesa} entregada`
-            : `Mesa ${pedido.mesa} lista para servir`,
-      })
+      if (esDomicilio) await actualizarEstadoDomicilio(pedidoId, "Listo")
+      else await api.actualizarEstadoPedido(pedidoId, "Listo")
+      await recargar()
+      setAviso({ tipo: "exito", texto: esDomicilio ? `Domicilio #${pedidoId} listo para salir` : `Mesa ${pedido.mesa} lista para servir` })
     } catch (error) {
       console.error("Error al marcar como listo:", error)
       setAviso({ tipo: "error", texto: "No se pudo marcar como listo. Revisa la conexión e inténtalo de nuevo." })
@@ -237,17 +283,14 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
     }
   }
 
-  // Solo se muestran pedidos en preparación, por prioridad (espera + volumen).
-  const estadosVisibles = incrustada ? ["EnProceso", "EnPreparacion", "Listo"] : ["EnProceso", "EnPreparacion"]
-  const visibles = todosLosPedidos.filter((p) => estadosVisibles.includes(p.estado))
+  const visibles = todosLosPedidos.filter((p) => ["EnProceso", "EnPreparacion", "Listo"].includes(p.estado))
   const mesas = [...new Set(visibles.filter((p) => p.tipo === "mesa").map((p) => p.mesa))].sort((a, b) => a - b)
-  const pedidosEnPreparacion = ordenarPorPrioridad(
-    visibles.filter((p) => filtroMesa === "todas" || (p.tipo === "mesa" && String(p.mesa) === filtroMesa)),
-    horaActual
-  )
+  const filtrados = visibles.filter((p) => filtroMesa === "todas" || (p.tipo === "mesa" && String(p.mesa) === filtroMesa))
+  const { enCocina, listos } = separarListos(filtrados)
+  const pedidosEnPreparacion = ordenarPorPrioridad(enCocina, horaActual)
 
   const cantidadActivas = pedidosEnPreparacion.length
-  const urgentes = pedidosEnPreparacion.filter((p) => p.estado !== "Listo" && calcularTiempoTranscurrido(p.hora) >= MINUTOS_URGENTE).length
+  const urgentes = pedidosEnPreparacion.filter((p) => calcularTiempoTranscurrido(p.hora) >= MINUTOS_URGENTE).length
 
   const chipFiltro = (valor, texto) => (
     <button
@@ -315,37 +358,40 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
       </header>
       )}
 
-      <main className="px-6 py-6">
-        {cantidadActivas === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease }}
-            className="mx-auto mt-24 max-w-md text-center"
-          >
-            <ChefHat className="mx-auto text-orange-300" size={56} strokeWidth={1.5} />
-            <h2 className="mt-5 text-[26px] font-extrabold tracking-[-0.02em]">Sin órdenes pendientes</h2>
-            <p className="mt-2 text-[16px] text-orange-100">Las nuevas comandas aparecen aquí solas, ordenadas por prioridad.</p>
-          </motion.div>
-        ) : (
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-            <AnimatePresence mode="popLayout">
-              {pedidosEnPreparacion.map((pedido) => {
-                const idVisible = pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
-                return (
-                  <Ticket
-                    key={pedido.id}
-                    pedido={pedido}
-                    minutos={calcularTiempoTranscurrido(pedido.hora)}
-                    enCarga={cargandoEstado === idVisible}
-                    onListo={marcarComoListo}
-                    onEmpezar={empezar}
-                  />
-                )
-              })}
-            </AnimatePresence>
-          </div>
-        )}
+      <main className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+        <div>
+          {cantidadActivas === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease }}
+              className="mx-auto mt-24 max-w-md text-center"
+            >
+              <ChefHat className="mx-auto text-orange-300" size={56} strokeWidth={1.5} />
+              <h2 className="mt-5 text-[26px] font-extrabold tracking-[-0.02em]">Sin órdenes pendientes</h2>
+              <p className="mt-2 text-[16px] text-orange-100">Las nuevas comandas aparecen aquí solas, ordenadas por prioridad.</p>
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 2xl:grid-cols-3">
+              <AnimatePresence mode="popLayout">
+                {pedidosEnPreparacion.map((pedido) => {
+                  const idVisible = pedido.tipo === "domicilio" ? pedido.domicilioId : pedido.id
+                  return (
+                    <Ticket
+                      key={pedido.id}
+                      pedido={pedido}
+                      minutos={calcularTiempoTranscurrido(pedido.hora)}
+                      enCarga={cargandoEstado === idVisible}
+                      onListo={marcarComoListo}
+                      onEmpezar={empezar}
+                    />
+                  )
+                })}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+        <Listos pedidos={listos} minutosDe={calcularTiempoTranscurrido} />
       </main>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">

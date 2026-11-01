@@ -1,694 +1,316 @@
-// src/NuevoDomicilio.js - CORREGIDO: SIEMPRE PIDE DIRECCIÓN NUEVA
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Minus, 
-  X, 
-  Check, 
-  Phone, 
-  MapPin, 
-  ShoppingBag,
-  ArrowLeft,
-  User
-} from 'lucide-react';
+// Domicilio por teléfono, en una sola pantalla como lo toma la caja: quién llama (por su número se
+// encuentran sus datos y direcciones), a dónde va, qué pide (con lo que hay en inventario) y cómo
+// paga (si es en efectivo, con qué billete, para que el domiciliario lleve el cambio).
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, MapPin, Minus, Plus, Search, Trash2 } from 'lucide-react';
 import { getPlatillos } from './services/api';
 import { NO_DISPONIBLE, agotado, topePorciones } from './components/menu/MenuQR';
 import {
-  buscarClientePorTelefono,
-  createClienteConDireccion,
-  createDireccion,
-  createDomicilio
+  buscarClientePorTelefono, createClienteConDireccion, createDireccion, createDomicilio, getDireccionesCliente,
 } from './services/domiciliosApi';
+import { Boton, Campo, Chip, useAviso } from './components/inventario/ui';
+import { billetesSugeridos, pesos } from './utils/caja';
+import { cambioDomicilio, METODOS_DOMICILIO, telefonoValido, totalDomicilio } from './utils/domicilios';
 
-function NuevoDomicilio({ onVolver, onDomicilioCreado }) {
-  // Estados del formulario
-  const [paso, setPaso] = useState(1);
-  const [telefono, setTelefono] = useState('');
-  const [cliente, setCliente] = useState(null);
-  const [nuevoCliente, setNuevoCliente] = useState({ nombre: '', email: '', telefono: '' });
-  const [direccion, setDireccion] = useState(null);
-  const [nuevaDireccion, setNuevaDireccion] = useState({
-    direccionCompleta: '',
-    barrio: '',
-    referenciasAdicionales: ''
-  });
-  
-  // Estados del pedido
-  const [platillos, setPlatillos] = useState([]);
-  const [carrito, setCarrito] = useState([]);
-  const [costoEnvio, setCostoEnvio] = useState(3000);
-  const [metodoPago, setMetodoPago] = useState('Efectivo');
-  const [pagadoAnticipado, setPagadoAnticipado] = useState(false);
-  const [notasCliente, setNotasCliente] = useState('');
-  
-  // Estados de UI
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-  const [esClienteNuevo, setEsClienteNuevo] = useState(false);
+const ENVIO_POR_DEFECTO = 3000;
+const NUEVA = 'nueva';
 
-  useEffect(() => {
-    cargarPlatillos();
-  }, []);
+const opcion = (activa) =>
+  `h-10 rounded-xl border px-3 text-[14px] font-bold transition-colors ${activa ? 'border-espresso bg-espresso text-white' : 'border-gray-300 bg-white text-espresso hover:border-gray-400'}`;
 
-  const cargarPlatillos = async () => {
-    try {
-      const response = await getPlatillos();
-      setPlatillos(response);
-    } catch (err) {
-      console.error('Error al cargar platillos:', err);
-      setError('Error al cargar platillos');
-    }
-  };
-
-  const buscarCliente = async () => {
-    if (!telefono.trim()) {
-      alert('Ingresa un número de teléfono');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const clienteEncontrado = await buscarClientePorTelefono(telefono);
-      
-      if (clienteEncontrado) {
-        // ✅ Cliente existe - Solo guardamos sus datos
-        console.log('✅ Cliente encontrado:', clienteEncontrado);
-        setCliente(clienteEncontrado);
-        setEsClienteNuevo(false);
-        setNuevoCliente({ 
-          nombre: clienteEncontrado.nombre,
-          email: clienteEncontrado.email || '',
-          telefono: clienteEncontrado.telefono
-        });
-      } else {
-        // ✅ Cliente NO existe
-        console.log('⚠️ Cliente no encontrado. Debe registrarse');
-        setCliente(null);
-        setEsClienteNuevo(true);
-        setNuevoCliente({ nombre: '', email: '', telefono });
-      }
-      
-      // ✅ SIEMPRE IR AL PASO 2 PARA PEDIR DIRECCIÓN
-      setPaso(2);
-      
-    } catch (err) {
-      console.error('❌ Error al buscar cliente:', err);
-      
-      if (err.message.includes('404') || err.message.includes('no encontrado')) {
-        setCliente(null);
-        setEsClienteNuevo(true);
-        setNuevoCliente({ nombre: '', email: '', telefono });
-        setPaso(2);
-      } else {
-        setError('Error al buscar cliente: ' + err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const continuarConDireccion = async () => {
-    // Validar dirección
-    if (!nuevaDireccion.direccionCompleta.trim()) {
-      alert('Ingresa la dirección completa');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      if (esClienteNuevo) {
-        // ✅ Cliente nuevo: crear cliente + dirección
-        if (!nuevoCliente.nombre.trim()) {
-          alert('Ingresa el nombre del cliente');
-          setLoading(false);
-          return;
-        }
-
-        const response = await createClienteConDireccion({
-          cliente: nuevoCliente,
-          direccion: nuevaDireccion
-        });
-
-        setCliente({ id: response.clienteId, ...nuevoCliente });
-        setDireccion({ id: response.direccionId, ...nuevaDireccion });
-      } else {
-        // ✅ Cliente existente: solo crear dirección nueva
-        const response = await createDireccion(cliente.id, nuevaDireccion);
-        setDireccion({ id: response.id, ...nuevaDireccion });
-      }
-      
-      setPaso(3);
-    } catch (err) {
-      console.error('Error al guardar dirección:', err);
-      setError('Error al guardar dirección: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const agregarAlCarrito = (platillo) => {
-    const existe = carrito.find(item => item.id === platillo.id);
-    if (existe) {
-      setCarrito(carrito.map(item =>
-        item.id === platillo.id
-          ? { ...item, cantidad: item.cantidad + 1 }
-          : item
-      ));
-    } else {
-      setCarrito([...carrito, { ...platillo, cantidad: 1, nota: '' }]);
-    }
-  };
-
-  const actualizarCantidad = (platilloId, cantidad) => {
-    if (cantidad <= 0) {
-      setCarrito(carrito.filter(item => item.id !== platilloId));
-    } else {
-      setCarrito(carrito.map(item =>
-        item.id === platilloId ? { ...item, cantidad: Math.min(cantidad, topePorciones(platillos.find(p => p.id === platilloId) ?? item)) } : item
-      ));
-    }
-  };
-
-  const actualizarNota = (platilloId, nota) => {
-    setCarrito(carrito.map(item =>
-      item.id === platilloId ? { ...item, nota } : item
-    ));
-  };
-
-  const calcularSubtotal = () => {
-    return carrito.reduce((total, item) => total + (item.precio * item.cantidad), 0);
-  };
-
-  const calcularTotal = () => {
-    return calcularSubtotal() + costoEnvio;
-  };
-
-  const crearDomicilio = async () => {
-    if (carrito.length === 0) {
-      alert('Agrega al menos un platillo al pedido');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const usuarioId = parseInt(localStorage.getItem('usuarioId') || '1');
-
-      await createDomicilio({
-        clienteId: cliente.id,
-        direccionId: direccion.id,
-        costoEnvio: costoEnvio,
-        metodoPago: metodoPago,
-        pagadoAnticipado: pagadoAnticipado,
-        notasCliente: notasCliente,
-        notasInternas: '',
-        usuarioCreadorId: usuarioId,
-        detalles: carrito.map(item => ({
-          platilloId: item.id,
-          cantidad: item.cantidad,
-          nota: item.nota
-        }))
-      });
-
-      setSuccess(true);
-      
-      if (onDomicilioCreado) {
-        onDomicilioCreado();
-      }
-      
-      setTimeout(() => {
-        if (onVolver) {
-          onVolver();
-        }
-      }, 2000);
-    } catch (err) {
-      console.error('Error al crear domicilio:', err);
-      setError('Error al crear domicilio: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const formatearMoneda = (valor) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0
-    }).format(valor);
-  };
-
-  if (success) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow-lg text-center max-w-md">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Check className="w-10 h-10 text-green-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">¡Domicilio Creado!</h2>
-          <p className="text-gray-600 mb-2">El pedido ha sido enviado a cocina</p>
-          <p className="text-sm text-gray-500 mb-4">El domicilio está listo para ser preparado</p>
-          <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
-            Redirigiendo...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+function Seccion({ numero, titulo, children }) {
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <button
-            onClick={onVolver}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Volver a Domicilios
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Nuevo Domicilio</h1>
-          <p className="text-gray-600">Registra un nuevo pedido a domicilio</p>
-        </div>
-
-        {/* Indicador de pasos */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            {[1, 2, 3].map(num => (
-              <div key={num} className="flex items-center flex-1">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                  paso >= num ? 'bg-orange-600 text-white' : 'bg-gray-300 text-gray-600'
-                }`}>
-                  {num}
-                </div>
-                {num < 3 && (
-                  <div className={`flex-1 h-1 mx-2 ${paso > num ? 'bg-orange-600' : 'bg-gray-300'}`} />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex justify-between mt-2 text-sm">
-            <span className={paso >= 1 ? 'text-orange-600 font-medium' : 'text-gray-600'}>Teléfono</span>
-            <span className={paso >= 2 ? 'text-orange-600 font-medium' : 'text-gray-600'}>Dirección</span>
-            <span className={paso >= 3 ? 'text-orange-600 font-medium' : 'text-gray-600'}>Pedido</span>
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
-        )}
-
-        {/* PASO 1: Teléfono del Cliente */}
-        {paso === 1 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Phone className="w-6 h-6 text-orange-600" />
-              Teléfono del Cliente
-            </h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Número de Teléfono
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="tel"
-                    value={telefono}
-                    onChange={(e) => setTelefono(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && buscarCliente()}
-                    placeholder="3001234567"
-                    autoFocus
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent text-lg"
-                  />
-                  <button
-                    onClick={buscarCliente}
-                    disabled={loading}
-                    className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {loading ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <Phone className="w-5 h-5" />
-                        Continuar
-                      </>
-                    )}
-                  </button>
-                </div>
-                <p className="text-sm text-gray-500 mt-2">
-                  Ingresa el teléfono del cliente. En el siguiente paso registrarás la dirección de entrega.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PASO 2: Dirección (SIEMPRE SE MUESTRA) */}
-        {paso === 2 && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <MapPin className="w-6 h-6 text-orange-600" />
-              Dirección de Entrega
-            </h2>
-
-            {/* Mensaje informativo según el tipo de cliente */}
-            <div className={`${esClienteNuevo ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'} border rounded-lg p-4 mb-6`}>
-              {esClienteNuevo ? (
-                <>
-                  <p className="text-sm text-blue-800 font-medium mb-2">
-                    📱 Cliente nuevo: {telefono}
-                  </p>
-                  <p className="text-xs text-blue-600">
-                    Complete los datos del cliente y la dirección de entrega para este pedido
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-green-800 font-medium mb-2">
-                    ✅ Cliente registrado: {nuevoCliente.nombre}
-                  </p>
-                  <p className="text-xs text-green-600">
-                    Complete la dirección de entrega para este pedido
-                  </p>
-                </>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              {/* Solo mostrar campos de cliente si es nuevo */}
-              {esClienteNuevo && (
-                <div className="space-y-4 pb-4 border-b">
-                  <h3 className="font-semibold text-gray-900">Datos del Cliente</h3>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nombre Completo *
-                    </label>
-                    <input
-                      type="text"
-                      value={nuevoCliente.nombre}
-                      onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombre: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
-                      placeholder="Ej: Juan Pérez"
-                      autoFocus
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email (opcional)
-                    </label>
-                    <input
-                      type="email"
-                      value={nuevoCliente.email}
-                      onChange={(e) => setNuevoCliente({ ...nuevoCliente, email: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
-                      placeholder="correo@ejemplo.com"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* FORMULARIO DE DIRECCIÓN (SIEMPRE SE MUESTRA) */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900">Dirección de Entrega</h3>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Dirección Completa *
-                  </label>
-                  <input
-                    type="text"
-                    value={nuevaDireccion.direccionCompleta}
-                    onChange={(e) => setNuevaDireccion({ ...nuevaDireccion, direccionCompleta: e.target.value })}
-                    placeholder="Ej: Calle 25 #15-30"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
-                    autoFocus={!esClienteNuevo}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Barrio
-                  </label>
-                  <input
-                    type="text"
-                    value={nuevaDireccion.barrio}
-                    onChange={(e) => setNuevaDireccion({ ...nuevaDireccion, barrio: e.target.value })}
-                    placeholder="Ej: Centro"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Referencias Adicionales
-                  </label>
-                  <textarea
-                    value={nuevaDireccion.referenciasAdicionales}
-                    onChange={(e) => setNuevaDireccion({ ...nuevaDireccion, referenciasAdicionales: e.target.value })}
-                    placeholder="Ej: Casa color blanca, portón negro, al lado de la tienda"
-                    rows="3"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600 focus:border-transparent resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Botones */}
-              <div className="flex gap-2 pt-4">
-                <button
-                  onClick={() => setPaso(1)}
-                  className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  Volver
-                </button>
-                <button
-                  onClick={continuarConDireccion}
-                  disabled={loading}
-                  className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-5 h-5" />
-                      Continuar al Pedido
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PASO 3: Armar Pedido */}
-        {paso === 3 && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <ShoppingBag className="w-6 h-6 text-orange-600" />
-                Seleccionar Platillos
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {platillos.map(platillo => (
-                  <div key={platillo.id} className="border rounded-lg p-4 hover:border-orange-600 transition-colors">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">{platillo.nombre}</h3>
-                        <p className="text-sm text-gray-600 mb-2">{platillo.descripcion}</p>
-                        <p className="text-lg font-bold text-green-600">
-                          {formatearMoneda(platillo.precio)}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => agregarAlCarrito(platillo)}
-                      disabled={topePorciones(platillo) <= (carrito.find(item => item.id === platillo.id)?.cantidad ?? 0)}
-                      className="w-full bg-orange-600 hover:bg-orange-700 text-white py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {agotado(platillo) ? NO_DISPONIBLE : <><Plus className="w-4 h-4" /> Agregar</>}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Carrito */}
-            {carrito.length > 0 && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  🛒 Carrito ({carrito.length} {carrito.length === 1 ? 'item' : 'items'})
-                </h3>
-                
-                <div className="space-y-4">
-                  {carrito.map(item => (
-                    <div key={item.id} className="border-b pb-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900">{item.nombre}</h4>
-                          <p className="text-sm text-gray-600">{formatearMoneda(item.precio)} c/u</p>
-                        </div>
-                        <button
-                          onClick={() => setCarrito(carrito.filter(i => i.id !== item.id))}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => actualizarCantidad(item.id, item.cantidad - 1)}
-                            className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded flex items-center justify-center"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <span className="w-12 text-center font-bold">{item.cantidad}</span>
-                          <button
-                            onClick={() => actualizarCantidad(item.id, item.cantidad + 1)}
-                            className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded flex items-center justify-center"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        <input
-                          type="text"
-                          value={item.nota}
-                          onChange={(e) => actualizarNota(item.id, e.target.value)}
-                          placeholder="Nota (opcional)"
-                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                        />
-
-                        <span className="font-bold text-gray-900 min-w-[100px] text-right">
-                          {formatearMoneda(item.precio * item.cantidad)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="space-y-2 pt-4">
-                    <div className="flex justify-between">
-                      <span className="text-gray-700">Subtotal:</span>
-                      <span className="font-semibold">{formatearMoneda(calcularSubtotal())}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-700">Costo de envío:</span>
-                      <input
-                        type="number"
-                        value={costoEnvio}
-                        onChange={(e) => setCostoEnvio(parseFloat(e.target.value) || 0)}
-                        className="w-32 px-3 py-1 border border-gray-300 rounded text-right"
-                      />
-                    </div>
-                    <div className="flex justify-between text-xl font-bold border-t pt-3">
-                      <span>Total:</span>
-                      <span className="text-green-600">{formatearMoneda(calcularTotal())}</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 pt-4 border-t">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Método de Pago
-                      </label>
-                      <select
-                        value={metodoPago}
-                        onChange={(e) => setMetodoPago(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-600"
-                      >
-                        <option value="Efectivo">Efectivo</option>
-                        <option value="Transferencia">Transferencia</option>
-                        <option value="Tarjeta">Tarjeta</option>
-                        <option value="Nequi">Nequi</option>
-                        <option value="Daviplata">Daviplata</option>
-                      </select>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="pagado"
-                        checked={pagadoAnticipado}
-                        onChange={(e) => setPagadoAnticipado(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <label htmlFor="pagado" className="text-sm text-gray-700">
-                        Pagado anticipadamente
-                      </label>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Notas del Cliente (opcional)
-                      </label>
-                      <textarea
-                        value={notasCliente}
-                        onChange={(e) => setNotasCliente(e.target.value)}
-                        placeholder="Indicaciones especiales del pedido..."
-                        rows="3"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg resize-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      onClick={() => setPaso(2)}
-                      className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                    >
-                      Volver
-                    </button>
-                    <button
-                      onClick={crearDomicilio}
-                      disabled={loading}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {loading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                          Creando Domicilio...
-                        </>
-                      ) : (
-                        <>
-                          <ShoppingBag className="w-5 h-5" />
-                          🚲 Crear Domicilio
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {carrito.length === 0 && (
-              <div className="bg-white rounded-lg shadow p-8 text-center">
-                <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-600 mb-4">El carrito está vacío</p>
-                <p className="text-sm text-gray-500">Selecciona platillos para agregar al pedido</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+    <section className="rounded-2xl border border-gray-200 bg-white p-5" aria-label={titulo}>
+      <h2 className="mb-4 flex items-center gap-2.5 text-[18px] font-extrabold text-espresso">
+        <span className="tabular grid h-7 w-7 place-items-center rounded-full bg-espresso text-[13px] text-white">{numero}</span>
+        {titulo}
+      </h2>
+      {children}
+    </section>
   );
 }
 
-export default NuevoDomicilio;
+export default function NuevoDomicilio({ onVolver, onDomicilioCreado }) {
+  const [telefono, setTelefono] = useState('');
+  const [buscado, setBuscado] = useState(false);
+  const [cliente, setCliente] = useState(null);
+  const [nombre, setNombre] = useState('');
+  const [direcciones, setDirecciones] = useState([]);
+  const [direccionId, setDireccionId] = useState(NUEVA);
+  const [nuevaDireccion, setNuevaDireccion] = useState({ direccionCompleta: '', barrio: '', referenciasAdicionales: '' });
+  const [platillos, setPlatillos] = useState([]);
+  const [q, setQ] = useState('');
+  const [categoria, setCategoria] = useState('Todas');
+  const [carrito, setCarrito] = useState([]);
+  const [envio, setEnvio] = useState(String(ENVIO_POR_DEFECTO));
+  const [metodo, setMetodo] = useState('Efectivo');
+  const [anticipado, setAnticipado] = useState(false);
+  const [pagaCon, setPagaCon] = useState('');
+  const [notas, setNotas] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [aviso, mostrar] = useAviso();
+
+  useEffect(() => {
+    getPlatillos().then(setPlatillos).catch(() => mostrar('No se pudo cargar la carta', 'error'));
+  }, [mostrar]);
+
+  const buscar = async () => {
+    if (!telefonoValido(telefono)) {
+      mostrar('Escribe un teléfono de 10 dígitos', 'error');
+      return;
+    }
+    setBuscando(true);
+    try {
+      const encontrado = await buscarClientePorTelefono(telefono.replace(/\D/g, ''));
+      setCliente(encontrado);
+      setNombre(encontrado?.nombre ?? '');
+      const lista = encontrado ? await getDireccionesCliente(encontrado.id) : [];
+      setDirecciones(lista ?? []);
+      setDireccionId(lista?.length ? (lista.find((d) => d.esPrincipal) ?? lista[0]).id : NUEVA);
+      setBuscado(true);
+    } catch (e) {
+      mostrar(e.message, 'error');
+    } finally {
+      setBuscando(false);
+    }
+  };
+
+  const categorias = useMemo(() => ['Todas', ...new Set(platillos.map((p) => p.categoria))], [platillos]);
+  const visibles = platillos.filter((p) => (categoria === 'Todas' || p.categoria === categoria)
+    && (!q.trim() || p.nombre.toLowerCase().includes(q.trim().toLowerCase())));
+
+  const cantidadDe = (id) => carrito.find((i) => i.id === id)?.cantidad ?? 0;
+  const cambiarCantidad = (platillo, delta) => setCarrito((c) => {
+    const actual = c.find((i) => i.id === platillo.id);
+    const cantidad = Math.max(0, Math.min(topePorciones(platillo), (actual?.cantidad ?? 0) + delta));
+    if (cantidad === 0) return c.filter((i) => i.id !== platillo.id);
+    return actual ? c.map((i) => (i.id === platillo.id ? { ...i, cantidad } : i)) : [...c, { id: platillo.id, nombre: platillo.nombre, precio: platillo.precio, cantidad, nota: '' }];
+  });
+  const cambiarNota = (id, nota) => setCarrito((c) => c.map((i) => (i.id === id ? { ...i, nota } : i)));
+
+  const costoEnvio = Math.max(0, Number(envio) || 0);
+  const total = totalDomicilio(carrito, costoEnvio);
+  const efectivo = metodo === 'Efectivo' && !anticipado;
+  const cambio = cambioDomicilio(total, pagaCon);
+  const direccionLista = direccionId !== NUEVA || nuevaDireccion.direccionCompleta.trim().length >= 5;
+
+  const error =
+    !buscado ? 'Busca primero al cliente por su teléfono'
+      : !nombre.trim() ? 'Escribe el nombre del cliente'
+        : !direccionLista ? 'Escribe la dirección completa'
+          : carrito.length === 0 ? 'Agrega al menos un plato'
+            : efectivo && pagaCon !== '' && cambio == null ? 'El billete no alcanza para el total'
+              : null;
+
+  const enviar = async () => {
+    if (error || enviando) return;
+    setEnviando(true);
+    try {
+      let clienteId = cliente?.id;
+      let idDireccion = direccionId === NUEVA ? null : direccionId;
+      if (!clienteId) {
+        const r = await createClienteConDireccion({
+          cliente: { nombre: nombre.trim(), telefono: telefono.replace(/\D/g, ''), email: null },
+          direccion: nuevaDireccion,
+        });
+        clienteId = r.clienteId;
+        idDireccion = r.direccionId;
+      } else if (!idDireccion) {
+        idDireccion = (await createDireccion(clienteId, nuevaDireccion)).id;
+      }
+      const creado = await createDomicilio({
+        clienteId,
+        direccionId: idDireccion,
+        costoEnvio,
+        metodoPago: metodo,
+        pagadoAnticipado: anticipado,
+        pagaCon: efectivo && pagaCon !== '' ? Number(pagaCon) : null,
+        notasCliente: notas.trim(),
+        detalles: carrito.map((i) => ({ platilloId: i.id, cantidad: i.cantidad, nota: i.nota.trim() })),
+      });
+      mostrar(`Domicilio #${creado?.id ?? ''} enviado a cocina`);
+      onDomicilioCreado?.();
+      onVolver?.();
+    } catch (e) {
+      mostrar(e.message, 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="mx-auto max-w-[1280px] px-4 py-6 lg:px-6 lg:py-8">
+        <header className="mb-6">
+          <Boton variante="fantasma" tamano="sm" onClick={onVolver}><ArrowLeft size={16} aria-hidden="true" />Domicilios</Boton>
+          <h1 className="mt-2 text-[28px] font-extrabold leading-tight tracking-[-0.02em] text-espresso">Nuevo domicilio</h1>
+          <p className="mt-1 text-[15px] text-gray-500">Toma el pedido por teléfono: llega a cocina apenas lo envías.</p>
+        </header>
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+          <div className="space-y-6">
+            <Seccion numero={1} titulo="Cliente">
+              <div className="flex flex-wrap items-end gap-2">
+                <Campo
+                  className="min-w-[220px] flex-1" label="Teléfono" inputMode="tel" autoFocus value={telefono} placeholder="3001234567"
+                  onChange={(e) => { setTelefono(e.target.value); setBuscado(false); }}
+                  onKeyDown={(e) => e.key === 'Enter' && buscar()}
+                />
+                <Boton onClick={buscar} disabled={buscando} className="h-11"><Search size={16} aria-hidden="true" />{buscando ? 'Buscando…' : 'Buscar'}</Boton>
+              </div>
+              {buscado && (
+                <div className="mt-4">
+                  {cliente
+                    ? <p className="mb-2"><Chip tono="ok">Cliente registrado</Chip></p>
+                    : <p className="mb-2"><Chip tono="info">Cliente nuevo</Chip></p>}
+                  <Campo label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} disabled={!!cliente} maxLength={100} />
+                </div>
+              )}
+            </Seccion>
+
+            {buscado && (
+              <Seccion numero={2} titulo="Dirección">
+                {direcciones.length > 0 && (
+                  <div className="mb-3 space-y-2" role="radiogroup" aria-label="Direcciones del cliente">
+                    {direcciones.map((d) => (
+                      <label key={d.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 ${direccionId === d.id ? 'border-espresso bg-orange-50' : 'border-gray-200'}`}>
+                        <input type="radio" name="direccion" className="mt-1 accent-espresso" checked={direccionId === d.id} onChange={() => setDireccionId(d.id)} />
+                        <span>
+                          <span className="block text-[15px] font-bold text-espresso">{d.direccionCompleta}</span>
+                          <span className="block text-[13px] text-gray-500">{[d.barrio, d.referenciasAdicionales].filter(Boolean).join(' · ')}</span>
+                        </span>
+                      </label>
+                    ))}
+                    <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 ${direccionId === NUEVA ? 'border-espresso bg-orange-50' : 'border-gray-200'}`}>
+                      <input type="radio" name="direccion" className="accent-espresso" checked={direccionId === NUEVA} onChange={() => setDireccionId(NUEVA)} />
+                      <span className="text-[15px] font-bold text-espresso">Otra dirección</span>
+                    </label>
+                  </div>
+                )}
+                {direccionId === NUEVA && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Campo className="sm:col-span-2" label="Dirección completa" value={nuevaDireccion.direccionCompleta} placeholder="Calle 20 # 15-30, apto 302" maxLength={200}
+                      onChange={(e) => setNuevaDireccion((d) => ({ ...d, direccionCompleta: e.target.value }))} />
+                    <Campo label="Barrio" value={nuevaDireccion.barrio} maxLength={100} onChange={(e) => setNuevaDireccion((d) => ({ ...d, barrio: e.target.value }))} />
+                    <Campo label="Referencias" value={nuevaDireccion.referenciasAdicionales} placeholder="Casa azul, frente al parque" maxLength={200}
+                      onChange={(e) => setNuevaDireccion((d) => ({ ...d, referenciasAdicionales: e.target.value }))} />
+                  </div>
+                )}
+              </Seccion>
+            )}
+
+            <Seccion numero={3} titulo="Pedido">
+              <label className="relative block">
+                <span className="sr-only">Buscar plato</span>
+                <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar plato" className="h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-3.5 text-[15px] text-espresso placeholder:text-gray-500 focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100" />
+              </label>
+              <div className="qp-rail -mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1">
+                {categorias.map((c) => (
+                  <button key={c} type="button" onClick={() => setCategoria(c)} aria-pressed={categoria === c} className={`h-9 shrink-0 rounded-full px-3.5 text-[13px] font-bold ${categoria === c ? 'bg-espresso text-white' : 'bg-gray-100 text-gray-600 hover:text-espresso'}`}>{c}</button>
+                ))}
+              </div>
+              <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                {visibles.map((p) => {
+                  const n = cantidadDe(p.id);
+                  const sinStock = agotado(p);
+                  const tope = topePorciones(p);
+                  return (
+                    <li key={p.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${n > 0 ? 'border-espresso' : 'border-gray-200'} ${sinStock ? 'opacity-60' : ''}`}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] font-bold text-espresso">{p.nombre}</span>
+                        <span className="tabular block text-[13px] text-gray-500">
+                          {sinStock ? NO_DISPONIBLE : `${pesos(p.precio)}${p.porcionesDisponibles != null && p.porcionesDisponibles <= 5 ? ` · quedan ${p.porcionesDisponibles}` : ''}`}
+                        </span>
+                      </span>
+                      {n > 0 && (
+                        <>
+                          <button type="button" onClick={() => cambiarCantidad(p, -1)} className="grid h-9 w-9 place-items-center rounded-full border border-gray-300 text-espresso" aria-label={`Quitar ${p.nombre}`}><Minus size={15} /></button>
+                          <span className="tabular w-5 text-center text-[16px] font-extrabold text-espresso">{n}</span>
+                        </>
+                      )}
+                      <button type="button" onClick={() => cambiarCantidad(p, 1)} disabled={sinStock || n >= tope} className="grid h-9 w-9 place-items-center rounded-full bg-espresso text-white disabled:bg-gray-200 disabled:text-gray-500" aria-label={`Agregar ${p.nombre}`}><Plus size={15} /></button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Seccion>
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-24" aria-label="Resumen del domicilio">
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <h2 className="text-[18px] font-extrabold text-espresso">Resumen</h2>
+              {carrito.length === 0 ? (
+                <p className="mt-2 text-[14px] text-gray-500">Agrega los platos que pide el cliente.</p>
+              ) : (
+                <ul className="mt-3 space-y-3">
+                  {carrito.map((i) => (
+                    <li key={i.id}>
+                      <div className="flex items-center gap-2 text-[14px]">
+                        <span className="tabular font-bold text-orange-700">{i.cantidad}×</span>
+                        <span className="min-w-0 flex-1 truncate font-semibold text-espresso">{i.nombre}</span>
+                        <span className="tabular text-espresso">{pesos(i.precio * i.cantidad)}</span>
+                        <button type="button" onClick={() => setCarrito((c) => c.filter((x) => x.id !== i.id))} className="grid h-8 w-8 place-items-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-red-700" aria-label={`Quitar ${i.nombre} del pedido`}><Trash2 size={14} /></button>
+                      </div>
+                      <input value={i.nota} onChange={(e) => cambiarNota(i.id, e.target.value)} placeholder="Nota para cocina (sin cebolla…)" maxLength={200} aria-label={`Nota de ${i.nombre}`} className="mt-1 h-9 w-full rounded-lg border border-gray-200 px-2.5 text-[13px] text-espresso placeholder:text-gray-400" />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Campo className="mt-4" label="Costo del envío" type="number" min="0" step="500" inputMode="numeric" value={envio} onChange={(e) => setEnvio(e.target.value)} />
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5" aria-label="Pago">
+              <h2 className="mb-3 text-[18px] font-extrabold text-espresso">Pago</h2>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Método de pago">
+                {METODOS_DOMICILIO.map((m) => (
+                  <button key={m.id} type="button" role="radio" aria-checked={metodo === m.id} className={opcion(metodo === m.id)} onClick={() => setMetodo(m.id)}>{m.label}</button>
+                ))}
+              </div>
+              <label className="mt-3 flex items-center gap-2 text-[14px] font-semibold text-espresso">
+                <input type="checkbox" className="h-5 w-5 accent-espresso" checked={anticipado} onChange={(e) => setAnticipado(e.target.checked)} />
+                Ya pagó (transferencia antes de salir)
+              </label>
+              {efectivo && (
+                <div className="mt-3 rounded-xl bg-gray-100 p-3">
+                  <Campo label="Paga con (billete)" type="number" min="0" step="1000" inputMode="numeric" value={pagaCon} onChange={(e) => setPagaCon(e.target.value)} placeholder="Opcional" />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {billetesSugeridos(total).filter((b) => b > total).map((b) => (
+                      <button key={b} type="button" onClick={() => setPagaCon(String(b))} className="tabular h-8 rounded-full border border-gray-300 bg-white px-3 text-[13px] font-bold text-espresso">{pesos(b)}</button>
+                    ))}
+                  </div>
+                  {pagaCon !== '' && (
+                    <p className={`tabular mt-2 text-[14px] font-bold ${cambio == null ? 'text-red-700' : 'text-espresso'}`}>
+                      {cambio == null ? 'No alcanza para el total' : `Llevar ${pesos(cambio)} de cambio`}
+                    </p>
+                  )}
+                </div>
+              )}
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-[13px] font-semibold text-gray-600">Nota del cliente</span>
+                <textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} maxLength={500} className="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-[15px] text-espresso focus:border-orange-500 focus:outline-none focus:ring-4 focus:ring-orange-100" placeholder="Timbre dañado, llamar al llegar…" />
+              </label>
+            </section>
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5">
+              <dl className="tabular space-y-1 text-[14px]">
+                <div className="flex justify-between text-gray-600"><dt>Productos</dt><dd>{pesos(total - costoEnvio)}</dd></div>
+                <div className="flex justify-between text-gray-600"><dt>Envío</dt><dd>{pesos(costoEnvio)}</dd></div>
+                <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
+                  <dt className="text-[15px] font-bold text-espresso">Total</dt>
+                  <dd className="text-[30px] font-extrabold tracking-[-0.03em] text-espresso">{pesos(total)}</dd>
+                </div>
+              </dl>
+              {error && <p className="mt-2 flex items-center gap-1.5 text-[13px] font-semibold text-amber-800"><MapPin size={14} aria-hidden="true" />{error}</p>}
+              <Boton tamano="lg" className="mt-3 w-full" onClick={enviar} disabled={!!error || enviando}>
+                {enviando ? 'Enviando…' : 'Enviar a cocina'}
+              </Boton>
+            </section>
+          </aside>
+        </div>
+      </main>
+      {aviso}
+    </div>
+  );
+}

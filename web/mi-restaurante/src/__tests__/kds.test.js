@@ -1,5 +1,5 @@
 // Regla de prioridad del KDS: espera + volumen de la comanda.
-import { ordenarPorPrioridad, prioridadComanda, transformarDomicilios } from '../utils/kds';
+import { ordenarPorPrioridad, prioridadComanda, separarListos, transformarDomicilios } from '../utils/kds';
 
 const ahora = new Date('2026-10-28T12:00:00Z');
 const hace = (min) => new Date(ahora.getTime() - min * 60000);
@@ -32,12 +32,20 @@ test('a igual prioridad gana la más antigua y las Listo van al final', () => {
   expect(orden.map((p) => p.id)).toEqual(['a', 'b', 'lista']);
 });
 
-test('solo los domicilios en preparación llegan a cocina', () => {
+test('los domicilios en cocina y los listos llegan a cocina; los que salieron no', () => {
   const datos = [
-    { id: 1, estado: 'EnPreparacion', fechaPedido: ahora.toISOString(), detalles: [{ id: 9, platilloNombre: 'X', cantidad: 2 }] },
-    { id: 2, estado: 'Listo', fechaPedido: ahora.toISOString(), detalles: [] },
+    { id: 1, estado: 'EnPreparacion', cocinaEmpezo: false, fechaPedido: ahora.toISOString(), detalles: [{ id: 9, platilloNombre: 'X', cantidad: 2 }] },
+    { id: 2, estado: 'Listo', cocinaEmpezo: true, domiciliarioNombre: 'Juan', fechaPedido: ahora.toISOString(), detalles: [] },
+    { id: 3, estado: 'EnCamino', fechaPedido: ahora.toISOString(), detalles: [] },
   ];
   const r = transformarDomicilios(datos);
-  expect(r).toHaveLength(1);
-  expect(r[0]).toMatchObject({ id: 'D1', tipo: 'domicilio', items: [{ cantidad: 2, notas: '' }] });
+  expect(r.map((d) => d.id)).toEqual(['D1', 'D2']);
+  expect(r[0]).toMatchObject({ tipo: 'domicilio', empezado: false, items: [{ cantidad: 2, notas: '' }] });
+  expect(r[1]).toMatchObject({ estado: 'Listo', empezado: true, domiciliario: 'Juan' });
+});
+
+test('lo listo se aparta de lo que se está preparando', () => {
+  const { enCocina, listos } = separarListos([comanda('a', 5, 1), comanda('b', 9, 1, 'Listo'), comanda('c', 20, 1, 'Listo')]);
+  expect(enCocina.map((p) => p.id)).toEqual(['a']);
+  expect(listos.map((p) => p.id)).toEqual(['c', 'b']);
 });

@@ -33,6 +33,7 @@ export const htmlFactura = (f, extra = {}) => {
   <p class="centro suave">Factura de venta</p>
   <p class="centro"><strong>${escapar(f.numeroFactura)}</strong></p>
   <p class="centro suave">${fechaHora(f.fechaEmision)}${f.mesaNumero ? ` · Mesa ${f.mesaNumero}` : ''}</p>
+  ${f.domicilio ? `<p class="centro suave">${escapar(f.domicilio)}</p>` : ''}
   <hr>
   <p>Cliente: ${escapar(f.nombreCliente)}</p>
   <p>CC/NIT: ${escapar(f.nitCliente)}</p>
@@ -47,8 +48,9 @@ export const htmlFactura = (f, extra = {}) => {
   </table>
   <hr>
   <table>
-    ${fila('Pago', escapar(f.metodoPago === 'QR' ? 'Transferencia o QR' : f.metodoPago))}
-    ${extra.recibido != null ? fila('Recibido', pesos(extra.recibido)) + fila('Cambio', pesos(extra.cambio)) : ''}
+    ${(f.pagos?.length ? f.pagos : [{ metodoPago: f.metodoPago, monto: f.total }])
+      .map((p) => fila(`Pago ${escapar(p.metodoPago === 'QR' ? 'Transferencia o QR' : p.metodoPago)}`, pesos(p.monto))).join('')}
+    ${extra.recibido != null ? fila('Recibido en efectivo', pesos(extra.recibido)) + fila('Cambio', pesos(extra.cambio)) : ''}
   </table>
   <hr>
   <p class="centro">Gracias por su visita</p>
@@ -79,13 +81,18 @@ export const htmlCuenta = (cuenta, lineas, ahora = new Date()) => {
 </body></html>`;
 };
 
-/** HTML del cierre de caja del día. cuadre: { base, contado, esperado, diferencia } (opcional). */
-export const htmlCierre = (c, cuadre) => {
+/**
+ * HTML del cierre de caja del día. a: el arqueo de la pantalla
+ * { base, propinasPagadas, retiros, esperado, contado, efectivo, datafono, tarjeta, banco, transferencias, observaciones }.
+ */
+export const htmlCierre = (c, a = {}) => {
   const metodos = (c.porMetodo ?? []).map((m) => fila(escapar(m.metodo), pesos(m.total))).join('');
+  const dif = (d) => (d?.diferencia == null ? '' : d.estado === 'cuadra' ? 'Cuadra' : `${d.diferencia > 0 ? 'Sobran' : 'Faltan'} ${pesos(Math.abs(d.diferencia))}`);
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cierre ${escapar(c.fecha)}</title><style>${ESTILO}</style></head><body>
   <h1>Qpro</h1>
   <p class="centro"><strong>Cierre de caja</strong></p>
   <p class="centro suave">${escapar(c.fecha)} · impreso ${fechaHora(new Date().toISOString())}</p>
+  ${c.cerrada ? `<p class="centro suave">Cerrada${c.cerradaPor ? ` por ${escapar(c.cerradaPor)}` : ''}</p>` : ''}
   <hr>
   <table>
     ${fila('Ventas en mesa', pesos(c.ventasMesa))}
@@ -98,19 +105,60 @@ export const htmlCierre = (c, cuadre) => {
   <p><strong>Por método de pago</strong></p>
   <table>${metodos}</table>
   <hr>
+  <p><strong>Efectivo del cajón</strong></p>
+  <table>
+    ${fila('+ Base inicial', pesos(a.base ?? c.base))}
+    ${fila('+ Cobros de mesa en efectivo', pesos(c.efectivoMesa))}
+    ${fila('+ Efectivo de domiciliarios', pesos(c.efectivoDomicilios))}
+    ${fila('− Propinas pagadas', pesos(a.propinasPagadas ?? c.propinasPagadas))}
+    ${fila('− Gastos o retiros', pesos(a.retiros ?? c.retiros))}
+    ${fila('= Debe haber', pesos(a.esperado ?? c.efectivoEsperado), 'total')}
+    ${a.contado != null ? fila('Contado', pesos(a.contado)) + fila('Resultado', dif(a.efectivo)) : ''}
+  </table>
+  ${a.datafono != null || a.banco != null ? `<hr><table>
+    ${a.datafono != null ? fila('Datáfono', `${pesos(a.datafono)} · ${dif(a.tarjeta)}`) : ''}
+    ${a.banco != null ? fila('Banco', `${pesos(a.banco)} · ${dif(a.transferencias)}`) : ''}
+  </table>` : ''}
+  <hr>
   <table>
     ${fila('Cuentas de mesa', c.cuentasMesa)}
     ${fila('Domicilios entregados', c.domicilios)}
     ${fila('Facturas', c.facturasEmitidas ? `${c.facturasEmitidas} (${escapar(c.primeraFactura)} a ${escapar(c.ultimaFactura)})` : '0')}
     ${fila('Pedidos anulados', `${c.pedidosAnulados} · ${pesos(c.valorAnulado)}`)}
   </table>
-  ${cuadre ? `<hr><p><strong>Cuadre de efectivo</strong></p><table>
-    ${fila('Base inicial', pesos(cuadre.base))}
-    ${fila('Efectivo esperado', pesos(cuadre.esperado))}
-    ${cuadre.diferencia != null ? fila('Efectivo contado', pesos(cuadre.contado)) + fila('Diferencia', pesos(cuadre.diferencia)) : ''}
-  </table>` : ''}
+  ${a.observaciones ? `<hr><p>${escapar(a.observaciones)}</p>` : ''}
   <hr>
   <p>Firma cajero: ______________________</p>
+</body></html>`;
+};
+
+/** Comanda del domicilio para la bolsa: a quién, dónde, qué lleva y cuánto cobrar (con el cambio). */
+export const htmlDomicilio = (d, ahora = new Date()) => {
+  const items = (d.detalles ?? []).map((i) => fila(`${i.cantidad} × ${escapar(i.platilloNombre)}${i.nota ? `<br><span class="suave">${escapar(i.nota)}</span>` : ''}`, pesos(i.subtotal ?? i.precioUnitario * i.cantidad))).join('');
+  const cobro = d.pagadoAnticipado
+    ? fila('Pago', 'Pagado: no cobrar')
+    : fila('Cobrar', `${pesos(d.total)} · ${escapar(d.metodoPago)}`) + (d.pagaCon ? fila('Paga con', pesos(d.pagaCon)) + fila('Llevar cambio', pesos(d.cambio ?? 0)) : '');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Domicilio ${escapar(d.id)}</title><style>${ESTILO}</style></head><body>
+  <h1>Qpro</h1>
+  <p class="centro"><strong>Domicilio #${escapar(d.id)}</strong></p>
+  <p class="centro suave">${fechaHora(d.fechaPedido ?? ahora.toISOString())}</p>
+  <hr>
+  <p><strong>${escapar(d.clienteNombre)}</strong> · ${escapar(d.clienteTelefono)}</p>
+  <p>${escapar(d.direccionCompleta)}${d.barrio ? `, ${escapar(d.barrio)}` : ''}</p>
+  ${d.referenciasAdicionales ? `<p class="suave">${escapar(d.referenciasAdicionales)}</p>` : ''}
+  ${d.notasCliente ? `<p class="suave">Nota: ${escapar(d.notasCliente)}</p>` : ''}
+  <hr>
+  <table>${items}</table>
+  <hr>
+  <table>
+    ${fila('Productos', pesos(d.subtotal))}
+    ${fila('Envío', pesos(d.costoEnvio))}
+    ${fila('Total', pesos(d.total), 'total')}
+  </table>
+  <hr>
+  <table>${cobro}</table>
+  ${d.domiciliarioNombre ? `<p class="centro suave">Lo lleva ${escapar(d.domiciliarioNombre)}</p>` : ''}
+  <p class="centro suave">La factura se entrega al cobrar.</p>
 </body></html>`;
 };
 

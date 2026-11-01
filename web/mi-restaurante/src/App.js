@@ -34,7 +34,10 @@ const SECCIONES = {
     { id: 'qr', label: 'Códigos QR', icon: QrCode },
     { id: 'reportes', label: 'Reportes', icon: BarChart3 }
   ],
-  caja: [{ id: 'facturacion', label: 'Caja', icon: Receipt }]
+  caja: [
+    { id: 'facturacion', label: 'Caja', icon: Receipt },
+    { id: 'domicilios', label: 'Domicilios', icon: Truck, incluye: ['domicilios-nuevo'] }
+  ]
 };
 
 function BarraPersonal({ usuario, rol, vistaActual, onCambiar, pendientes, onSalir }) {
@@ -154,7 +157,7 @@ function AppContent() {
       const rol = usuario.rol?.toLowerCase();
       if (rol === 'cocina' && vistaActual !== 'cocina') {
         setVistaActual('cocina');
-      } else if (rol === 'caja' && vistaActual !== 'facturacion') {
+      } else if (rol === 'caja' && !['facturacion', 'domicilios', 'domicilios-nuevo'].includes(vistaActual)) {
         setVistaActual('facturacion');
       }
     }
@@ -188,7 +191,8 @@ function AppContent() {
             })),
             hora: new Date(p.fecha),
             estado: p.estado,
-            empezado: p.cocinaEmpezo
+            empezado: p.cocinaEmpezo,
+            editado: p.fechaEdicion ? new Date(p.fechaEdicion) : null
           }))
       );
     } catch (error) {
@@ -235,13 +239,13 @@ function AppContent() {
         return <ProtectedRoute permisos={['administrador']}><Inventario /></ProtectedRoute>;
       case 'domicilios':
         return (
-          <ProtectedRoute permisos={['administrador']}>
+          <ProtectedRoute permisos={['administrador', 'caja']}>
             <Domicilios onNuevoDomicilio={() => setVistaActual('domicilios-nuevo')} />
           </ProtectedRoute>
         );
       case 'domicilios-nuevo':
         return (
-          <ProtectedRoute permisos={['administrador']}>
+          <ProtectedRoute permisos={['administrador', 'caja']}>
             <NuevoDomicilio
               onVolver={() => setVistaActual('domicilios')}
               onDomicilioCreado={() => cargarPedidos()} // recarga para que aparezcan en cocina
@@ -286,7 +290,7 @@ function AppContent() {
         rol={rol}
         vistaActual={vistaActual}
         onCambiar={setVistaActual}
-        pendientes={pedidos.length}
+        pendientes={pedidos.filter((p) => p.estado !== 'Listo').length}
         onSalir={logout}
       />
       {renderVistaActual()}

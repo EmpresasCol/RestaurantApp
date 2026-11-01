@@ -1,5 +1,6 @@
 import {
-  agruparCuentas, billetesSugeridos, cambio, cobrable, cuadreEfectivo, lineasCuenta, propinaSugerida, textoSolicitud, validarNit,
+  agruparCuentas, arqueo, billetesSugeridos, cambio, cobrable, consumoElegido, consumoPedido, contarBilletes, estadoSolicitud,
+  lineasCuenta, montosPagos, partesIguales, platosPorCobrar, propinaSugerida, resumenPagos, textoSolicitud, validarNit,
 } from '../utils/caja';
 import { htmlCierre, htmlCuenta, htmlFactura } from '../utils/recibo';
 import { csvReporte, horasVisibles, rangoPeriodo, sinVentas } from '../utils/reportes';
@@ -76,15 +77,70 @@ describe('cobro', () => {
   });
 });
 
-describe('cuadre de efectivo', () => {
-  test('esperado = base + efectivo cobrado', () => {
-    expect(cuadreEfectivo({ base: '100000', efectivo: 250000, contado: '' })).toEqual({ esperado: 350000, diferencia: null, estado: 'sin-contar' });
+describe('cuentas compartidas', () => {
+  const pedidos = [
+    { id: 1, estado: 'Entregado', detalles: [{ id: 10, platilloNombre: 'Cerveza', precio: 8000, cantidad: 2 }, { id: 11, platilloNombre: 'Arepa', precio: 6000, cantidad: 1, pagado: true }] },
+    { id: 2, estado: 'EnProceso', detalles: [{ id: 12, platilloNombre: 'Sopa', precio: 15000, cantidad: 1 }] },
+  ];
+
+  test('lo ya pagado de un pedido no se vuelve a cobrar ni se cuenta en la mesa', () => {
+    expect(consumoPedido(pedidos[0])).toBe(16000);
+    expect(lineasCuenta(pedidos).map((l) => l.nombre)).toEqual(['Cerveza', 'Sopa']);
+    const [mesa] = agruparCuentas(pedidos.map((p) => ({ ...p, mesaId: 1, mesaNumero: 1, fecha: '2026-11-02T12:00:00Z' })));
+    expect(mesa.pagadoParcial).toBe(true);
+    expect(mesa.platos).toBe(3);
   });
 
-  test('dice si cuadra, sobra o falta', () => {
-    expect(cuadreEfectivo({ base: 0, efectivo: 1000, contado: '1000' }).estado).toBe('cuadra');
-    expect(cuadreEfectivo({ base: 0, efectivo: 1000, contado: '1500' }).estado).toBe('sobra');
-    expect(cuadreEfectivo({ base: 0, efectivo: 1000, contado: '700' })).toMatchObject({ estado: 'falta', diferencia: -300 });
+  test('cada quien paga lo suyo: solo platos listos y las unidades que elija', () => {
+    const platos = platosPorCobrar(pedidos);
+    expect(platos).toEqual([{ detalleId: 10, pedidoId: 1, nombre: 'Cerveza', nota: undefined, precio: 8000, cantidad: 2 }]);
+    expect(consumoElegido(platos, { 10: 1 })).toBe(8000);
+    expect(consumoElegido(platos, { 10: 5 })).toBe(16000); // no cobra más de lo que queda
+  });
+
+  test('partes iguales redondea a centenas y la última cuadra el total', () => {
+    expect(partesIguales(50000, 3)).toEqual([16700, 16700, 16600]);
+    expect(partesIguales(90000, 2)).toEqual([45000, 45000]);
+    expect(partesIguales(0, 3)).toEqual([]);
+    expect(partesIguales(150, 2).reduce((a, b) => a + b, 0)).toBe(150);
+  });
+
+  test('el pago sin valor se lleva lo que falta; los demás quedan como se escribieron', () => {
+    const montos = montosPagos([{ monto: '30000' }, { monto: '' }, { monto: '' }], 50000);
+    expect(montos).toEqual([30000, 20000, 0]);
+    expect(resumenPagos(montos, 50000)).toEqual({ pagado: 50000, falta: 0, sobra: 0 });
+    expect(resumenPagos([60000], 50000).sobra).toBe(10000);
+  });
+
+  test('lo que avisó el mesero: pidió la cuenta, ya pagó todo o pagó una parte', () => {
+    expect(estadoSolicitud({ pagos: [] })).toBe('pedida');
+    expect(estadoSolicitud({ cuadra: true, pagos: [{ monto: 1 }] })).toBe('pagada');
+    expect(estadoSolicitud({ cuadra: false, pagos: [{ monto: 1 }] })).toBe('parcial');
+    expect(textoSolicitud({ cuadra: true, pagos: [{ monto: 1 }] })).toBe('Ya pagó: confirma el cobro');
+    expect(textoSolicitud({ cuadra: false, pagos: [{ monto: 20000 }], totalAvisado: 20000, porCobrar: 50000, propina: 0 })).toMatch(/Pagó \$\s?20\.000 de \$\s?50\.000/);
+  });
+});
+
+describe('arqueo de caja', () => {
+  const cierre = { base: 100000, efectivoMesa: 250000, efectivoDomicilios: 28000, tarjeta: 80000, transferencias: 40000 };
+
+  test('esperado = base + efectivo de mesa + efectivo de domiciliarios − propinas pagadas − retiros', () => {
+    const a = arqueo(cierre, { propinasPagadas: '10000', retiros: '5000', contado: '' });
+    expect(a.esperado).toBe(363000);
+    expect(a.efectivo).toEqual({ diferencia: null, estado: 'sin-contar' });
+  });
+
+  test('dice si el cajón, el datáfono y el banco cuadran, sobran o faltan', () => {
+    const a = arqueo(cierre, { contado: '377000', datafono: '80000', banco: '39000' });
+    expect(a.efectivo).toEqual({ diferencia: -1000, estado: 'falta' });
+    expect(a.tarjeta.estado).toBe('cuadra');
+    expect(a.transferencias).toEqual({ diferencia: -1000, estado: 'falta' });
+    expect(arqueo(cierre, { contado: '378500' }).efectivo.estado).toBe('sobra');
+  });
+
+  test('contar por billetes suma cada denominación', () => {
+    expect(contarBilletes({ 50000: '2', 20000: '1', 500: '3' })).toBe(121500);
+    expect(contarBilletes({ 10000: '-2', 2000: 'x' })).toBe(0);
   });
 });
 
@@ -122,9 +178,11 @@ describe('tirillas', () => {
       fecha: '2026-11-02', ventasMesa: 100000, propinas: 0, ventasDomicilio: 0, envios: 0, totalRecaudado: 100000,
       porMetodo: [{ metodo: 'Efectivo', total: 100000 }], cuentasMesa: 3, domicilios: 0,
       facturasEmitidas: 3, primeraFactura: 'FV-00000010', ultimaFactura: 'FV-00000012', pedidosAnulados: 0, valorAnulado: 0,
-    }, { base: 50000, esperado: 150000, contado: 149000, diferencia: -1000 });
+      efectivoMesa: 100000, efectivoDomicilios: 0,
+    }, { base: 50000, esperado: 150000, contado: 149000, efectivo: { diferencia: -1000, estado: 'falta' } });
     expect(html).toContain('FV-00000010 a FV-00000012');
-    expect(html).toContain('Cuadre de efectivo');
+    expect(html).toContain('Efectivo del cajón');
+    expect(html).toMatch(/Faltan \$\s?1\.000/);
   });
 });
 

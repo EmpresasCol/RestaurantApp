@@ -1,5 +1,6 @@
-// Reglas de caja (sin React, para poder probarlas): cuentas por mesa, propina, cambio y cuadre.
-// Los montos replican lo que valida la API en POST /pagos/cobro; el servidor tiene la última palabra.
+// Reglas de caja (sin React, para poder probarlas): cuentas por mesa, cuentas compartidas, pagos,
+// propina, cambio y arqueo. Los montos replican lo que valida la API en POST /pagos/cobro y en el
+// cierre; el servidor tiene la última palabra.
 
 const cop = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 export const pesos = (valor) => cop.format(Math.round(Number(valor) || 0));
@@ -11,9 +12,14 @@ export const METODOS = [
   { id: 'Otro', label: 'Otro' },
 ];
 
-/** Precio por lo que se pidió (la API congela el precio al pedir). */
+export const nombreMetodo = (m) => METODOS.find((x) => x.id === m)?.label ?? m;
+
+/** Un plato cobrado en una cuenta dividida ya no se debe. */
+const debe = (d) => !d.pagado;
+
+/** Lo que falta cobrar del pedido (la API congela el precio al pedir). */
 export const consumoPedido = (pedido) =>
-  (pedido?.detalles ?? []).reduce((t, d) => t + (Number(d.precio) || 0) * (Number(d.cantidad) || 0), 0);
+  (pedido?.detalles ?? []).filter(debe).reduce((t, d) => t + (Number(d.precio) || 0) * (Number(d.cantidad) || 0), 0);
 
 /** Un pedido que sigue en cocina no se cobra: desaparecería de la comanda. */
 export const cobrable = (pedido) => pedido?.estado === 'Listo' || pedido?.estado === 'Entregado';
@@ -51,7 +57,8 @@ export const agruparCuentas = (pedidos = [], solicitudes = []) => {
         total: pedidosOrdenados.reduce((t, p) => t + consumoPedido(p), 0),
         totalCobrable: cobrables.reduce((t, p) => t + consumoPedido(p), 0),
         enCocina: pedidosOrdenados.length - cobrables.length,
-        platos: pedidosOrdenados.reduce((t, p) => t + p.detalles.reduce((s, d) => s + d.cantidad, 0), 0),
+        platos: pedidosOrdenados.reduce((t, p) => t + p.detalles.filter(debe).reduce((s, d) => s + d.cantidad, 0), 0),
+        pagadoParcial: pedidosOrdenados.some((p) => p.detalles.some((d) => d.pagado)),
         solicitud: solicitudes.find((s) => s.mesaId === c.mesaId) ?? null,
       };
     })
@@ -64,14 +71,32 @@ const PAGO_AVISADO = {
   QR: 'Pagó por transferencia',
 };
 
+/**
+ * Situación de la cuenta que pidió el mesero:
+ * `pedida` (solo pidió la cuenta), `pagada` (sus pagos cubren todo: la caja confirma)
+ * o `parcial` (pagó una parte: la caja completa el resto).
+ */
+export const estadoSolicitud = (solicitud) => {
+  if (!solicitud) return null;
+  if (solicitud.cuadra) return 'pagada';
+  if ((solicitud.pagos ?? []).length > 0 || solicitud.metodoPago) return 'parcial';
+  return 'pedida';
+};
+
 /** Texto de la solicitud del mesero para la tarjeta de la mesa. */
-export const textoSolicitud = (solicitud) =>
-  !solicitud ? null : solicitud.metodoPago ? PAGO_AVISADO[solicitud.metodoPago] ?? solicitud.metodoPago : 'Pidió la cuenta';
+export const textoSolicitud = (solicitud) => {
+  const estado = estadoSolicitud(solicitud);
+  if (!estado) return null;
+  if (estado === 'pedida') return 'Pidió la cuenta';
+  if (estado === 'pagada') return 'Ya pagó: confirma el cobro';
+  if (!(solicitud.pagos ?? []).length) return PAGO_AVISADO[solicitud.metodoPago] ?? solicitud.metodoPago;
+  return `Pagó ${pesos(solicitud.totalAvisado)} de ${pesos((solicitud.porCobrar ?? 0) + (solicitud.propina ?? 0))}`;
+};
 
 /** Mismo plato al mismo precio en varios pedidos: una sola línea, como en la factura. */
 export const lineasCuenta = (pedidos = []) => {
   const lineas = new Map();
-  pedidos.forEach((p) => p.detalles.forEach((d) => {
+  pedidos.forEach((p) => p.detalles.filter(debe).forEach((d) => {
     const clave = `${d.platilloId}-${d.precio}`;
     const l = lineas.get(clave) ?? { nombre: d.platilloNombre, precio: d.precio, cantidad: 0 };
     l.cantidad += d.cantidad;
@@ -80,8 +105,51 @@ export const lineasCuenta = (pedidos = []) => {
   return [...lineas.values()].map((l) => ({ ...l, total: l.precio * l.cantidad }));
 };
 
+/** Platos que se pueden cobrar uno a uno (cada quien paga lo suyo): solo lo que ya salió de cocina. */
+export const platosPorCobrar = (pedidos = []) =>
+  pedidos.filter(cobrable).flatMap((p) => p.detalles.filter(debe).map((d) => ({
+    detalleId: d.id, pedidoId: p.id, nombre: d.platilloNombre, nota: d.nota, precio: Number(d.precio) || 0, cantidad: d.cantidad,
+  })));
+
+/** Consumo de lo elegido: { detalleId: unidades }. */
+export const consumoElegido = (platos, elegidos) =>
+  platos.reduce((t, p) => t + p.precio * Math.min(p.cantidad, Number(elegidos[p.detalleId]) || 0), 0);
+
 /** Propina voluntaria sugerida (10 % en Colombia), redondeada a centenas como se paga en efectivo. */
 export const propinaSugerida = (consumo, tasa = 0.1) => Math.round((consumo * tasa) / 100) * 100;
+
+/**
+ * Un total en n partes iguales redondeadas a centenas (como se paga de verdad);
+ * la última se ajusta para que la suma sea exacta.
+ */
+export const partesIguales = (total, n) => {
+  const partes = Math.floor(Number(n));
+  if (!(partes >= 1) || !(total > 0)) return [];
+  const parte = Math.round(total / partes / 100) * 100;
+  const ultima = total - parte * (partes - 1);
+  if (ultima <= 0) return partesIguales(total, partes - 1);
+  return [...Array(partes - 1).fill(parte), ultima];
+};
+
+const vacio = (v) => v === '' || v == null;
+
+/** Monto de cada pago; el primer renglón sin monto se lleva lo que falta para el total. */
+export const montosPagos = (pagos, total) => {
+  const fijos = pagos.reduce((t, p) => t + (vacio(p.monto) ? 0 : Number(p.monto) || 0), 0);
+  let resto = Math.max(0, total - fijos);
+  return pagos.map((p) => {
+    if (!vacio(p.monto)) return Number(p.monto) || 0;
+    const m = resto;
+    resto = 0;
+    return m;
+  });
+};
+
+/** Lo pagado frente al total: { pagado, falta, sobra }. */
+export const resumenPagos = (montos, total) => {
+  const pagado = montos.reduce((t, m) => t + m, 0);
+  return { pagado, falta: Math.max(0, total - pagado), sobra: Math.max(0, pagado - total) };
+};
 
 /** Botones de efectivo: el valor exacto y los billetes con que suele pagar el cliente. */
 export const billetesSugeridos = (total) => {
@@ -97,15 +165,38 @@ export const billetesSugeridos = (total) => {
 /** Cambio a entregar; negativo = lo que falta. */
 export const cambio = (recibido, total) => (Number(recibido) || 0) - total;
 
-/** Cuadre del cajón: base con que se abrió + efectivo cobrado frente a lo que se contó. */
-export const cuadreEfectivo = ({ base = 0, efectivo = 0, contado }) => {
-  const esperado = (Number(base) || 0) + (Number(efectivo) || 0);
-  const hayConteo = contado !== '' && contado != null && !Number.isNaN(Number(contado));
-  const diferencia = hayConteo ? Number(contado) - esperado : null;
+// ── Cierre de caja ─────────────────────────────────────────────────────
+
+/** Billetes y monedas en circulación en Colombia, para contar el cajón. */
+export const DENOMINACIONES = [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50];
+
+/** Total contado: { denominación: cantidad }. */
+export const contarBilletes = (conteo = {}) =>
+  Object.entries(conteo).reduce((t, [d, n]) => t + Number(d) * (Math.max(0, Math.floor(Number(n))) || 0), 0);
+
+const numero = (v) => (vacio(v) || Number.isNaN(Number(v)) ? null : Number(v));
+
+/** Diferencia entre lo real y lo que dice el sistema. Menos de un peso es redondeo. */
+export const diferencia = (real, sistema) => {
+  const valor = numero(real);
+  if (valor == null) return { diferencia: null, estado: 'sin-contar' };
+  const d = valor - sistema;
+  return { diferencia: d, estado: Math.abs(d) < 1 ? 'cuadra' : d > 0 ? 'sobra' : 'falta' };
+};
+
+/**
+ * Arqueo como se hace en la caja: efectivo esperado = base + cobros en efectivo (mesa y lo que
+ * entregaron los domiciliarios) − propinas pagadas al equipo − gastos o retiros del cajón.
+ * Tarjeta y transferencias se comparan con el cierre del datáfono y con el banco.
+ */
+export const arqueo = (cierre, { propinasPagadas, retiros, contado, datafono, banco } = {}) => {
+  const esperado = (cierre?.base ?? 0) + (cierre?.efectivoMesa ?? 0) + (cierre?.efectivoDomicilios ?? 0)
+    - (numero(propinasPagadas) ?? 0) - (numero(retiros) ?? 0);
   return {
     esperado,
-    diferencia,
-    estado: diferencia == null ? 'sin-contar' : diferencia === 0 ? 'cuadra' : diferencia > 0 ? 'sobra' : 'falta',
+    efectivo: diferencia(contado, esperado),
+    tarjeta: diferencia(datafono, cierre?.tarjeta ?? 0),
+    transferencias: diferencia(banco, cierre?.transferencias ?? 0),
   };
 };
 

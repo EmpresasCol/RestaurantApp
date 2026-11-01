@@ -28,11 +28,20 @@ export const ordenarPorPrioridad = (pedidos, ahora = new Date()) =>
     return diferencia !== 0 ? diferencia : new Date(a.hora) - new Date(b.hora);
   });
 
-/** Domicilios en preparación con la misma forma que los pedidos de mesa. */
+/**
+ * La cocina trabaja lo que está por preparar; lo listo se aparta hasta que el mesero lo
+ * sirve (o el domiciliario lo recoge), para no confundirlo con lo que está en el fuego.
+ */
+export const separarListos = (pedidos) => ({
+  enCocina: pedidos.filter((p) => p.estado !== 'Listo'),
+  listos: [...pedidos.filter((p) => p.estado === 'Listo')].sort((a, b) => new Date(a.listoDesde ?? a.hora) - new Date(b.listoDesde ?? b.hora)),
+});
+
+/** Domicilios en cocina o listos para salir, con la misma forma que los pedidos de mesa. */
 export const transformarDomicilios = (domiciliosData) => {
   if (!Array.isArray(domiciliosData)) return [];
   return domiciliosData
-    .filter((d) => d.estado === 'EnPreparacion')
+    .filter((d) => d.estado === 'EnPreparacion' || d.estado === 'Listo')
     .map((d) => ({
       id: `D${d.id}`,
       domicilioId: d.id,
@@ -40,6 +49,7 @@ export const transformarDomicilios = (domiciliosData) => {
       cliente: d.clienteNombre,
       telefono: d.clienteTelefono,
       direccion: d.direccionCompleta,
+      domiciliario: d.domiciliarioNombre,
       items: d.detalles.map((det) => ({
         id: det.id,
         nombre: det.platilloNombre,
@@ -47,7 +57,9 @@ export const transformarDomicilios = (domiciliosData) => {
         notas: det.nota || '',
       })),
       hora: new Date(d.fechaPedido),
-      estado: 'EnPreparacion',
+      estado: d.estado,
+      // Hasta que la cocina lo empieza, el cliente todavía puede cambiarlo desde su enlace.
+      empezado: !!d.cocinaEmpezo,
       tipo: 'domicilio',
       notasCliente: d.notasCliente,
     }));

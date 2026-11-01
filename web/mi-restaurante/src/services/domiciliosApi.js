@@ -1,342 +1,102 @@
 // src/services/domiciliosApi.js
+// Clientes, direcciones y domicilios: lo que usan Domicilios, Cocina y Caja.
 import { getApiBaseUrl, encabezadosAuth, manejarNoAutorizado } from './sesion';
 
 const API_URL = getApiBaseUrl();
 
 const fetchWithHeaders = async (url, options = {}) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': '69420',
-    ...encabezadosAuth(),
-    ...options.headers
-  };
-
   const response = await fetch(url, {
     ...options,
-    headers
+    headers: {
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': '69420',
+      ...encabezadosAuth(),
+      ...options.headers,
+    },
   });
   manejarNoAutorizado(response.status);
   return response;
 };
 
-// ==================== CLIENTES ====================
+// La API responde { message }, un texto o un ProblemDetails; se devuelve un Error legible.
+const errorDe = async (response, respaldo) => {
+  const texto = await response.text().catch(() => '');
+  try {
+    const json = JSON.parse(texto);
+    if (typeof json === 'string') return new Error(json);
+    return new Error(json.message || Object.values(json.errors ?? {}).flat()[0] || json.title || respaldo);
+  } catch {
+    return new Error(texto || respaldo);
+  }
+};
+
+const pedir = async (ruta, respaldo, opciones) => {
+  const response = await fetchWithHeaders(`${API_URL}${ruta}`, opciones);
+  if (!response.ok) throw await errorDe(response, respaldo);
+  const texto = await response.text();
+  return texto ? JSON.parse(texto) : null;
+};
+
+const enviar = (ruta, respaldo, metodo, cuerpo) =>
+  pedir(ruta, respaldo, { method: metodo, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+
+// ==================== CLIENTES Y DIRECCIONES ====================
+/** Cliente por teléfono, o null si no existe. */
 export const buscarClientePorTelefono = async (telefono) => {
-  try {
-    console.log(`🔍 Buscando cliente con teléfono: ${telefono}`);
-    const response = await fetchWithHeaders(`${API_URL}/clientes/telefono/${telefono}`);
-    
-    if (response.status === 404) {
-      console.log('⚠️ Cliente no encontrado (404)');
-      return null;
-    }
-    
-    if (!response.ok) {
-      throw new Error('Error al buscar cliente');
-    }
-    
-    const cliente = await response.json();
-    console.log('✅ Cliente encontrado:', cliente);
-    return cliente;
-  } catch (error) {
-    console.error('❌ Error al buscar cliente:', error);
-    throw error;
-  }
+  const response = await fetchWithHeaders(`${API_URL}/clientes/telefono/${encodeURIComponent(telefono)}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw await errorDe(response, 'No se pudo buscar el cliente');
+  return response.json();
 };
 
-export const createClienteConDireccion = async (data) => {
-  try {
-    console.log('📤 Creando cliente con dirección:', data);
-    
-    const response = await fetchWithHeaders(`${API_URL}/clientes/con-direccion`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
+export const createClienteConDireccion = (data) => enviar('/clientes/con-direccion', 'No se pudo crear el cliente', 'POST', data);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error al crear cliente: ${errorText}`);
-    }
+export const getDireccionesCliente = (clienteId) => pedir(`/direcciones/cliente/${clienteId}`, 'No se pudieron cargar las direcciones');
 
-    const resultado = await response.json();
-    console.log('✅ Cliente y dirección creados:', resultado);
-    return resultado;
-  } catch (error) {
-    console.error('❌ Error al crear cliente con dirección:', error);
-    throw error;
-  }
-};
-
-// ==================== DIRECCIONES ====================
-export const getDireccionesCliente = async (clienteId) => {
-  try {
-    console.log(`🔍 Obteniendo direcciones del cliente ${clienteId}`);
-    const response = await fetchWithHeaders(`${API_URL}/direcciones/cliente/${clienteId}`);
-    
-    if (!response.ok) {
-      throw new Error('Error al obtener direcciones');
-    }
-    
-    const direcciones = await response.json();
-    console.log(`✅ Direcciones obtenidas: ${direcciones.length}`);
-    return direcciones;
-  } catch (error) {
-    console.error('❌ Error al obtener direcciones:', error);
-    throw error;
-  }
-};
-
-export const createDireccion = async (clienteId, direccionData) => {
-  try {
-    console.log(`📤 Creando dirección para cliente ${clienteId}:`, direccionData);
-    
-    const response = await fetchWithHeaders(`${API_URL}/direcciones?clienteId=${clienteId}`, {
-      method: 'POST',
-      body: JSON.stringify(direccionData)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error al crear dirección: ${errorText}`);
-    }
-
-    const resultado = await response.json();
-    console.log('✅ Dirección creada:', resultado);
-    return resultado;
-  } catch (error) {
-    console.error('❌ Error al crear dirección:', error);
-    throw error;
-  }
-};
+export const createDireccion = (clienteId, direccion) =>
+  enviar(`/direcciones?clienteId=${clienteId}`, 'No se pudo guardar la dirección', 'POST', direccion);
 
 // ==================== DOMICILIOS ====================
-export const getDomicilios = async () => {
-  try {
-    console.log('🔍 Obteniendo todos los domicilios');
-    const response = await fetchWithHeaders(`${API_URL}/domicilios`);
-    
-    if (!response.ok) {
-      throw new Error('Error al obtener domicilios');
-    }
-    
-    const domicilios = await response.json();
-    console.log(`✅ Domicilios obtenidos: ${domicilios.length}`);
-    return domicilios;
-  } catch (error) {
-    console.error('❌ Error al obtener domicilios:', error);
-    throw error;
-  }
-};
+export const getDomicilios = () => pedir('/domicilios', 'No se pudieron cargar los domicilios');
 
+/** En cocina, listos, recogidos o en camino. */
+export const getDomiciliosActivos = () => pedir('/domicilios/activos', 'No se pudieron cargar los domicilios');
 
+/** Los del día (hora de Colombia) más los que siguen en curso de días anteriores. */
+export const getDomiciliosHoy = () => pedir('/domicilios/hoy', 'No se pudieron cargar los domicilios');
 
-export const getDomiciliosActivos = async () => {
-  try {
-    console.log('🔍 Obteniendo domicilios activos');
-    const response = await fetchWithHeaders(`${API_URL}/domicilios/activos`);
-    
-    if (!response.ok) {
-      throw new Error('Error al obtener domicilios activos');
-    }
-    
-    const domicilios = await response.json();
-    console.log(`✅ Domicilios activos obtenidos: ${domicilios.length}`);
-    return domicilios;
-  } catch (error) {
-    console.error('❌ Error al obtener domicilios activos:', error);
-    throw error;
-  }
-};
+export const getDomicilio = (id) => pedir(`/domicilios/${id}`, 'No se pudo cargar el domicilio');
 
-export const getDomicilio = async (id) => {
-  try {
-    console.log(`🔍 Obteniendo domicilio ${id}`);
-    const response = await fetchWithHeaders(`${API_URL}/domicilios/${id}`);
-    
-    if (!response.ok) {
-      throw new Error('Error al obtener domicilio');
-    }
-    
-    const domicilio = await response.json();
-    console.log('✅ Domicilio obtenido:', domicilio);
-    return domicilio;
-  } catch (error) {
-    console.error('❌ Error al obtener domicilio:', error);
-    throw error;
-  }
-};
+export const createDomicilio = (domicilio) => enviar('/domicilios', 'No se pudo crear el domicilio', 'POST', domicilio);
 
-export const createDomicilio = async (domicilioData) => {
-  try {
-    console.log('📤 Creando domicilio:', domicilioData);
-    
-    // ✅ Forzar estado inicial a "EnPreparacion" para que aparezca en cocina igual que pedidos de mesa
-    const datosConEstado = {
-      ...domicilioData,
-      estado: 'EnPreparacion'
-    };
-    
-    console.log('📤 Datos a enviar al backend:', JSON.stringify(datosConEstado, null, 2));
-    
-    const response = await fetchWithHeaders(`${API_URL}/domicilios`, {
-      method: 'POST',
-      body: JSON.stringify(datosConEstado)
-    });
+/** La cocina empieza el domicilio: desde ahí el cliente ya no lo cambia. */
+export const prepararDomicilio = (id) => enviar(`/domicilios/${id}/preparar`, 'No se pudo empezar el domicilio', 'PUT');
 
-    console.log('📡 Status de respuesta:', response.status);
-    console.log('📡 Headers de respuesta:', [...response.headers.entries()]);
+/**
+ * Cambia el estado. extra: { metodoPago } al entregar (cómo pagó de verdad) o { motivo } al cancelar.
+ */
+export const actualizarEstadoDomicilio = (id, estado, extra = {}) =>
+  enviar(`/domicilios/${id}/estado`, 'No se pudo actualizar el domicilio', 'PUT', { estado, ...extra });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Error del servidor:', errorText);
-      throw new Error(`Error al crear domicilio: ${errorText}`);
-    }
+export const actualizarMetodoPagoDomicilio = (id, metodoPago, pagadoAnticipado, pagaCon = null) =>
+  enviar(`/domicilios/${id}/metodo-pago`, 'No se pudo cambiar el pago', 'PUT', { metodoPago, pagadoAnticipado, pagaCon });
 
-    // ✅ Verificar si hay contenido en la respuesta
-    const contentType = response.headers.get('content-type');
-    console.log('📡 Content-Type:', contentType);
+/** null devuelve el domicilio a la bolsa común de "para recoger". */
+export const asignarDomiciliario = (id, domiciliarioId) =>
+  enviar(`/domicilios/${id}/domiciliario`, 'No se pudo asignar el domiciliario', 'PUT', { domiciliarioId });
 
-    // Si la respuesta es 201 Created sin contenido JSON, devolver un objeto simple
-    if (response.status === 201) {
-      const text = await response.text();
-      console.log('📡 Respuesta raw:', text);
-      
-      if (!text || text.trim() === '') {
-        console.log('✅ Domicilio creado exitosamente (sin cuerpo de respuesta)');
-        return { success: true, message: 'Domicilio creado exitosamente' };
-      }
-      
-      try {
-        const resultado = JSON.parse(text);
-        console.log('✅ Domicilio creado:', resultado);
-        return resultado;
-      } catch (parseError) {
-        console.log('⚠️ No se pudo parsear la respuesta como JSON, pero el domicilio fue creado');
-        return { success: true, message: 'Domicilio creado exitosamente' };
-      }
-    }
+export const getDomiciliarios = () => pedir('/domicilios/domiciliarios', 'No se pudieron cargar los domiciliarios');
 
-    // Para otros códigos de estado, intentar parsear JSON
-    const resultado = await response.json();
-    console.log('✅ Domicilio creado:', resultado);
-    return resultado;
-    
-  } catch (error) {
-    console.error('❌ Error al crear domicilio:', error);
-    throw error;
-  }
-};
+export const getComprobanteDomicilio = async (id) =>
+  (await pedir(`/domicilios/${id}/comprobante`, 'No se pudo cargar el comprobante')).comprobante;
 
-export const actualizarEstadoDomicilio = async (domicilioId, nuevoEstado) => {
-  try {
-    console.log(`🔄 Actualizando estado del domicilio ${domicilioId} → ${nuevoEstado}`);
-    
-    const response = await fetchWithHeaders(`${API_URL}/domicilios/${domicilioId}/estado`, {
-      method: 'PUT',
-      body: JSON.stringify({ estado: nuevoEstado })
-    });
+// ==================== EFECTIVO DE LOS DOMICILIARIOS ====================
+/** Efectivo que cada domiciliario cobró y no ha entregado en caja. */
+export const getLiquidaciones = () => pedir('/domicilios/liquidaciones', 'No se pudo cargar el efectivo de los domiciliarios');
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error al actualizar estado: ${errorText}`);
-    }
-
-    // ✅ Manejar respuesta 204 No Content
-    if (response.status === 204) {
-      console.log('✅ Estado del domicilio actualizado (204 No Content)');
-      return { success: true };
-    }
-
-    // Intentar parsear JSON si hay contenido
-    const text = await response.text();
-    if (!text || text.trim() === '') {
-      console.log('✅ Estado del domicilio actualizado (sin cuerpo de respuesta)');
-      return { success: true };
-    }
-
-    try {
-      const resultado = JSON.parse(text);
-      console.log('✅ Estado del domicilio actualizado:', resultado);
-      return resultado;
-    } catch (parseError) {
-      console.log('✅ Estado actualizado (respuesta no JSON)');
-      return { success: true };
-    }
-  } catch (error) {
-    console.error('❌ Error al actualizar estado del domicilio:', error);
-    throw error;
-  }
-};
-
-export const actualizarMetodoPagoDomicilio = async (domicilioId, metodoPago, pagadoAnticipado) => {
-  try {
-    console.log(`💳 Actualizando método de pago del domicilio ${domicilioId}`);
-    
-    const response = await fetchWithHeaders(`${API_URL}/domicilios/${domicilioId}/metodo-pago`, {
-      method: 'PUT',
-      body: JSON.stringify({ metodoPago, pagadoAnticipado })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error al actualizar método de pago: ${errorText}`);
-    }
-
-    // ✅ Manejar respuesta 204 No Content
-    if (response.status === 204) {
-      console.log('✅ Método de pago actualizado (204 No Content)');
-      return { success: true };
-    }
-
-    // Intentar parsear JSON si hay contenido
-    const text = await response.text();
-    if (!text || text.trim() === '') {
-      console.log('✅ Método de pago actualizado (sin cuerpo de respuesta)');
-      return { success: true };
-    }
-
-    try {
-      const resultado = JSON.parse(text);
-      console.log('✅ Método de pago actualizado:', resultado);
-      return resultado;
-    } catch (parseError) {
-      console.log('✅ Método de pago actualizado (respuesta no JSON)');
-      return { success: true };
-    }
-  } catch (error) {
-    console.error('❌ Error al actualizar método de pago:', error);
-    throw error;
-  }
-};
+/** La caja recibe el efectivo del domiciliario. */
+export const liquidarDomiciliario = (domiciliarioId) =>
+  enviar(`/domicilios/liquidaciones/${domiciliarioId}`, 'No se pudo registrar el efectivo recibido', 'POST');
 
 // ==================== ESTADÍSTICAS ====================
-export const getEstadisticasDomicilios = async () => {
-  try {
-    console.log('📊 Obteniendo estadísticas de domicilios');
-    const response = await fetchWithHeaders(`${API_URL}/domicilios/estadisticas/hoy`);
-    
-    if (!response.ok) {
-      throw new Error('Error al obtener estadísticas');
-    }
-    
-    const estadisticas = await response.json();
-    console.log('✅ Estadísticas obtenidas:', estadisticas);
-    return estadisticas;
-  } catch (error) {
-    console.error('❌ Error al obtener estadísticas:', error);
-    throw error;
-  }
-};
-
-export default {
-  buscarClientePorTelefono,
-  createClienteConDireccion,
-  getDireccionesCliente,
-  createDireccion,
-  getDomicilios,
-  getDomiciliosActivos,
-  getDomicilio,
-  createDomicilio,
-  actualizarEstadoDomicilio,
-  actualizarMetodoPagoDomicilio,
-  getEstadisticasDomicilios
-};
+export const getEstadisticasDomicilios = () => pedir('/domicilios/estadisticas/hoy', 'No se pudieron cargar las estadísticas');

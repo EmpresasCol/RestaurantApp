@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { Calculator, FileText, Receipt } from 'lucide-react';
 import * as api from './services/api';
 import { useCambios } from './services/realtime';
-import { actualizarEstadoDomicilio, getDomiciliosActivos } from './services/domiciliosApi';
+import { actualizarEstadoDomicilio, getDomiciliosActivos, getLiquidaciones, liquidarDomiciliario } from './services/domiciliosApi';
 import { ease, useAviso } from './components/inventario/ui';
 import PorCobrar from './components/caja/PorCobrar';
 import CobroPanel from './components/caja/CobroPanel';
@@ -14,9 +14,9 @@ import CierreCaja from './components/caja/CierreCaja';
 import { agruparCuentas, hoyLocal, pesos } from './utils/caja';
 
 const TITULOS = {
-  cobrar: ['Caja', 'Cuentas abiertas por mesa y domicilios en camino.'],
-  facturas: ['Facturas', 'Lo cobrado en el día, con su detalle para reimprimir.'],
-  cierre: ['Cierre de caja', 'Lo recaudado por método de pago y el cuadre del efectivo.'],
+  cobrar: ['Caja', 'Cuentas abiertas por mesa, domicilios en curso y el efectivo de los domiciliarios.'],
+  facturas: ['Facturas', 'Lo cobrado en el día (mesas y domicilios), con su detalle para reimprimir.'],
+  cierre: ['Cierre de caja', 'Abre con la base, cuenta el cajón al final y compáralo con lo que dice el sistema.'],
 };
 
 function Facturacion() {
@@ -24,20 +24,23 @@ function Facturacion() {
   const [pedidos, setPedidos] = useState([]);
   const [domicilios, setDomicilios] = useState([]);
   const [solicitudes, setSolicitudes] = useState([]);
-  const [cuentaEnCobro, setCuentaEnCobro] = useState(null);
+  const [liquidaciones, setLiquidaciones] = useState([]);
+  const [mesaEnCobro, setMesaEnCobro] = useState(null);
   const [fecha, setFecha] = useState(hoyLocal);
   const [version, setVersion] = useState(0);
   const [aviso, mostrar] = useAviso();
 
   const cargar = useCallback(async () => {
     try {
-      const [p, d, s] = await Promise.all([
+      const [p, d, s, l] = await Promise.all([
         api.getPedidosActivos(),
         getDomiciliosActivos().catch(() => []),
         api.getSolicitudesCuenta().catch(() => []),
+        getLiquidaciones().catch(() => []),
       ]);
       setPedidos(p);
       setSolicitudes(s);
+      setLiquidaciones(Array.isArray(l) ? l : []);
       setDomicilios(Array.isArray(d) ? d.filter((x) => !['Entregado', 'Cancelado'].includes(x.estado)) : []);
     } catch {
       mostrar('No se pudieron cargar las cuentas', 'error');
@@ -54,20 +57,32 @@ function Facturacion() {
   }, [cargar]);
 
   const cuentas = useMemo(() => agruparCuentas(pedidos, solicitudes), [pedidos, solicitudes]);
-  const porCobrar = cuentas.reduce((t, c) => t + c.total, 0) + domicilios.reduce((t, d) => t + d.total, 0);
+  // La cuenta en cobro se lee de lo último cargado: así el panel ve lo que queda tras un cobro parcial.
+  const cuentaEnCobro = cuentas.find((c) => c.mesaId === mesaEnCobro) ?? null;
+  const porCobrar = cuentas.reduce((t, c) => t + c.total, 0) + domicilios.filter((d) => !d.pagadoAnticipado).reduce((t, d) => t + d.total, 0);
 
-  const domicilioCobrado = async (d) => {
+  const domicilioCobrado = async (d, metodoPago) => {
     try {
-      await actualizarEstadoDomicilio(d.id, 'Entregado');
-      mostrar(`Domicilio #${d.id} entregado y cobrado`);
+      await actualizarEstadoDomicilio(d.id, 'Entregado', { metodoPago });
+      mostrar(`Domicilio #${d.id} entregado y facturado`);
       cargar();
     } catch (e) {
-      mostrar(e.message.replace(/^Error al actualizar estado:\s*/, ''), 'error');
+      mostrar(e.message, 'error');
+    }
+  };
+
+  const liquidar = async (l) => {
+    try {
+      const r = await liquidarDomiciliario(l.domiciliarioId);
+      mostrar(`Recibiste ${pesos(r.total)} de ${l.nombre}`);
+      cargar();
+    } catch (e) {
+      mostrar(e.message, 'error');
     }
   };
 
   const vistas = [
-    { id: 'cobrar', label: 'Por cobrar', icon: Receipt, contador: cuentas.length + domicilios.length },
+    { id: 'cobrar', label: 'Por cobrar', icon: Receipt, contador: cuentas.length + domicilios.length + liquidaciones.length },
     { id: 'facturas', label: 'Facturas', icon: FileText },
     { id: 'cierre', label: 'Cierre del día', icon: Calculator },
   ];
@@ -110,13 +125,16 @@ function Facturacion() {
         </header>
 
         {vista === 'cobrar' && (
-          <PorCobrar cuentas={cuentas} domicilios={domicilios} onCobrar={setCuentaEnCobro} onDomicilioCobrado={domicilioCobrado} />
+          <PorCobrar
+            cuentas={cuentas} domicilios={domicilios} liquidaciones={liquidaciones}
+            onCobrar={(c) => setMesaEnCobro(c.mesaId)} onDomicilioCobrado={domicilioCobrado} onLiquidar={liquidar}
+          />
         )}
         {vista === 'facturas' && <FacturasDia fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} />}
-        {vista === 'cierre' && <CierreCaja fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} />}
+        {vista === 'cierre' && <CierreCaja fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} onLiquidar={liquidar} />}
       </main>
 
-      <CobroPanel cuenta={cuentaEnCobro} onCerrar={() => setCuentaEnCobro(null)} onCobrado={cargar} mostrar={mostrar} />
+      <CobroPanel cuenta={cuentaEnCobro} onCerrar={() => setMesaEnCobro(null)} onCobrado={cargar} mostrar={mostrar} />
       {aviso}
     </div>
   );
