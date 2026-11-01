@@ -137,6 +137,7 @@ namespace RestaurantApi.Controllers
         {
             var pedido = await _context.Pedidos
                 .Include(p => p.Mesa)
+                .Include(p => p.Detalles)
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (pedido == null)
@@ -147,6 +148,14 @@ namespace RestaurantApi.Controllers
 
             if (!EstadosPedido.PuedeCambiar(pedido.Estado, estadoEnum))
                 return Conflict(new { message = $"No se puede pasar un pedido de {pedido.Estado} a {estadoEnum}" });
+
+            // Cobrar es de la caja (POST api/pagos/cobro emite la factura); el mesero solo lleva la cuenta.
+            if (estadoEnum == EstadoPedido.Pagado && pedido.Estado != estadoEnum && !EsCajaOAdmin())
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "El pago se registra en caja" });
+
+            if (estadoEnum == EstadoPedido.Cancelado && pedido.Estado != estadoEnum
+                && User.IsInRole(nameof(RolUsuario.Mesero)) && EstadosPedido.CocinaEmpezo(pedido))
+                return Conflict(new { message = "La cocina ya empezó este pedido. Pide a cocina o al administrador que lo cancele." });
 
             var cambio = pedido.Estado != estadoEnum;
             pedido.Estado = estadoEnum;
@@ -179,6 +188,29 @@ namespace RestaurantApi.Controllers
             });
         }
 
+        /// <summary>
+        /// Cocina empieza a preparar el pedido: sus platos pendientes pasan a EnPreparacion.
+        /// Desde ese momento el mesero ya no lo edita ni lo cancela.
+        /// </summary>
+        [HttpPut("{id}/preparar")]
+        [Authorize(Roles = "Administrador,Cocina")]
+        public async Task<IActionResult> Preparar(int id)
+        {
+            var pedido = await _context.Pedidos
+                .Include(p => p.Detalles)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (pedido == null)
+                return NotFound();
+            if (pedido.Estado != EstadoPedido.EnProceso)
+                return Conflict(new { message = $"Un pedido {pedido.Estado} ya no se empieza a preparar" });
+
+            foreach (var d in pedido.Detalles.Where(d => d.Estado == EstadoDetalle.Pendiente))
+                d.Estado = EstadoDetalle.EnPreparacion;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         // PUT: api/Pedidos/5/actualizar
         /// <summary>Reemplaza los detalles; el inventario se ajusta solo por la diferencia.</summary>
         [HttpPut("{id}/actualizar")]
@@ -193,6 +225,9 @@ namespace RestaurantApi.Controllers
 
             if (!EstadosPedido.EsEditable(pedido.Estado))
                 return Conflict(new { message = $"Un pedido {pedido.Estado} no se puede modificar" });
+
+            if (EstadosPedido.CocinaEmpezo(pedido))
+                return Conflict(new { message = "La cocina ya empezó este pedido. Agrega los platos nuevos como otro pedido." });
 
             var lineas = dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
             // Un platillo que se ocultó después de pedirlo puede seguir en el pedido que se edita.
@@ -374,8 +409,18 @@ namespace RestaurantApi.Controllers
                 p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
 
             if (!otrosAbiertos)
+            {
                 pedido.Mesa.Estado = EstadoMesa.Disponible;
+                // Sin cuenta abierta, una solicitud de cuenta pendiente ya no aplica.
+                var pendientes = await _context.SolicitudesCuenta
+                    .Where(s => s.MesaId == pedido.MesaId && s.Estado == SolicitudCuenta.Pendiente)
+                    .ToListAsync();
+                foreach (var s in pendientes) s.Estado = SolicitudCuenta.Anulada;
+            }
         }
+
+        private bool EsCajaOAdmin()
+            => User.IsInRole(nameof(RolUsuario.Caja)) || User.IsInRole(nameof(RolUsuario.Administrador));
 
         private async Task SincronizarInventarioAsync(int pedidoId, bool cancelar)
         {
@@ -428,6 +473,7 @@ namespace RestaurantApi.Controllers
             MeseroNombre = pedido.Usuario?.Nombre ?? "Sin asignar",
             Estado = pedido.Estado.ToString(),
             Fecha = pedido.Fecha,
+            CocinaEmpezo = EstadosPedido.CocinaEmpezo(pedido),
             Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
             {
                 Id = d.Id,

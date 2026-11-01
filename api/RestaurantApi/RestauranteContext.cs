@@ -46,6 +46,7 @@ namespace RestaurantApi
         public DbSet<Pago> Pagos { get; set; }
         public DbSet<Factura> Facturas { get; set; }
         public DbSet<UsuarioFCM> UsuariosFCM { get; set; }
+        public DbSet<SolicitudCuenta> SolicitudesCuenta { get; set; }
 
         // Domicilios
         public DbSet<Cliente> Clientes { get; set; }
@@ -403,6 +404,17 @@ namespace RestaurantApi
                     .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
                 entity.Property(e => e.CostoTotal)
                     .Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+            });
+
+            modelBuilder.Entity<SolicitudCuenta>(entity =>
+            {
+                entity.ToTable("SolicitudesCuenta");
+                entity.Property(e => e.MetodoPago).HasMaxLength(10);
+                entity.Property(e => e.Comprobante).HasColumnType("mediumtext");
+                entity.Property(e => e.Estado).HasMaxLength(10).IsRequired();
+                entity.HasIndex(e => new { e.MesaId, e.Estado });
+                entity.HasOne(e => e.Mesa).WithMany().HasForeignKey(e => e.MesaId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(e => e.Usuario).WithMany().HasForeignKey(e => e.UsuarioId).OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<PresentacionCompra>(entity =>

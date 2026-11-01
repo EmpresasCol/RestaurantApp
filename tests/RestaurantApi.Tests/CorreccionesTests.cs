@@ -112,7 +112,7 @@ public class CorreccionesTests
     {
         using var ctx = TestDb.Crear();
         TestDb.CrearPedidoDirecto(ctx, 1, 1);
-        await Pedidos(ctx).ActualizarEstado(1, new ActualizarEstadoPedidoDto { Estado = "Pagado" });
+        await TestDb.ComoAdmin(Pedidos(ctx)).ActualizarEstado(1, new ActualizarEstadoPedidoDto { Estado = "Pagado" });
 
         var r = await Pedidos(ctx).ActualizarPedidoCompleto(1, new ActualizarPedidoCompletoDto
         {

@@ -12,6 +12,7 @@ public class TemaRealtimeTests
     [InlineData("/api/PedidoDetalles/3", "pedidos")]
     [InlineData("/api/pagos", "pedidos")]
     [InlineData("/api/facturas/1", "pedidos")]
+    [InlineData("/api/cuentas/solicitudes", "pedidos")]
     [InlineData("/api/mesas/2/estado", "mesas")]
     [InlineData("/api/domicilios/4/estado", "domicilios")]
     [InlineData("/api/domiciliarios/1/pedidos/4/recoger", "domicilios")]

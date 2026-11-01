@@ -112,14 +112,11 @@ namespace RestaurantApi.Controllers
             _context.Pagos.AddRange(pagos);
 
             foreach (var p in pedidos) p.Estado = EstadoPedido.Pagado;
-            var mesa = pedidos[0].Mesa;
-            if (mesa != null)
-            {
-                var otrosAbiertos = await _context.Pedidos.AnyAsync(p =>
-                    p.MesaId == mesa.Id && !ids.Contains(p.Id) &&
-                    p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
-                if (!otrosAbiertos) mesa.Estado = EstadoMesa.Disponible;
-            }
+            var mesaId = pedidos[0].MesaId;
+            var cuentaSaldada = !await _context.Pedidos.AnyAsync(p =>
+                p.MesaId == mesaId && !ids.Contains(p.Id) &&
+                p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
+            if (cuentaSaldada && pedidos[0].Mesa is { } mesa) mesa.Estado = EstadoMesa.Disponible;
             await _context.SaveChangesAsync();
 
             var factura = new Factura
@@ -134,6 +131,18 @@ namespace RestaurantApi.Controllers
             await Facturacion.EmitirAsync(_context, factura);
 
             foreach (var pago in pagos) pago.FacturaId = factura.Id;
+            // Con la cuenta saldada, la solicitud del mesero queda ligada a su factura (y a su comprobante).
+            if (cuentaSaldada)
+            {
+                var solicitudes = await _context.SolicitudesCuenta
+                    .Where(s => s.MesaId == mesaId && s.Estado == SolicitudCuenta.Pendiente)
+                    .ToListAsync();
+                foreach (var s in solicitudes)
+                {
+                    s.Estado = SolicitudCuenta.Cobrada;
+                    s.FacturaId = factura.Id;
+                }
+            }
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
 

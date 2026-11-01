@@ -11,6 +11,9 @@
         public int UsuarioId { get; set; }
         public string MeseroNombre { get; set; } = "Sin asignar";
 
+        /// <summary>Cocina ya lo empezó o terminó: el mesero no lo edita ni lo cancela.</summary>
+        public bool CocinaEmpezo { get; set; }
+
         public List<PedidoDetalleDto> Detalles { get; set; } = new();
     }
 }

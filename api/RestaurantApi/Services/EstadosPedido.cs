@@ -24,6 +24,14 @@ namespace RestaurantApi.Services
         public static bool EsEditable(EstadoPedido estado)
             => estado is not (EstadoPedido.Pagado or EstadoPedido.Cancelado);
 
+        /// <summary>
+        /// La cocina tocó el pedido: lo empezó (algún plato EnPreparacion) o ya lo terminó.
+        /// Desde ahí el mesero no lo edita ni lo cancela; los platos nuevos van en otro pedido.
+        /// </summary>
+        public static bool CocinaEmpezo(Pedido pedido)
+            => pedido.Estado != EstadoPedido.EnProceso
+               || pedido.Detalles.Any(d => d.Estado is EstadoDetalle.EnPreparacion or EstadoDetalle.Listo);
+
         private static readonly Dictionary<string, string[]> Domicilio = new()
         {
             ["EnPreparacion"] = new[] { "Listo", "Cancelado" },

@@ -55,10 +55,22 @@ public class PedidosControllerTests
         using var ctx = TestDb.Crear();
         var creado = (PedidoDto)((CreatedAtActionResult)(await Controller(ctx).PostPedido(PedidoValido())).Result!).Value!;
 
-        var r = await Controller(ctx).ActualizarEstado(creado.Id, new ActualizarEstadoPedidoDto { Estado = "Pagado" });
+        var r = await TestDb.ComoAdmin(Controller(ctx)).ActualizarEstado(creado.Id, new ActualizarEstadoPedidoDto { Estado = "Pagado" });
 
         Assert.IsType<OkObjectResult>(r);
         Assert.Equal(EstadoMesa.Disponible, ctx.Mesas.AsNoTracking().Single(m => m.Id == TestDb.MesaUnoId).Estado);
+    }
+
+    [Fact]
+    public async Task El_mesero_no_puede_marcar_un_pedido_como_pagado()
+    {
+        using var ctx = TestDb.Crear();
+        TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
+
+        var r = await Controller(ctx).ActualizarEstado(1, new ActualizarEstadoPedidoDto { Estado = "Pagado" });
+
+        Assert.Equal(403, Assert.IsType<ObjectResult>(r).StatusCode);
+        Assert.Equal(EstadoPedido.Entregado, ctx.Pedidos.AsNoTracking().Single().Estado);
     }
 
     [Fact]
@@ -135,7 +147,7 @@ public class PedidosControllerTests
     {
         using var ctx = TestDb.Crear();
         TestDb.CrearPedidoDirecto(ctx, 1, 1);
-        var c = Controller(ctx);
+        var c = TestDb.ComoAdmin(Controller(ctx));
         await c.ActualizarEstado(1, new ActualizarEstadoPedidoDto { Estado = "Pagado" });
 
         var r = await c.ActualizarEstado(1, new ActualizarEstadoPedidoDto { Estado = "EnProceso" });

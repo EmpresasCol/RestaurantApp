@@ -103,6 +103,22 @@ CREATE TABLE UsuariosFCM (
     UNIQUE KEY unique_usuario_token (UsuarioId, FcmToken)
 ) ENGINE=InnoDB;
 
+-- Solicitud de cuenta del mesero (ver migraciones/2026-11-03_solicitudes_cuenta.sql).
+CREATE TABLE SolicitudesCuenta (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    MesaId INT NOT NULL,
+    UsuarioId INT NOT NULL,
+    Fecha DATETIME NOT NULL,
+    MetodoPago VARCHAR(10) NULL,
+    Comprobante MEDIUMTEXT NULL,
+    FechaPago DATETIME NULL,
+    Estado VARCHAR(10) NOT NULL DEFAULT 'Pendiente',
+    FacturaId INT NULL,
+    INDEX idx_solicitudes_mesa_estado (MesaId, Estado),
+    FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE RESTRICT,
+    FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
 -- =====================================================
 -- SECCIÓN 2: MÓDULO DE INVENTARIO
 -- =====================================================
