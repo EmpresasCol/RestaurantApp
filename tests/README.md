@@ -6,7 +6,8 @@ Creadas durante la auditoría técnica del 27/10/2026.
 | --- | --- | --- |
 | API .NET 8 (xUnit + EF Core InMemory) | `tests/RestaurantApi.Tests/` | `dotnet test tests/RestaurantApi.Tests` |
 | Web React (Jest + Testing Library) | `web/mi-restaurante/src/__tests__/` | `cd web/mi-restaurante && npm test -- --watchAll=false` |
-| App Flutter | `app/restaurant_app/test/models_test.dart` | `cd app/restaurant_app && flutter test test/models_test.dart` |
+| App Flutter (reglas, providers con API simulada, pantallas) | `app/restaurant_app/test/` | `cd app/restaurant_app && flutter test` |
+| App móvil, casos manuales | `tests/PLAN_PRUEBAS_MOVIL.md` | En celular, con la web de cocina y caja |
 
 ## Convención
 
