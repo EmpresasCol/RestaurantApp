@@ -33,6 +33,54 @@ namespace RestaurantApi.Dtos
         /// <summary>Cuentas que siguen abiertas ahora mismo (para no cerrar con mesas sin cobrar).</summary>
         public int CuentasAbiertas { get; set; }
         public decimal ValorAbierto { get; set; }
+        /// <summary>Domicilios que siguen en curso ahora mismo.</summary>
+        public int DomiciliosEnCurso { get; set; }
+        public bool EsHoy { get; set; }
+
+        // ── Arqueo del cajón ──
+        /// <summary>Efectivo con que se abrió la caja.</summary>
+        public decimal Base { get; set; }
+        public bool BaseRegistrada { get; set; }
+        /// <summary>Cobros de mesa en efectivo (consumo y propina).</summary>
+        public decimal EfectivoMesa { get; set; }
+        public decimal PropinasEfectivo { get; set; }
+        /// <summary>Efectivo de domicilios que llegó al cajón ese día (entregado por el domiciliario o cobrado en caja).</summary>
+        public decimal EfectivoDomicilios { get; set; }
+        /// <summary>Efectivo que los domiciliarios cobraron y no han entregado (no está en el cajón).</summary>
+        public List<LiquidacionPendienteDto> EfectivoEnDomiciliarios { get; set; } = new();
+        public decimal PropinasPagadas { get; set; }
+        public decimal Retiros { get; set; }
+        /// <summary>Base + efectivo de mesa + efectivo de domicilios − propinas pagadas − retiros.</summary>
+        public decimal EfectivoEsperado { get; set; }
+        public decimal? EfectivoContado { get; set; }
+        public decimal? Diferencia { get; set; }
+        /// <summary>Lo que el sistema dice que entró por datáfono y por transferencia o QR.</summary>
+        public decimal Tarjeta { get; set; }
+        public decimal Transferencias { get; set; }
+        public decimal? TarjetaDatafono { get; set; }
+        public decimal? TransferenciasBanco { get; set; }
+        public string? Observaciones { get; set; }
+        public bool Cerrada { get; set; }
+        public DateTime? FechaCierre { get; set; }
+        public string? CerradaPor { get; set; }
+    }
+
+    public class AperturaCajaDto
+    {
+        public DateTime Fecha { get; set; }
+        public decimal Base { get; set; }
+    }
+
+    /// <summary>Arqueo al cerrar: lo que se contó y lo que se pagó con efectivo del cajón.</summary>
+    public class CerrarCajaDto
+    {
+        public DateTime Fecha { get; set; }
+        public decimal EfectivoContado { get; set; }
+        public decimal PropinasPagadas { get; set; }
+        public decimal Retiros { get; set; }
+        public decimal? TarjetaDatafono { get; set; }
+        public decimal? TransferenciasBanco { get; set; }
+        public string? Observaciones { get; set; }
     }
 
     public class VentaDiaDto

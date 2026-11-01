@@ -1,9 +1,10 @@
-﻿namespace RestaurantApi.Dtos
+namespace RestaurantApi.Dtos
 {
     public class FacturaDto
     {
         public int Id { get; set; }
-        public int PagoId { get; set; }
+        public int? PagoId { get; set; }
+        public int? DomicilioId { get; set; }
         public string NumeroFactura { get; set; } = string.Empty;
         public string? NitCliente { get; set; }
         public string? NombreCliente { get; set; }
@@ -18,6 +19,16 @@
         public string MetodoPago { get; set; } = string.Empty;
         public List<int> PedidoIds { get; set; } = new();
         public List<FacturaItemDto> Items { get; set; } = new();
+        /// <summary>Cómo se pagó: uno o varios pagos (propina incluida).</summary>
+        public List<FacturaPagoDto> Pagos { get; set; } = new();
+        /// <summary>Solo domicilios: cliente y dirección para la tirilla.</summary>
+        public string? Domicilio { get; set; }
+    }
+
+    public class FacturaPagoDto
+    {
+        public string MetodoPago { get; set; } = string.Empty;
+        public decimal Monto { get; set; }
     }
 
     public class FacturaItemDto

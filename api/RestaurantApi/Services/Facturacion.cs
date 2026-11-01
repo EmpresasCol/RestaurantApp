@@ -61,13 +61,43 @@ namespace RestaurantApi.Services
             return $"{PrefijoConsecutivo}{n:D8}";
         }
 
-        /// <summary>Facturas con sus platos, mesa y método. Una factura cubre los pagos con su FacturaId (o su PagoId).</summary>
+        /// <summary>
+        /// Factura del domicilio: se emite al entregarlo y cobrarlo, a nombre del cliente.
+        /// Si ya existe (se marcó entregado dos veces), devuelve la misma.
+        /// </summary>
+        public static async Task<Factura> EmitirDomicilioAsync(RestauranteContext ctx, Domicilio d, string nombreCliente)
+        {
+            var existente = await ctx.Facturas.FirstOrDefaultAsync(f => f.DomicilioId == d.Id);
+            if (existente != null) return existente;
+
+            var factura = new Factura
+            {
+                DomicilioId = d.Id,
+                Subtotal = d.Subtotal + d.CostoEnvio,
+                Propina = 0,
+                Total = d.Subtotal + d.CostoEnvio,
+                FechaEmision = d.FechaEntrega ?? DateTime.UtcNow
+            };
+            AsignarCliente(factura, null, nombreCliente);
+            await EmitirAsync(ctx, factura);
+            return factura;
+        }
+
+        /// <summary>
+        /// Facturas con sus platos, mesa y pagos. Los platos de una cuenta de mesa llevan su FacturaId;
+        /// las facturas anteriores a la cuenta dividida se reconstruyen con los pedidos de sus pagos.
+        /// </summary>
         public static async Task<List<FacturaDto>> ConDetalleAsync(RestauranteContext ctx, List<Factura> facturas)
         {
             var ids = facturas.Select(f => f.Id).ToList();
-            var pagoIds = facturas.Select(f => f.PagoId).ToList();
+            var pagoIds = facturas.Where(f => f.PagoId != null).Select(f => f.PagoId!.Value).ToList();
             var pagos = await ctx.Pagos.AsNoTracking()
                 .Where(p => (p.FacturaId != null && ids.Contains(p.FacturaId.Value)) || pagoIds.Contains(p.Id))
+                .ToListAsync();
+            var detalles = await ctx.PedidoDetalles.AsNoTracking()
+                .Include(d => d.Platillo)
+                .Include(d => d.Pedido).ThenInclude(p => p!.Mesa)
+                .Where(d => d.FacturaId != null && ids.Contains(d.FacturaId.Value))
                 .ToListAsync();
             var pedidoIds = pagos.Select(p => p.PedidoId).Distinct().ToList();
             var pedidos = await ctx.Pedidos.AsNoTracking()
@@ -75,15 +105,21 @@ namespace RestaurantApi.Services
                 .Include(p => p.Detalles).ThenInclude(d => d.Platillo)
                 .Where(p => pedidoIds.Contains(p.Id))
                 .ToDictionaryAsync(p => p.Id);
+            var domicilioIds = facturas.Where(f => f.DomicilioId != null).Select(f => f.DomicilioId!.Value).ToList();
+            var domicilios = await ctx.Domicilios.AsNoTracking()
+                .Include(d => d.Cliente)
+                .Include(d => d.Direccion)
+                .Include(d => d.Detalles).ThenInclude(x => x.Platillo)
+                .Where(d => domicilioIds.Contains(d.Id))
+                .ToDictionaryAsync(d => d.Id);
 
             return facturas.Select(f =>
             {
-                var suyos = pagos.Where(p => p.FacturaId == f.Id || p.Id == f.PagoId).DistinctBy(p => p.Id).ToList();
-                var susPedidos = suyos.Select(p => pedidos.GetValueOrDefault(p.PedidoId)).OfType<Pedido>().ToList();
-                return new FacturaDto
+                var dto = new FacturaDto
                 {
                     Id = f.Id,
                     PagoId = f.PagoId,
+                    DomicilioId = f.DomicilioId,
                     NumeroFactura = f.NumeroFactura,
                     NitCliente = f.NitCliente,
                     NombreCliente = f.NombreCliente,
@@ -91,23 +127,54 @@ namespace RestaurantApi.Services
                     Propina = f.Propina,
                     Total = f.Total,
                     ArchivoUrl = f.ArchivoUrl,
-                    FechaEmision = f.FechaEmision,
-                    MesaNumero = susPedidos.FirstOrDefault()?.Mesa?.Numero,
-                    MetodoPago = string.Join(" + ", suyos.Select(p => p.MetodoPago.ToString()).Distinct()),
-                    PedidoIds = susPedidos.Select(p => p.Id).OrderBy(x => x).ToList(),
-                    // El mismo plato al mismo precio en varios pedidos va en una sola línea.
-                    Items = susPedidos.SelectMany(p => p.Detalles)
-                        .GroupBy(d => new { d.PlatilloId, Precio = Cuentas.Precio(d) })
+                    FechaEmision = f.FechaEmision
+                };
+
+                if (f.DomicilioId is { } domicilioId && domicilios.TryGetValue(domicilioId, out var dom))
+                {
+                    dto.Domicilio = $"Domicilio #{dom.Id} · {dom.Cliente?.Nombre} · {dom.Direccion?.DireccionCompleta}";
+                    dto.MetodoPago = dom.MetodoPago;
+                    dto.Pagos = new List<FacturaPagoDto> { new() { MetodoPago = dom.MetodoPago, Monto = f.Total } };
+                    dto.Items = dom.Detalles
+                        .GroupBy(d => new { d.PlatilloId, d.PrecioUnitario })
                         .Select(g => new FacturaItemDto
                         {
                             Nombre = g.First().Platillo?.Nombre ?? "Plato",
                             Cantidad = g.Sum(d => d.Cantidad),
-                            PrecioUnitario = g.Key.Precio,
-                            Total = g.Key.Precio * g.Sum(d => d.Cantidad)
+                            PrecioUnitario = g.Key.PrecioUnitario,
+                            Total = g.Key.PrecioUnitario * g.Sum(d => d.Cantidad)
                         })
                         .OrderBy(i => i.Nombre)
-                        .ToList()
-                };
+                        .ToList();
+                    if (dom.CostoEnvio > 0)
+                        dto.Items.Add(new FacturaItemDto { Nombre = "Envío a domicilio", Cantidad = 1, PrecioUnitario = dom.CostoEnvio, Total = dom.CostoEnvio });
+                    return dto;
+                }
+
+                var suyos = pagos.Where(p => p.FacturaId == f.Id || p.Id == f.PagoId).DistinctBy(p => p.Id).OrderBy(p => p.Id).ToList();
+                var platos = detalles.Where(d => d.FacturaId == f.Id).ToList();
+                if (platos.Count == 0)
+                    platos = suyos.Select(p => pedidos.GetValueOrDefault(p.PedidoId)).OfType<Pedido>()
+                        .DistinctBy(p => p.Id).SelectMany(p => p.Detalles).ToList();
+
+                dto.MesaNumero = platos.Select(d => d.Pedido?.Mesa?.Numero).FirstOrDefault(n => n != null)
+                                 ?? suyos.Select(p => pedidos.GetValueOrDefault(p.PedidoId)?.Mesa?.Numero).FirstOrDefault(n => n != null);
+                dto.MetodoPago = string.Join(" + ", suyos.Select(p => p.MetodoPago.ToString()).Distinct());
+                dto.Pagos = suyos.Select(p => new FacturaPagoDto { MetodoPago = p.MetodoPago.ToString(), Monto = p.Monto + p.MontoPropina }).ToList();
+                dto.PedidoIds = platos.Select(d => d.PedidoId).Distinct().OrderBy(x => x).ToList();
+                // El mismo plato al mismo precio en varios pedidos va en una sola línea.
+                dto.Items = platos
+                    .GroupBy(d => new { d.PlatilloId, Precio = Cuentas.Precio(d) })
+                    .Select(g => new FacturaItemDto
+                    {
+                        Nombre = g.First().Platillo?.Nombre ?? "Plato",
+                        Cantidad = g.Sum(d => d.Cantidad),
+                        PrecioUnitario = g.Key.Precio,
+                        Total = g.Key.Precio * g.Sum(d => d.Cantidad)
+                    })
+                    .OrderBy(i => i.Nombre)
+                    .ToList();
+                return dto;
             }).ToList();
         }
     }

@@ -1,4 +1,4 @@
-﻿namespace RestaurantApi.Dtos
+namespace RestaurantApi.Dtos
 {
     public class PedidoDto
     {
@@ -13,6 +13,12 @@
 
         /// <summary>Cocina ya lo empezó o terminó: el mesero no lo edita ni lo cancela.</summary>
         public bool CocinaEmpezo { get; set; }
+
+        /// <summary>El mesero cambió los platos (null si nunca): la cocina lo resalta.</summary>
+        public DateTime? FechaEdicion { get; set; }
+
+        /// <summary>Lo que falta cobrar de este pedido (sin los platos ya facturados).</summary>
+        public decimal PorCobrar { get; set; }
 
         public List<PedidoDetalleDto> Detalles { get; set; } = new();
     }

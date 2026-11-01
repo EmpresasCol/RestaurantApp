@@ -54,6 +54,11 @@ namespace RestaurantApi.Dtos
         public int? DomiciliarioId { get; set; }
         public string? DomiciliarioNombre { get; set; }
 
+        /// <summary>La cocina ya lo empezó (si está asignado y aún en cocina, el domiciliario espera).</summary>
+        public bool CocinaEmpezo { get; set; }
+        public decimal? PagaCon { get; set; }
+        public decimal? Cambio { get; set; }
+
         public List<DomicilioDetalleDto> Detalles { get; set; } = new();
     }
 
@@ -66,6 +71,9 @@ namespace RestaurantApi.Dtos
         public int EntregadosSemana { get; set; }
         public int EntregadosMes { get; set; }
         public double? TiempoPromedioEntregaMin { get; set; }
+        /// <summary>Efectivo cobrado que debe entregar en caja.</summary>
+        public decimal EfectivoPorEntregar { get; set; }
+        public int EntregasPorLiquidar { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

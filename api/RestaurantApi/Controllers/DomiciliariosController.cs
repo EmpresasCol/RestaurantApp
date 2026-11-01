@@ -1,4 +1,4 @@
-﻿// api/RestaurantApi/Controllers/DomiciliariosController.cs
+// api/RestaurantApi/Controllers/DomiciliariosController.cs
 // Endpoints específicos para el rol Domiciliario (app móvil).
 // No expone información más allá de lo necesario: el domiciliario solo ve
 // pedidos 'Listo' sin asignar y los suyos asignados en curso.
@@ -110,7 +110,7 @@ namespace RestaurantApi.Controllers
         // ══════════════════════════════════════════════════════════════════
         // PEDIDOS VISIBLES PARA EL DOMICILIARIO
         //   · Listos y SIN asignar (bolsa común).
-        //   · Recogidos / EnCamino del propio domiciliario.
+        //   · Los que le asignaron (aún en cocina o listos) y sus Recogidos / EnCamino.
         // ══════════════════════════════════════════════════════════════════
 
         [HttpGet("{domiciliarioId:int}/pedidos")]
@@ -128,8 +128,8 @@ namespace RestaurantApi.Controllers
                 .Where(d =>
                     // Bolsa común: listos sin asignar
                     (d.Estado == "Listo" && d.DomiciliarioId == null)
-                    // Mis entregas activas
-                    || ((d.Estado == "Recogido" || d.Estado == "EnCamino")
+                    // Mis entregas: asignadas por el restaurante o ya en camino
+                    || ((d.Estado == "EnPreparacion" || d.Estado == "Listo" || d.Estado == "Recogido" || d.Estado == "EnCamino")
                         && d.DomiciliarioId == domiciliarioId))
                 .OrderBy(d => d.FechaPedido)
                 .Select(d => MapToDomiciliarioDto(d))
@@ -212,10 +212,12 @@ namespace RestaurantApi.Controllers
         }
 
         /// <summary>
-        /// Marcar "entregado al cliente". Transición: Recogido o EnCamino → Entregado.
+        /// Marcar "entregado y cobrado". Transición: Recogido o EnCamino → Entregado. Si el cliente
+        /// pagó distinto a lo que dijo al pedir, llega el método real; una transferencia trae su foto.
+        /// Se emite la factura. El efectivo queda pendiente hasta que el domiciliario lo entregue en caja.
         /// </summary>
         [HttpPut("{domiciliarioId:int}/pedidos/{domicilioId:int}/entregar")]
-        public async Task<IActionResult> MarcarEntregado(int domiciliarioId, int domicilioId)
+        public async Task<IActionResult> MarcarEntregado(int domiciliarioId, int domicilioId, [FromBody] EntregarDomicilioDto? dto = null)
         {
             var rechazo = await ValidarDomiciliarioAsync(domiciliarioId);
             if (rechazo is not null) return rechazo;
@@ -229,10 +231,16 @@ namespace RestaurantApi.Controllers
             if (domicilio.Estado is not ("Recogido" or "EnCamino"))
                 return Conflict(new { message = $"Estado inválido: {domicilio.Estado}" });
 
-            domicilio.Estado       = "Entregado";
-            domicilio.FechaEntrega = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
+            try
+            {
+                var error = await Entregas.EntregarAsync(_context, domicilio, dto?.MetodoPago, dto?.Comprobante, cobradoEnCaja: false);
+                if (error != null)
+                    return BadRequest(new { message = error });
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(new { message = "El domicilio cambió. Recarga e intenta de nuevo." });
+            }
             await _realtime.NotificarCambioEstadoAsync(domicilio);
 
             _logger.LogInformation("✅ Pedido #{Id} entregado por domiciliario {Dom}", domicilioId, domiciliarioId);
@@ -277,7 +285,9 @@ namespace RestaurantApi.Controllers
                     .Where(e => e.FechaRecogida.HasValue && e.FechaEntrega.HasValue)
                     .Select(e => (e.FechaEntrega!.Value - e.FechaRecogida!.Value).TotalMinutes)
                     .DefaultIfEmpty()
-                    .Average()
+                    .Average(),
+                EfectivoPorEntregar    = entregas.Where(Entregas.EfectivoPorLiquidar).Sum(e => e.Subtotal + e.CostoEnvio),
+                EntregasPorLiquidar    = entregas.Count(Entregas.EfectivoPorLiquidar)
             };
 
             return Ok(stats);
@@ -323,6 +333,9 @@ namespace RestaurantApi.Controllers
             NotasCliente          = d.NotasCliente,
             DomiciliarioId        = d.DomiciliarioId,
             DomiciliarioNombre    = d.Domiciliario?.Nombre,
+            CocinaEmpezo          = d.Estado != "EnPreparacion" || d.InicioPreparacion != null,
+            PagaCon               = d.PagaCon,
+            Cambio                = Entregas.Cambio(d),
             Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
             {
                 Id              = dd.Id,

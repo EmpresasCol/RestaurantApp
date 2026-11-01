@@ -1,4 +1,4 @@
-﻿// api/RestaurantApi/RestauranteContext.cs
+// api/RestaurantApi/RestauranteContext.cs
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
 
@@ -47,6 +47,8 @@ namespace RestaurantApi
         public DbSet<Factura> Facturas { get; set; }
         public DbSet<UsuarioFCM> UsuariosFCM { get; set; }
         public DbSet<SolicitudCuenta> SolicitudesCuenta { get; set; }
+        public DbSet<PagoAvisado> PagosAvisados { get; set; }
+        public DbSet<CierreCaja> CierresCaja { get; set; }
 
         // Domicilios
         public DbSet<Cliente> Clientes { get; set; }
@@ -126,6 +128,14 @@ namespace RestaurantApi
 
             modelBuilder.Entity<Pago>()
                 .HasIndex(p => p.FacturaId);
+
+            // Plato cobrado: la factura que lo cubre (dividir la cuenta por consumo).
+            modelBuilder.Entity<PedidoDetalle>()
+                .HasIndex(d => d.FacturaId);
+
+            modelBuilder.Entity<Factura>()
+                .HasIndex(f => f.DomicilioId)
+                .IsUnique();
 
             // Factura.PagoId (pago principal) y Pago.FacturaId (todos los pagos de la cuenta) son dos
             // relaciones distintas; sin declararlas, EF las confunde e inventa una columna PagoId1.
@@ -412,9 +422,32 @@ namespace RestaurantApi
                 entity.Property(e => e.MetodoPago).HasMaxLength(10);
                 entity.Property(e => e.Comprobante).HasColumnType("mediumtext");
                 entity.Property(e => e.Estado).HasMaxLength(10).IsRequired();
+                entity.Property(e => e.Propina).HasColumnType("decimal(10,2)");
                 entity.HasIndex(e => new { e.MesaId, e.Estado });
                 entity.HasOne(e => e.Mesa).WithMany().HasForeignKey(e => e.MesaId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(e => e.Usuario).WithMany().HasForeignKey(e => e.UsuarioId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(e => e.Pagos).WithOne(p => p.Solicitud).HasForeignKey(p => p.SolicitudId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<PagoAvisado>(entity =>
+            {
+                entity.ToTable("PagosAvisados");
+                entity.Property(e => e.MetodoPago).HasMaxLength(10).IsRequired();
+                entity.Property(e => e.Monto).HasColumnType("decimal(10,2)");
+                entity.Property(e => e.Comprobante).HasColumnType("mediumtext");
+                entity.HasIndex(e => e.SolicitudId);
+            });
+
+            modelBuilder.Entity<CierreCaja>(entity =>
+            {
+                entity.ToTable("CierresCaja");
+                entity.Property(e => e.FechaCaja).HasColumnType("date");
+                entity.HasIndex(e => e.FechaCaja).IsUnique();
+                foreach (var monto in new[] { nameof(CierreCaja.Base), nameof(CierreCaja.PropinasPagadas), nameof(CierreCaja.Retiros),
+                             nameof(CierreCaja.EfectivoEsperado), nameof(CierreCaja.EfectivoContado),
+                             nameof(CierreCaja.TarjetaDatafono), nameof(CierreCaja.TransferenciasBanco) })
+                    entity.Property(monto).HasColumnType("decimal(12,2)");
+                entity.Property(e => e.Observaciones).HasMaxLength(500);
             });
 
             modelBuilder.Entity<PresentacionCompra>(entity =>
@@ -459,6 +492,7 @@ namespace RestaurantApi
             {
                 entity.Property(e => e.Estado).IsConcurrencyToken();
                 entity.Property(e => e.DomiciliarioId).IsConcurrencyToken();
+                entity.Property(e => e.ComprobantePago).HasColumnType("mediumtext");
             });
 
             // Las fechas se guardan en UTC; al leerlas se marcan como UTC para que
@@ -473,7 +507,7 @@ namespace RestaurantApi
             // Columnas DATE (sin hora): son fechas de calendario, no instantes.
             var soloFecha = new HashSet<string>
             {
-                "FechaIngreso", "FechaVencimiento", "FechaOrden", "FechaEntregaEstimada", "FechaEntregaReal"
+                "FechaIngreso", "FechaVencimiento", "FechaOrden", "FechaEntregaEstimada", "FechaEntregaReal", "FechaCaja"
             };
 
             foreach (var entityType in modelBuilder.Model.GetEntityTypes())

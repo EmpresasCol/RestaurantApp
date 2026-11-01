@@ -76,6 +76,8 @@ namespace RestaurantApi.Controllers
             await Facturacion.EmitirAsync(_context, factura);
 
             pago.FacturaId = factura.Id;
+            foreach (var d in await _context.PedidoDetalles.Where(d => d.PedidoId == pago.PedidoId && d.FacturaId == null).ToListAsync())
+                d.FacturaId = factura.Id;
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetFactura), new { id = factura.Id }, ADto(factura));

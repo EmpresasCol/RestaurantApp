@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -157,6 +157,14 @@ namespace RestaurantApi.Controllers
                 && User.IsInRole(nameof(RolUsuario.Mesero)) && EstadosPedido.CocinaEmpezo(pedido))
                 return Conflict(new { message = "La cocina ya empezó este pedido. Pide a cocina o al administrador que lo cancele." });
 
+            // Lo que ya se cobró en una factura no se cancela: la factura emitida no se reescribe.
+            if (estadoEnum == EstadoPedido.Cancelado && pedido.Estado != estadoEnum && pedido.Detalles.Any(d => d.FacturaId != null))
+                return Conflict(new { message = "Ya se cobró parte de este pedido; no se puede cancelar" });
+
+            // Servir es del mesero: la cocina solo marca listo y el pedido sigue a la vista hasta que llegue a la mesa.
+            if (estadoEnum == EstadoPedido.Entregado && pedido.Estado != estadoEnum && User.IsInRole(nameof(RolUsuario.Cocina)))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "El mesero marca el pedido como servido" });
+
             var cambio = pedido.Estado != estadoEnum;
             pedido.Estado = estadoEnum;
             await ActualizarMesaAsync(pedido);
@@ -243,6 +251,7 @@ namespace RestaurantApi.Controllers
                 .ToDictionary(g => g.Key, g => g.First().PrecioUnitario);
 
             _context.PedidoDetalles.RemoveRange(pedido.Detalles);
+            pedido.FechaEdicion = DateTime.UtcNow;
             foreach (var detalle in dto.Detalles)
             {
                 _context.PedidoDetalles.Add(new PedidoDetalle
@@ -291,6 +300,9 @@ namespace RestaurantApi.Controllers
             {
                 if (!EstadosPedido.EsEditable(estadoAnterior))
                     return Conflict(new { message = $"Un pedido {estadoAnterior} no se puede modificar" });
+                if (pedido.Detalles.Any(d => d.FacturaId != null))
+                    return Conflict(new { message = "Ya se cobró parte de este pedido; los platos nuevos van en otro pedido" });
+                pedido.FechaEdicion = DateTime.UtcNow;
 
                 var activos = detalles.Where(d => !d.Eliminar).Select(d => (d.PlatilloId, d.Cantidad)).ToList();
                 if (activos.Count > 0)
@@ -474,7 +486,9 @@ namespace RestaurantApi.Controllers
             Estado = pedido.Estado.ToString(),
             Fecha = pedido.Fecha,
             CocinaEmpezo = EstadosPedido.CocinaEmpezo(pedido),
-            Detalles = pedido.Detalles.Select(d => new PedidoDetalleDto
+            FechaEdicion = pedido.FechaEdicion,
+            PorCobrar = Cuentas.ConsumoPorCobrar(pedido),
+            Detalles = pedido.Detalles.OrderBy(d => d.Id).Select(d => new PedidoDetalleDto
             {
                 Id = d.Id,
                 PlatilloId = d.PlatilloId,
@@ -482,7 +496,8 @@ namespace RestaurantApi.Controllers
                 Cantidad = d.Cantidad,
                 Precio = Cuentas.Precio(d),
                 Nota = d.Nota,
-                Estado = d.Estado.ToString()
+                Estado = d.Estado.ToString(),
+                Pagado = d.FacturaId != null
             }).ToList()
         };
     }

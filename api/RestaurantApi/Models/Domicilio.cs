@@ -1,4 +1,4 @@
-﻿// api/RestaurantApi/Models/Domicilio.cs
+// api/RestaurantApi/Models/Domicilio.cs
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -70,6 +70,19 @@ namespace RestaurantApi.Models
 
         [MaxLength(20)]
         public string OrigenPedido { get; set; } = "Admin";
+
+        /// <summary>La cocina lo empezó; antes el cliente todavía puede editarlo.</summary>
+        public DateTime? InicioPreparacion { get; set; }
+
+        /// <summary>Billete con que paga el cliente en efectivo: el domiciliario lleva el cambio.</summary>
+        [Column(TypeName = "decimal(10,2)")]
+        public decimal? PagaCon { get; set; }
+
+        /// <summary>Foto de la transferencia que recibió el domiciliario al entregar (data URI).</summary>
+        public string? ComprobantePago { get; set; }
+
+        /// <summary>La caja recibió el efectivo que cobró el domiciliario.</summary>
+        public DateTime? FechaLiquidacion { get; set; }
 
         // Navegación
         [ForeignKey("ClienteId")]

@@ -50,6 +50,7 @@ CREATE TABLE Pedidos (
     UsuarioId INT NOT NULL,
     Estado ENUM('EnProceso','Listo','Entregado','Pagado','Cancelado') DEFAULT 'EnProceso',
     Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FechaEdicion DATETIME NULL,
     FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE RESTRICT,
     FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE RESTRICT,
     INDEX idx_estado (Estado)
@@ -63,6 +64,8 @@ CREATE TABLE PedidoDetalles (
     Nota TEXT,
     Estado ENUM('Pendiente','EnPreparacion','Listo','Cancelado') DEFAULT 'Pendiente',
     PrecioUnitario DECIMAL(10,2) NULL,
+    FacturaId INT NULL,
+    INDEX idx_detalles_factura (FacturaId),
     FOREIGN KEY (PedidoId) REFERENCES Pedidos(Id) ON DELETE CASCADE,
     FOREIGN KEY (PlatilloId) REFERENCES Platillos(Id) ON DELETE RESTRICT,
     CONSTRAINT chk_pedidodetalles_cantidad_positive CHECK (Cantidad > 0)
@@ -82,7 +85,8 @@ CREATE TABLE Pagos (
 
 CREATE TABLE Facturas (
     Id INT AUTO_INCREMENT PRIMARY KEY,
-    PagoId INT NOT NULL,
+    PagoId INT NULL,
+    DomicilioId INT NULL,
     NumeroFactura VARCHAR(50) UNIQUE NOT NULL,
     NitCliente VARCHAR(50),
     NombreCliente VARCHAR(150),
@@ -91,6 +95,7 @@ CREATE TABLE Facturas (
     Total DECIMAL(10,2) NOT NULL,
     ArchivoUrl VARCHAR(255),
     FechaEmision DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE INDEX ux_facturas_domicilio (DomicilioId),
     FOREIGN KEY (PagoId) REFERENCES Pagos(Id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
@@ -112,11 +117,44 @@ CREATE TABLE SolicitudesCuenta (
     MetodoPago VARCHAR(10) NULL,
     Comprobante MEDIUMTEXT NULL,
     FechaPago DATETIME NULL,
+    Propina DECIMAL(10,2) NULL,
     Estado VARCHAR(10) NOT NULL DEFAULT 'Pendiente',
     FacturaId INT NULL,
     INDEX idx_solicitudes_mesa_estado (MesaId, Estado),
     FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE RESTRICT,
     FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- Cómo pagó la mesa según el mesero: uno o varios pagos, cada transferencia con su foto.
+CREATE TABLE PagosAvisados (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    SolicitudId INT NOT NULL,
+    MetodoPago VARCHAR(10) NOT NULL,
+    Monto DECIMAL(10,2) NOT NULL,
+    Comprobante MEDIUMTEXT NULL,
+    Fecha DATETIME NOT NULL,
+    FacturaId INT NULL,
+    INDEX idx_avisados_solicitud (SolicitudId),
+    FOREIGN KEY (SolicitudId) REFERENCES SolicitudesCuenta(Id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Caja de cada día: base al abrir y arqueo al cerrar.
+CREATE TABLE CierresCaja (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    FechaCaja DATE NOT NULL,
+    Base DECIMAL(12,2) NOT NULL DEFAULT 0,
+    UsuarioAperturaId INT NULL,
+    FechaApertura DATETIME NULL,
+    PropinasPagadas DECIMAL(12,2) NOT NULL DEFAULT 0,
+    Retiros DECIMAL(12,2) NOT NULL DEFAULT 0,
+    EfectivoEsperado DECIMAL(12,2) NULL,
+    EfectivoContado DECIMAL(12,2) NULL,
+    TarjetaDatafono DECIMAL(12,2) NULL,
+    TransferenciasBanco DECIMAL(12,2) NULL,
+    Observaciones VARCHAR(500) NULL,
+    UsuarioCierreId INT NULL,
+    FechaCierre DATETIME NULL,
+    UNIQUE INDEX ux_cierres_fecha (FechaCaja)
 ) ENGINE=InnoDB;
 
 -- =====================================================
@@ -366,6 +404,10 @@ CREATE TABLE Domicilios (
     ObservacionCliente TEXT NULL,
     FechaObservacion DATETIME NULL,
     OrigenPedido ENUM('Admin','Publico') NOT NULL DEFAULT 'Admin',
+    InicioPreparacion DATETIME NULL,
+    PagaCon DECIMAL(10,2) NULL,
+    ComprobantePago MEDIUMTEXT NULL,
+    FechaLiquidacion DATETIME NULL,
     FechaCreacion DATETIME DEFAULT CURRENT_TIMESTAMP,
     FechaActualizacion DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (ClienteId) REFERENCES Clientes(Id) ON DELETE RESTRICT,

@@ -1,4 +1,4 @@
-﻿// api/RestaurantApi/Controllers/DomiciliosController.cs
+// api/RestaurantApi/Controllers/DomiciliosController.cs
 using System.Linq.Expressions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +15,6 @@ namespace RestaurantApi.Controllers
     public class DomiciliosController : ControllerBase
     {
         private const int CantidadMaximaPorLinea = 100;
-        private static readonly string[] MetodosPagoValidos = { "Efectivo", "Transferencia", "Tarjeta", "Nequi", "Daviplata" };
         private static readonly string[] EstadosActivos = { "EnPreparacion", "Listo", "Recogido", "EnCamino" };
 
         private readonly RestauranteContext _context;
@@ -36,7 +35,7 @@ namespace RestaurantApi.Controllers
                 .Select(AResponseDto)
                 .ToListAsync();
 
-            return Ok(domicilios);
+            return Ok(await ConFacturaAsync(domicilios));
         }
 
         // GET: api/domicilios/activos
@@ -50,7 +49,7 @@ namespace RestaurantApi.Controllers
                 .Select(AResponseDto)
                 .ToListAsync();
 
-            return Ok(domicilios);
+            return Ok(await ConFacturaAsync(domicilios));
         }
 
         // GET: api/domicilios/{id}
@@ -65,7 +64,22 @@ namespace RestaurantApi.Controllers
             if (domicilio == null)
                 return NotFound(new { message = "Domicilio no encontrado" });
 
-            return Ok(domicilio);
+            return Ok((await ConFacturaAsync(new List<DomicilioResponseDto> { domicilio }))[0]);
+        }
+
+        // GET: api/domicilios/hoy
+        /// <summary>Todo lo del día (hora de Colombia) más lo que sigue en curso de días anteriores.</summary>
+        [HttpGet("hoy")]
+        public async Task<ActionResult<IEnumerable<DomicilioResponseDto>>> GetDomiciliosHoy()
+        {
+            var hoy = HoraLocal.InicioDeHoyUtc();
+            var domicilios = await _context.Domicilios
+                .Where(d => d.FechaPedido >= hoy || EstadosActivos.Contains(d.Estado))
+                .OrderByDescending(d => d.FechaPedido)
+                .Select(AResponseDto)
+                .ToListAsync();
+
+            return Ok(await ConFacturaAsync(domicilios));
         }
 
         // POST: api/domicilios
@@ -82,8 +96,8 @@ namespace RestaurantApi.Controllers
             if (dto.CostoEnvio < 0)
                 return BadRequest(new { message = "El costo de envío no puede ser negativo" });
 
-            var metodoPago = string.IsNullOrWhiteSpace(dto.MetodoPago) ? "Efectivo" : dto.MetodoPago;
-            if (!MetodosPagoValidos.Contains(metodoPago))
+            var metodoPago = string.IsNullOrWhiteSpace(dto.MetodoPago) ? "Efectivo" : Entregas.Normalizar(dto.MetodoPago);
+            if (metodoPago == null)
                 return BadRequest(new { message = "Método de pago inválido" });
 
             if (!await _context.Clientes.AnyAsync(c => c.Id == dto.ClienteId))
@@ -120,6 +134,9 @@ namespace RestaurantApi.Controllers
             }).ToList();
 
             var subtotal = detalles.Sum(d => d.Subtotal);
+            var errorPago = ValidarPagaCon(dto.PagaCon, metodoPago, dto.PagadoAnticipado, subtotal + dto.CostoEnvio);
+            if (errorPago != null)
+                return BadRequest(new { message = errorPago });
 
             // Domicilio y detalles en un solo SaveChanges.
             var domicilio = new Domicilio
@@ -133,6 +150,7 @@ namespace RestaurantApi.Controllers
                 Total = subtotal + dto.CostoEnvio,
                 MetodoPago = metodoPago,
                 PagadoAnticipado = dto.PagadoAnticipado,
+                PagaCon = metodoPago == "Efectivo" && !dto.PagadoAnticipado ? dto.PagaCon : null,
                 NotasCliente = dto.NotasCliente ?? "",
                 NotasInternas = dto.NotasInternas ?? "",
                 UsuarioCreadorId = usuarioCreadorId,
@@ -153,7 +171,32 @@ namespace RestaurantApi.Controllers
             return CreatedAtAction(nameof(GetDomicilio), new { id = domicilio.Id }, domicilioCreado);
         }
 
+        // PUT: api/domicilios/{id}/preparar
+        /// <summary>
+        /// La cocina empieza el domicilio (como "Empezar a preparar" en los pedidos de mesa).
+        /// Desde ahí el cliente ya no lo edita desde su enlace de seguimiento.
+        /// </summary>
+        [HttpPut("{id}/preparar")]
+        [Authorize(Roles = "Administrador,Cocina")]
+        public async Task<IActionResult> Preparar(int id)
+        {
+            var domicilio = await _context.Domicilios.FindAsync(id);
+            if (domicilio == null)
+                return NotFound(new { message = "Domicilio no encontrado" });
+            if (domicilio.Estado != "EnPreparacion")
+                return Conflict(new { message = $"Un domicilio {domicilio.Estado} ya no se empieza a preparar" });
+
+            domicilio.InicioPreparacion ??= DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         // PUT: api/domicilios/{id}/estado
+        /// <summary>
+        /// Cocina: Listo. Caja o administrador: Entregado (cobrado en caja o sin domiciliario,
+        /// con el método con que pagó de verdad) o Cancelado (con motivo). Recogido y En camino
+        /// son del domiciliario desde la app.
+        /// </summary>
         [HttpPut("{id}/estado")]
         public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoDto dto)
         {
@@ -171,13 +214,31 @@ namespace RestaurantApi.Controllers
             if (domicilio.Estado == dto.Estado)
                 return NoContent();
 
-            domicilio.Estado = dto.Estado;
-            if (dto.Estado == "Entregado")
-                domicilio.FechaEntrega = DateTime.UtcNow;
+            // La cocina prepara; entregar y cancelar son de caja o del administrador.
+            if (User.IsInRole(nameof(RolUsuario.Cocina)) && dto.Estado is not ("Listo" or "EnPreparacion"))
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "La cocina solo marca el domicilio listo" });
 
             try
             {
-                await _context.SaveChangesAsync();
+                if (dto.Estado == "Entregado")
+                {
+                    var error = await Entregas.EntregarAsync(_context, domicilio, dto.MetodoPago, null, cobradoEnCaja: true);
+                    if (error != null)
+                        return BadRequest(new { message = error });
+                }
+                else
+                {
+                    domicilio.Estado = dto.Estado;
+                    if (dto.Estado == "Listo")
+                        domicilio.InicioPreparacion ??= DateTime.UtcNow;
+                    if (dto.Estado == "Cancelado")
+                    {
+                        var motivo = string.IsNullOrWhiteSpace(dto.Motivo) ? "sin motivo" : dto.Motivo.Trim();
+                        domicilio.NotasInternas = string.Join(" · ", new[] { domicilio.NotasInternas, $"Cancelado: {motivo}" }
+                            .Where(n => !string.IsNullOrWhiteSpace(n)));
+                    }
+                    await _context.SaveChangesAsync();
+                }
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -192,6 +253,37 @@ namespace RestaurantApi.Controllers
             return NoContent();
         }
 
+        // PUT: api/domicilios/{id}/domiciliario
+        /// <summary>
+        /// Asigna el domicilio a un domiciliario (o lo devuelve a la bolsa común) antes de que lo
+        /// recojan: el domiciliario lo ve en "Mis entregas" desde que está en cocina.
+        /// </summary>
+        [HttpPut("{id}/domiciliario")]
+        [Authorize(Roles = "Administrador,Caja")]
+        public async Task<IActionResult> AsignarDomiciliario(int id, [FromBody] AsignarDomiciliarioDto dto)
+        {
+            var domicilio = await _context.Domicilios.FindAsync(id);
+            if (domicilio == null)
+                return NotFound(new { message = "Domicilio no encontrado" });
+            if (domicilio.Estado is not ("EnPreparacion" or "Listo"))
+                return Conflict(new { message = "Ya salió del restaurante: no se puede reasignar" });
+
+            if (dto.DomiciliarioId is { } domiciliarioId
+                && !await _context.Usuarios.AnyAsync(u => u.Id == domiciliarioId && u.Rol == RolUsuario.Domiciliario && u.Activo))
+                return BadRequest(new { message = "Ese usuario no es un domiciliario activo" });
+
+            domicilio.DomiciliarioId = dto.DomiciliarioId;
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Conflict(new { message = "Otro domiciliario lo tomó primero. Recarga e intenta de nuevo." });
+            }
+            return NoContent();
+        }
+
         // PUT: api/domicilios/{id}/metodo-pago
         [HttpPut("{id}/metodo-pago")]
         [Authorize(Roles = "Administrador,Caja")]
@@ -202,15 +294,100 @@ namespace RestaurantApi.Controllers
             if (domicilio == null)
                 return NotFound(new { message = "Domicilio no encontrado" });
 
-            if (!MetodosPagoValidos.Contains(dto.MetodoPago))
+            if (domicilio.Estado is "Entregado" or "Cancelado")
+                return Conflict(new { message = "Ya se cerró: su factura no se reescribe" });
+
+            var metodo = Entregas.Normalizar(dto.MetodoPago);
+            if (metodo == null)
                 return BadRequest(new { message = "Método de pago inválido" });
 
-            domicilio.MetodoPago = dto.MetodoPago;
+            var errorPago = ValidarPagaCon(dto.PagaCon, metodo, dto.PagadoAnticipado, domicilio.Subtotal + domicilio.CostoEnvio);
+            if (errorPago != null)
+                return BadRequest(new { message = errorPago });
+
+            domicilio.MetodoPago = metodo;
             domicilio.PagadoAnticipado = dto.PagadoAnticipado;
+            domicilio.PagaCon = metodo == "Efectivo" && !dto.PagadoAnticipado ? dto.PagaCon : null;
 
             await _context.SaveChangesAsync();
 
             return NoContent();
+        }
+
+        // GET: api/domicilios/domiciliarios
+        /// <summary>Domiciliarios activos, para asignarles domicilios.</summary>
+        [HttpGet("domiciliarios")]
+        [Authorize(Roles = "Administrador,Caja")]
+        public async Task<ActionResult<IEnumerable<object>>> GetDomiciliarios()
+            => await _context.Usuarios.AsNoTracking()
+                .Where(u => u.Rol == RolUsuario.Domiciliario && u.Activo)
+                .OrderBy(u => u.Nombre)
+                .Select(u => new { u.Id, u.Nombre })
+                .ToListAsync();
+
+        // GET: api/domicilios/liquidaciones
+        /// <summary>Efectivo que cada domiciliario cobró y no ha entregado en caja.</summary>
+        [HttpGet("liquidaciones")]
+        [Authorize(Roles = "Administrador,Caja")]
+        public async Task<ActionResult<IEnumerable<LiquidacionPendienteDto>>> GetLiquidaciones()
+        {
+            var pendientes = await _context.Domicilios.AsNoTracking()
+                .Include(d => d.Domiciliario)
+                .Where(d => d.Estado == "Entregado" && d.MetodoPago == "Efectivo" && !d.PagadoAnticipado
+                            && d.FechaLiquidacion == null && d.DomiciliarioId != null)
+                .ToListAsync();
+
+            return pendientes
+                .GroupBy(d => d.DomiciliarioId!.Value)
+                .Select(g => new LiquidacionPendienteDto
+                {
+                    DomiciliarioId = g.Key,
+                    Nombre = g.First().Domiciliario?.Nombre ?? $"Domiciliario #{g.Key}",
+                    Entregas = g.Count(),
+                    Total = g.Sum(d => d.Subtotal + d.CostoEnvio),
+                    Domicilios = g.Select(d => d.Id).OrderBy(x => x).ToList()
+                })
+                .OrderByDescending(l => l.Total)
+                .ToList();
+        }
+
+        // POST: api/domicilios/liquidaciones/{domiciliarioId}
+        /// <summary>La caja recibe del domiciliario el efectivo de sus entregas: entra al cuadre del día.</summary>
+        [HttpPost("liquidaciones/{domiciliarioId}")]
+        [Authorize(Roles = "Administrador,Caja")]
+        public async Task<ActionResult<LiquidacionPendienteDto>> Liquidar(int domiciliarioId)
+        {
+            var pendientes = await _context.Domicilios
+                .Include(d => d.Domiciliario)
+                .Where(d => d.DomiciliarioId == domiciliarioId && d.Estado == "Entregado" && d.MetodoPago == "Efectivo"
+                            && !d.PagadoAnticipado && d.FechaLiquidacion == null)
+                .ToListAsync();
+            if (pendientes.Count == 0)
+                return NotFound(new { message = "Este domiciliario no tiene efectivo por entregar" });
+
+            var ahora = DateTime.UtcNow;
+            foreach (var d in pendientes) d.FechaLiquidacion = ahora;
+            await _context.SaveChangesAsync();
+
+            return new LiquidacionPendienteDto
+            {
+                DomiciliarioId = domiciliarioId,
+                Nombre = pendientes[0].Domiciliario?.Nombre ?? $"Domiciliario #{domiciliarioId}",
+                Entregas = pendientes.Count,
+                Total = pendientes.Sum(d => d.Subtotal + d.CostoEnvio),
+                Domicilios = pendientes.Select(d => d.Id).OrderBy(x => x).ToList()
+            };
+        }
+
+        // GET: api/domicilios/{id}/comprobante
+        [HttpGet("{id}/comprobante")]
+        [Authorize(Roles = "Administrador,Caja")]
+        public async Task<IActionResult> GetComprobante(int id)
+        {
+            var comprobante = await _context.Domicilios.Where(d => d.Id == id).Select(d => d.ComprobantePago).FirstOrDefaultAsync();
+            if (comprobante == null)
+                return NotFound(new { message = "Este domicilio no tiene comprobante" });
+            return Ok(new { comprobante });
         }
 
         // GET: api/domicilios/estadisticas/hoy
@@ -224,18 +401,44 @@ namespace RestaurantApi.Controllers
                 .Where(d => d.FechaPedido >= hoy && d.FechaPedido < manana)
                 .ToListAsync();
 
+            var porLiquidar = await _context.Domicilios.AsNoTracking()
+                .Where(d => d.Estado == "Entregado" && d.MetodoPago == "Efectivo" && !d.PagadoAnticipado
+                            && d.FechaLiquidacion == null && d.DomiciliarioId != null)
+                .SumAsync(d => d.Subtotal + d.CostoEnvio);
+
             var estadisticas = new EstadisticasDomiciliosDto
             {
                 TotalDomicilios = domiciliosHoy.Count,
+                PorEmpezar = domiciliosHoy.Count(d => d.Estado == "EnPreparacion" && d.InicioPreparacion == null),
                 EnPreparacion = domiciliosHoy.Count(d => d.Estado == "EnPreparacion"),
                 Listo = domiciliosHoy.Count(d => d.Estado == "Listo"),
                 EnCamino = domiciliosHoy.Count(d => d.Estado == "EnCamino" || d.Estado == "Recogido"),
                 Entregados = domiciliosHoy.Count(d => d.Estado == "Entregado"),
                 Cancelados = domiciliosHoy.Count(d => d.Estado == "Cancelado"),
-                TotalVentas = domiciliosHoy.Where(d => d.Estado == "Entregado").Sum(d => d.Total)
+                TotalVentas = domiciliosHoy.Where(d => d.Estado == "Entregado").Sum(d => d.Subtotal + d.CostoEnvio),
+                EfectivoPorLiquidar = porLiquidar
             };
 
             return Ok(estadisticas);
+        }
+
+        /// <summary>En efectivo, el billete del cliente debe alcanzar para el total.</summary>
+        private static string? ValidarPagaCon(decimal? pagaCon, string metodo, bool pagadoAnticipado, decimal total)
+        {
+            if (pagaCon == null || metodo != "Efectivo" || pagadoAnticipado) return null;
+            return pagaCon < total ? $"Con {pagaCon:N0} no alcanza para el total de {total:N0}" : null;
+        }
+
+        /// <summary>Número de la factura de los domicilios entregados.</summary>
+        private async Task<List<DomicilioResponseDto>> ConFacturaAsync(List<DomicilioResponseDto> domicilios)
+        {
+            var ids = domicilios.Where(d => d.Estado == "Entregado").Select(d => (int?)d.Id).ToList();
+            if (ids.Count == 0) return domicilios;
+            var numeros = await _context.Facturas.AsNoTracking()
+                .Where(f => ids.Contains(f.DomicilioId))
+                .ToDictionaryAsync(f => f.DomicilioId!.Value, f => f.NumeroFactura);
+            foreach (var d in domicilios) d.NumeroFactura = numeros.GetValueOrDefault(d.Id);
+            return domicilios;
         }
 
         private static readonly Expression<Func<Domicilio, DomicilioResponseDto>> AResponseDto = d => new DomicilioResponseDto
@@ -263,6 +466,17 @@ namespace RestaurantApi.Controllers
             DomiciliarioNombre = d.Domiciliario != null ? d.Domiciliario.Nombre : null,
             FechaEstimadaEntrega = d.FechaEstimadaEntrega,
             FechaEntrega = d.FechaEntrega,
+            FechaRecogida = d.FechaRecogida,
+            FechaLiquidacion = d.FechaLiquidacion,
+            CocinaEmpezo = d.Estado != "EnPreparacion" || d.InicioPreparacion != null,
+            PagaCon = d.PagaCon,
+            Cambio = d.MetodoPago == "Efectivo" && !d.PagadoAnticipado && d.PagaCon != null && d.PagaCon >= d.Subtotal + d.CostoEnvio
+                ? d.PagaCon - (d.Subtotal + d.CostoEnvio)
+                : null,
+            TieneComprobante = d.ComprobantePago != null,
+            OrigenPedido = d.OrigenPedido,
+            PorLiquidar = d.Estado == "Entregado" && d.MetodoPago == "Efectivo" && !d.PagadoAnticipado
+                          && d.FechaLiquidacion == null && d.DomiciliarioId != null,
             Detalles = d.Detalles.Select(dd => new DomicilioDetalleDto
             {
                 Id = dd.Id,

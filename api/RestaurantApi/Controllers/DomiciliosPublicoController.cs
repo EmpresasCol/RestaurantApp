@@ -1,4 +1,4 @@
-﻿// api/RestaurantApi/Controllers/DomiciliosPublicoController.cs
+// api/RestaurantApi/Controllers/DomiciliosPublicoController.cs
 // Endpoints públicos (sin autenticación) para:
 //   · Crear un pedido desde la página abierta del cliente final.
 //   · Consultar el seguimiento del pedido por token.
@@ -240,7 +240,7 @@ namespace RestaurantApi.Controllers
                 FechaRecogida          = d.FechaRecogida,
                 FechaEntrega           = d.FechaEntrega,
                 PuedeEditarHasta       = d.PuedeEditarHasta,
-                PuedeEditarAhora       = d.Estado == "EnPreparacion"
+                PuedeEditarAhora       = d.Estado == "EnPreparacion" && d.InicioPreparacion == null
                                          && d.PuedeEditarHasta.HasValue
                                          && ahora <= d.PuedeEditarHasta.Value,
                 PuedeEnviarObservacion = d.Estado == "Entregado"
@@ -286,8 +286,8 @@ namespace RestaurantApi.Controllers
             if (domicilio is null) return NotFound();
 
             // Reglas de edición (explícitas, auditables):
-            if (domicilio.Estado != "EnPreparacion")
-                return Conflict(new { message = "El pedido ya está en una fase que no permite edición" });
+            if (domicilio.Estado != "EnPreparacion" || domicilio.InicioPreparacion != null)
+                return Conflict(new { message = "La cocina ya empezó tu pedido: ya no se puede editar" });
 
             if (!domicilio.PuedeEditarHasta.HasValue || DateTime.UtcNow > domicilio.PuedeEditarHasta.Value)
                 return Conflict(new { message = "La ventana de edición ha expirado" });

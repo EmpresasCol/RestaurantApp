@@ -160,7 +160,7 @@ public class AppMeseroTests
         using var ctx = TestDb.Crear();
         TestDb.CrearPedidoDirecto(ctx, 1, 1, estado: EstadoPedido.Entregado);
         TestDb.CrearPedidoDirecto(ctx, 2, 1, estado: EstadoPedido.Entregado);
-        Solicitud(await Cuentas(ctx).Solicitar(new SolicitarCuentaDto { MesaId = TestDb.MesaUnoId, MetodoPago = "QR", Comprobante = Foto }));
+        Solicitud(await Cuentas(ctx).Solicitar(new SolicitarCuentaDto { MesaId = TestDb.MesaUnoId }));
 
         // Dividir la cuenta: el primer cobro deja la solicitud pendiente.
         await new PagosController(ctx).Cobrar(new CrearCobroDto { PedidoIds = { 1 }, MetodoPago = "QR" });
@@ -173,7 +173,6 @@ public class AppMeseroTests
         var cerrada = ctx.SolicitudesCuenta.AsNoTracking().Single();
         Assert.Equal(SolicitudCuenta.Cobrada, cerrada.Estado);
         Assert.Equal(factura.Id, cerrada.FacturaId);
-        Assert.Equal(Foto, cerrada.Comprobante);
     }
 
     [Fact]

@@ -1,9 +1,12 @@
-﻿namespace RestaurantApi.Models
+namespace RestaurantApi.Models
 {
     public class Factura
     {
         public int Id { get; set; }
-        public int PagoId { get; set; }
+        /// <summary>Primer pago de la cuenta de mesa; null en la factura de un domicilio.</summary>
+        public int? PagoId { get; set; }
+        /// <summary>Domicilio que cubre esta factura (se emite al entregarlo y cobrarlo).</summary>
+        public int? DomicilioId { get; set; }
         public string NumeroFactura { get; set; } = null!;
         public string? NitCliente { get; set; }
         public string? NombreCliente { get; set; }

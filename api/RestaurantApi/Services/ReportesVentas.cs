@@ -45,6 +45,29 @@ namespace RestaurantApi.Services
         // Una cuenta = una factura (o un pago suelto anterior a las facturas por cuenta).
         private static string Cuenta(Pago p) => p.FacturaId is { } f ? $"F{f}" : $"P{p.Id}";
 
+        /// <summary>
+        /// Platos vendidos en mesa en esos cobros: los que llevan la factura (cuenta dividida por
+        /// consumo) y, en los cobros anteriores sin platos ligados, todos los de su pedido.
+        /// </summary>
+        private async Task<List<(PedidoDetalle Detalle, Pedido Pedido, string Cuenta)>> PlatosMesaAsync(List<(Pago Pago, Pedido? Pedido)> pagos)
+        {
+            var facturaIds = pagos.Where(x => x.Pago.FacturaId != null).Select(x => x.Pago.FacturaId!.Value).Distinct().ToList();
+            var detalles = await _ctx.PedidoDetalles.AsNoTracking()
+                .Include(d => d.Platillo)
+                .Include(d => d.Pedido).ThenInclude(p => p!.Usuario)
+                .Where(d => d.FacturaId != null && facturaIds.Contains(d.FacturaId.Value))
+                .ToListAsync();
+            var lineas = detalles.Where(d => d.Pedido != null).Select(d => (d, d.Pedido!, $"F{d.FacturaId}")).ToList();
+
+            var conPlatos = detalles.Select(d => d.FacturaId!.Value).ToHashSet();
+            var sueltos = pagos
+                .Where(x => x.Pedido != null && (x.Pago.FacturaId is not { } f || !conPlatos.Contains(f)))
+                .DistinctBy(x => (Cuenta(x.Pago), x.Pedido!.Id));
+            foreach (var (pago, pedido) in sueltos)
+                lineas.AddRange(pedido!.Detalles.Select(d => (d, pedido, Cuenta(pago))));
+            return lineas;
+        }
+
         private static List<MetodoRecaudoDto> PorMetodo(List<(Pago Pago, Pedido? Pedido)> pagos, List<Domicilio> domicilios)
         {
             var filas = Cuentas.Grupos.ToDictionary(g => g, g => new MetodoRecaudoDto { Metodo = g });
@@ -118,8 +141,60 @@ namespace RestaurantApi.Services
                 ValorAbierto = abiertos.Sum(Cuentas.Consumo)
             };
             cierre.TotalRecaudado = cierre.VentasMesa + cierre.Propinas + cierre.VentasDomicilio + cierre.Envios;
+            cierre.EsHoy = fechaColombia.Date == HoraLocal.AhoraColombia().Date;
+            cierre.DomiciliosEnCurso = await _ctx.Domicilios.CountAsync(d => d.Estado == "EnPreparacion" || d.Estado == "Listo" || d.Estado == "Recogido" || d.Estado == "EnCamino");
+
+            // ── Arqueo del cajón ──
+            var efectivoMesa = pagos.Where(x => x.Pago.MetodoPago == MetodoPago.Efectivo).ToList();
+            cierre.EfectivoMesa = efectivoMesa.Sum(x => x.Pago.Monto + x.Pago.MontoPropina);
+            cierre.PropinasEfectivo = efectivoMesa.Sum(x => x.Pago.MontoPropina);
+            cierre.EfectivoDomicilios = await _ctx.Domicilios.AsNoTracking()
+                .Where(d => d.Estado == "Entregado" && d.MetodoPago == "Efectivo" && !d.PagadoAnticipado
+                            && d.FechaLiquidacion >= desde && d.FechaLiquidacion < hasta)
+                .SumAsync(d => d.Subtotal + d.CostoEnvio);
+            cierre.EfectivoEnDomiciliarios = (await _ctx.Domicilios.AsNoTracking()
+                    .Include(d => d.Domiciliario)
+                    .Where(d => d.Estado == "Entregado" && d.MetodoPago == "Efectivo" && !d.PagadoAnticipado
+                                && d.FechaLiquidacion == null && d.DomiciliarioId != null)
+                    .ToListAsync())
+                .GroupBy(d => d.DomiciliarioId!.Value)
+                .Select(g => new LiquidacionPendienteDto
+                {
+                    DomiciliarioId = g.Key,
+                    Nombre = g.First().Domiciliario?.Nombre ?? $"Domiciliario #{g.Key}",
+                    Entregas = g.Count(),
+                    Total = g.Sum(d => d.Subtotal + d.CostoEnvio),
+                    Domicilios = g.Select(d => d.Id).OrderBy(x => x).ToList()
+                })
+                .ToList();
+            cierre.Tarjeta = cierre.PorMetodo.Where(m => m.Metodo == "Tarjeta").Sum(m => m.Total);
+            cierre.Transferencias = cierre.PorMetodo.Where(m => m.Metodo == "Transferencia o QR").Sum(m => m.Total);
+
+            var dia = fechaColombia.Date;
+            var registro = await _ctx.CierresCaja.AsNoTracking().FirstOrDefaultAsync(c => c.FechaCaja == dia);
+            if (registro != null)
+            {
+                cierre.Base = registro.Base;
+                cierre.BaseRegistrada = registro.FechaApertura != null || registro.FechaCierre != null;
+                cierre.PropinasPagadas = registro.PropinasPagadas;
+                cierre.Retiros = registro.Retiros;
+                cierre.EfectivoContado = registro.EfectivoContado;
+                cierre.TarjetaDatafono = registro.TarjetaDatafono;
+                cierre.TransferenciasBanco = registro.TransferenciasBanco;
+                cierre.Observaciones = registro.Observaciones;
+                cierre.Cerrada = registro.FechaCierre != null;
+                cierre.FechaCierre = registro.FechaCierre;
+                if (registro.UsuarioCierreId is { } quien)
+                    cierre.CerradaPor = await _ctx.Usuarios.Where(u => u.Id == quien).Select(u => u.Nombre).FirstOrDefaultAsync();
+            }
+            cierre.EfectivoEsperado = EfectivoEsperado(cierre);
+            cierre.Diferencia = cierre.EfectivoContado - cierre.EfectivoEsperado;
             return cierre;
         }
+
+        /// <summary>Lo que debe haber en el cajón: base + efectivo que entró − efectivo que salió.</summary>
+        public static decimal EfectivoEsperado(CierreCajaDto c)
+            => c.Base + c.EfectivoMesa + c.EfectivoDomicilios - c.PropinasPagadas - c.Retiros;
 
         /// <summary>Ventas entre dos días de calendario de Colombia (ambos incluidos).</summary>
         public async Task<ReporteVentasDto> VentasAsync(DateTime desdeColombia, DateTime hastaColombia)
@@ -180,9 +255,9 @@ namespace RestaurantApi.Services
             r.PorHora = horas;
 
             // Platos vendidos con el precio con que se vendieron.
-            var platos = pagos.Where(x => x.Pedido != null)
-                .SelectMany(x => x.Pedido!.Detalles.Select(d => (d.PlatilloId, d.Platillo, d.Cantidad, Ingreso: Cuentas.Precio(d) * d.Cantidad)))
-                .Concat(domicilios.SelectMany(dm => dm.Detalles.Select(d => (d.PlatilloId, d.Platillo, d.Cantidad, Ingreso: d.PrecioUnitario * d.Cantidad))));
+            var lineas = await PlatosMesaAsync(pagos);
+            var platos = lineas.Select(x => (x.Detalle.PlatilloId, x.Detalle.Platillo, x.Detalle.Cantidad, Ingreso: Cuentas.Precio(x.Detalle) * x.Detalle.Cantidad))
+                .Concat(domicilios.SelectMany(dm => dm.Detalles.Select(d => (d.PlatilloId, Platillo: (Platillo?)d.Platillo, d.Cantidad, Ingreso: d.PrecioUnitario * d.Cantidad))));
             r.Platillos = platos.GroupBy(x => x.PlatilloId)
                 .Select(g => new PlatilloVendidoDto
                 {
@@ -196,26 +271,29 @@ namespace RestaurantApi.Services
                 .ToList();
 
             // Canales: mesero (app), comensal por QR y domicilio.
-            var mesa = pagos.Where(x => x.Pedido != null).ToList();
-            bool EsQr((Pago Pago, Pedido? Pedido) x) => x.Pedido!.Usuario?.NombreUsuario == UsuarioQR;
+            bool EsQr(Pedido p) => p.Usuario?.NombreUsuario == UsuarioQR;
+            decimal Valor(PedidoDetalle d) => Cuentas.Precio(d) * d.Cantidad;
+            var porMesero = lineas.Where(x => !EsQr(x.Pedido)).ToList();
+            var porQr = lineas.Where(x => EsQr(x.Pedido)).ToList();
             r.Canales = new List<CanalVentaDto>
             {
-                new() { Canal = "Mesero", Ventas = mesa.Count(x => !EsQr(x)), Total = mesa.Where(x => !EsQr(x)).Sum(x => x.Pago.Monto) },
-                new() { Canal = "QR de la mesa", Ventas = mesa.Count(EsQr), Total = mesa.Where(EsQr).Sum(x => x.Pago.Monto) },
+                new() { Canal = "Mesero", Ventas = porMesero.Select(x => x.Cuenta).Distinct().Count(), Total = porMesero.Sum(x => Valor(x.Detalle)) },
+                new() { Canal = "QR de la mesa", Ventas = porQr.Select(x => x.Cuenta).Distinct().Count(), Total = porQr.Sum(x => Valor(x.Detalle)) },
                 new() { Canal = "Domicilio", Ventas = domicilios.Count, Total = domicilios.Sum(d => d.Subtotal) },
             };
 
-            // Meseros: solo personas; los pedidos del QR no son de ningún mesero.
-            r.Meseros = mesa.Where(x => !EsQr(x))
-                .GroupBy(x => x.Pedido!.UsuarioId)
+            // Meseros: solo personas; los pedidos del QR no son de ningún mesero. La propina de una
+            // cuenta va al mesero del primer pedido cobrado.
+            r.Meseros = porMesero
+                .GroupBy(x => x.Pedido.UsuarioId)
                 .Select(g => new MeseroVentaDto
                 {
                     UsuarioId = g.Key,
-                    Nombre = g.First().Pedido!.Usuario?.Nombre ?? $"Usuario #{g.Key}",
-                    Pedidos = g.Count(),
-                    Mesas = g.Select(x => x.Pedido!.MesaId).Distinct().Count(),
-                    Ventas = g.Sum(x => x.Pago.Monto),
-                    Propinas = g.Sum(x => x.Pago.MontoPropina)
+                    Nombre = g.First().Pedido.Usuario?.Nombre ?? $"Usuario #{g.Key}",
+                    Pedidos = g.Select(x => x.Pedido.Id).Distinct().Count(),
+                    Mesas = g.Select(x => x.Pedido.MesaId).Distinct().Count(),
+                    Ventas = g.Sum(x => Valor(x.Detalle)),
+                    Propinas = pagos.Where(x => x.Pedido?.UsuarioId == g.Key).Sum(x => x.Pago.MontoPropina)
                 })
                 .OrderByDescending(m => m.Ventas)
                 .ToList();

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RestaurantApi.Models;
@@ -14,6 +14,7 @@ namespace RestaurantApi.Controllers
     {
         // Tolerancia de redondeo al comparar el pago con el consumo (pesos).
         private const decimal Tolerancia = 1m;
+        private const int MaximoPagos = 20;
 
         private readonly RestauranteContext _context;
 
@@ -43,20 +44,15 @@ namespace RestaurantApi.Controllers
         }
 
         /// <summary>
-        /// Cobra la cuenta de una mesa: uno o varios pedidos de esa mesa con una sola factura.
-        /// El servidor calcula el consumo con el precio con que se pidió cada plato. Un pedido que
-        /// sigue en cocina no se cobra (desaparecería de la comanda). Pagos, cierre de pedidos,
-        /// liberación de la mesa y factura van en una sola transacción.
+        /// Cobra la cuenta de una mesa con una sola factura: todos sus pedidos, algunos, o solo los
+        /// platos de una persona (dividir por consumo, incluso 1 de 2 unidades). Se paga con uno o
+        /// varios pagos (efectivo + tarjeta, partes iguales, varias transferencias). El servidor
+        /// calcula el consumo con el precio congelado. Lo que sigue en cocina no se cobra. Si el
+        /// mesero ya avisó pagos que cubren toda la cuenta, se cobra tal cual: nadie los cambia.
         /// </summary>
         [HttpPost("cobro")]
         public async Task<ActionResult<CobroDto>> Cobrar(CrearCobroDto dto)
         {
-            if (!Enum.TryParse<MetodoPago>(dto.MetodoPago, true, out var metodo) || !Enum.IsDefined(metodo))
-                return BadRequest(new { message = $"Método de pago inválido: {dto.MetodoPago}" });
-
-            var ids = dto.PedidoIds.Distinct().ToList();
-            if (ids.Count == 0)
-                return BadRequest(new { message = "Elige al menos un pedido para cobrar" });
             if (dto.Propina < 0)
                 return BadRequest(new { message = "La propina no puede ser negativa" });
 
@@ -64,64 +60,162 @@ namespace RestaurantApi.Controllers
             if (errorCliente != null)
                 return BadRequest(new { message = errorCliente });
 
+            // ── Qué se cobra ──────────────────────────────────────────────
+            var lineasPedidas = dto.Lineas.Where(l => l.Cantidad != 0).ToList();
+            if (lineasPedidas.Any(l => l.Cantidad < 0))
+                return BadRequest(new { message = "La cantidad de cada plato debe ser positiva" });
+            if (lineasPedidas.GroupBy(l => l.DetalleId).Any(g => g.Count() > 1))
+                return BadRequest(new { message = "Un plato aparece dos veces en el cobro" });
+
+            var detalleIds = lineasPedidas.Select(l => l.DetalleId).ToList();
+            var pedidoIds = dto.PedidoIds.Distinct().ToList();
+            if (detalleIds.Count > 0)
+                pedidoIds = await _context.PedidoDetalles.Where(d => detalleIds.Contains(d.Id)).Select(d => d.PedidoId).Distinct().ToListAsync();
+            if (pedidoIds.Count == 0)
+                return BadRequest(new { message = "Elige al menos un plato o pedido para cobrar" });
+
             var pedidos = await _context.Pedidos
                 .Include(p => p.Mesa)
                 .Include(p => p.Detalles).ThenInclude(d => d.Platillo)
-                .Where(p => ids.Contains(p.Id))
+                .Where(p => pedidoIds.Contains(p.Id))
                 .OrderBy(p => p.Fecha)
                 .ToListAsync();
 
-            if (pedidos.Count != ids.Count)
-                return NotFound(new { message = "Alguno de los pedidos ya no existe" });
+            var encontrados = pedidos.SelectMany(p => p.Detalles).Count(d => detalleIds.Contains(d.Id));
+            if (pedidos.Count != pedidoIds.Count || encontrados != detalleIds.Count)
+                return NotFound(new { message = "Alguno de los platos o pedidos ya no existe" });
             if (pedidos.Select(p => p.MesaId).Distinct().Count() > 1)
                 return BadRequest(new { message = "Solo se cobran juntos los pedidos de una misma mesa" });
 
             var cerrado = pedidos.FirstOrDefault(p => !EstadosPedido.EsEditable(p.Estado));
             if (cerrado != null)
                 return Conflict(new { message = $"El pedido #{cerrado.Id} ya está {(cerrado.Estado == EstadoPedido.Pagado ? "pagado" : "cancelado")}" });
-            if (await _context.Pagos.AnyAsync(p => ids.Contains(p.PedidoId)))
-                return Conflict(new { message = "Uno de los pedidos ya tiene un pago registrado" });
 
-            var enCocina = pedidos.Where(p => p.Estado == EstadoPedido.EnProceso).Select(p => $"#{p.Id}").ToList();
+            var enCocina = pedidos.Where(p => !Cuentas.Cobrable(p.Estado)).Select(p => $"#{p.Id}").ToList();
             if (enCocina.Count > 0)
                 return Conflict(new { message = $"El pedido {string.Join(", ", enCocina)} sigue en cocina. Cóbralo cuando esté listo." });
 
-            var consumo = pedidos.Sum(Cuentas.Consumo);
+            // (plato, unidades que se cobran ahora)
+            var cobrar = new List<(PedidoDetalle Detalle, int Cantidad)>();
+            if (detalleIds.Count == 0)
+            {
+                cobrar.AddRange(pedidos.SelectMany(Cuentas.PorCobrar).Select(d => (d, d.Cantidad)));
+                if (cobrar.Count == 0)
+                    return Conflict(new { message = "Esos pedidos ya están cobrados" });
+            }
+            else
+            {
+                foreach (var l in lineasPedidas)
+                {
+                    var d = pedidos.SelectMany(p => p.Detalles).Single(x => x.Id == l.DetalleId);
+                    var nombre = d.Platillo?.Nombre ?? "ese plato";
+                    if (d.FacturaId != null || d.Estado == EstadoDetalle.Cancelado)
+                        return Conflict(new { message = $"{nombre} ya se cobró" });
+                    if (l.Cantidad > d.Cantidad)
+                        return BadRequest(new { message = $"De {nombre} solo quedan {d.Cantidad} por cobrar" });
+                    cobrar.Add((d, l.Cantidad));
+                }
+            }
+
+            var consumo = cobrar.Sum(x => Cuentas.Precio(x.Detalle) * x.Cantidad);
             if (consumo <= 0)
                 return BadRequest(new { message = "La cuenta está en cero" });
             if (dto.Propina > consumo)
                 return BadRequest(new { message = "La propina no puede ser mayor que el consumo" });
-
             var total = consumo + dto.Propina;
-            decimal? recibido = metodo == MetodoPago.Efectivo ? dto.Recibido : null;
-            if (recibido < total)
-                return BadRequest(new { message = $"El efectivo recibido no alcanza: faltan {total - recibido:N0} pesos" });
 
+            // ── Cómo se paga ──────────────────────────────────────────────
+            var pagosDto = dto.Pagos.Count > 0
+                ? dto.Pagos
+                : new List<PagoCobroDto> { new() { MetodoPago = dto.MetodoPago, Monto = total, Recibido = dto.Recibido } };
+            if (pagosDto.Count > MaximoPagos)
+                return BadRequest(new { message = $"Máximo {MaximoPagos} pagos por cuenta" });
+
+            var pagos = new List<(MetodoPago Metodo, decimal Monto, decimal? Recibido, int? AvisoId)>();
+            foreach (var p in pagosDto)
+            {
+                if (!Enum.TryParse<MetodoPago>(p.MetodoPago, true, out var metodo) || !Enum.IsDefined(metodo))
+                    return BadRequest(new { message = $"Método de pago inválido: {p.MetodoPago}" });
+                if (p.Monto <= 0)
+                    return BadRequest(new { message = "Cada pago debe ser mayor que cero" });
+                var recibido = metodo == MetodoPago.Efectivo ? p.Recibido : null;
+                if (recibido < p.Monto)
+                    return BadRequest(new { message = $"El efectivo recibido no alcanza: faltan {p.Monto - recibido:N0} pesos" });
+                pagos.Add((metodo, p.Monto, recibido, p.AvisoId));
+            }
+            var pagado = pagos.Sum(p => p.Monto);
+            if (Math.Abs(pagado - total) >= 0.01m)
+                return BadRequest(new
+                {
+                    message = pagado < total
+                        ? $"Los pagos no cubren la cuenta: faltan {total - pagado:N0} pesos"
+                        : $"Los pagos suman {pagado - total:N0} pesos de más: súmalos a la propina o corrige un pago"
+                });
+
+            // ── Lo que avisó el mesero no se cambia ───────────────────────
+            var mesaId = pedidos[0].MesaId;
+            var solicitud = await _context.SolicitudesCuenta
+                .Include(s => s.Pagos)
+                .FirstOrDefaultAsync(s => s.MesaId == mesaId && s.Estado == SolicitudCuenta.Pendiente);
+            var avisos = solicitud?.Pagos.Where(a => a.FacturaId == null).ToList() ?? new List<PagoAvisado>();
+            var abiertos = await Cuentas.AbiertosDeMesaAsync(_context, mesaId);
+            var debeMesa = abiertos.Sum(Cuentas.ConsumoPorCobrar);
+
+            if (pagos.Where(p => p.AvisoId != null).GroupBy(p => p.AvisoId).Any(g => g.Count() > 1))
+                return Conflict(new { message = "Un pago avisado aparece dos veces" });
+            foreach (var p in pagos.Where(p => p.AvisoId != null))
+            {
+                var aviso = avisos.FirstOrDefault(a => a.Id == p.AvisoId);
+                if (aviso == null)
+                    return Conflict(new { message = "Ese pago avisado ya se usó o no es de esta mesa" });
+                if (!string.Equals(aviso.MetodoPago, p.Metodo.ToString(), StringComparison.OrdinalIgnoreCase) || aviso.Monto != p.Monto)
+                    return Conflict(new { message = "Un pago que avisó el mesero no se puede cambiar" });
+            }
+
+            var propinaAvisada = solicitud?.Propina ?? 0;
+            if (Cuentas.AvisoCuadra(avisos.Sum(a => a.Monto), debeMesa, propinaAvisada))
+            {
+                var mismosPagos = pagos.Count == avisos.Count && pagos.All(p => p.AvisoId != null);
+                if (consumo != debeMesa || dto.Propina != propinaAvisada || !mismosPagos)
+                    return Conflict(new { message = "El mesero ya registró el pago completo de esta mesa: cóbrala tal como la avisó" });
+            }
+
+            // ── Registrar ─────────────────────────────────────────────────
             using var tx = await _context.Database.BeginTransactionAsync();
             var ahora = DateTime.UtcNow;
 
-            // Un pago por pedido (cada uno con su consumo); la propina va en el primero.
-            var pagos = pedidos.Select((p, i) => new Pago
+            // Cobrar solo una parte de un plato: la parte que se paga queda en su propia línea.
+            var cobrados = new List<PedidoDetalle>();
+            foreach (var (d, cantidad) in cobrar)
             {
-                PedidoId = p.Id,
-                Monto = Cuentas.Consumo(p),
-                MontoPropina = i == 0 ? dto.Propina : 0,
-                MetodoPago = metodo,
+                if (cantidad == d.Cantidad) { cobrados.Add(d); continue; }
+                d.Cantidad -= cantidad;
+                var parte = new PedidoDetalle
+                {
+                    PedidoId = d.PedidoId, PlatilloId = d.PlatilloId, Cantidad = cantidad, Nota = d.Nota,
+                    Estado = d.Estado, PrecioUnitario = Cuentas.Precio(d), Platillo = d.Platillo
+                };
+                pedidos.Single(p => p.Id == d.PedidoId).Detalles.Add(parte);
+                cobrados.Add(parte);
+            }
+
+            // Un pago por cada forma de pago; la propina se reparte en proporción.
+            var propinas = Cuentas.RepartirPropina(pagos.Select(p => p.Monto).ToList(), dto.Propina);
+            var primerPedido = pedidos.First(p => cobrados.Any(d => d.PedidoId == p.Id));
+            var registros = pagos.Select((p, i) => new Pago
+            {
+                PedidoId = primerPedido.Id,
+                Monto = p.Monto - propinas[i],
+                MontoPropina = propinas[i],
+                MetodoPago = p.Metodo,
                 Fecha = ahora
             }).ToList();
-            _context.Pagos.AddRange(pagos);
-
-            foreach (var p in pedidos) p.Estado = EstadoPedido.Pagado;
-            var mesaId = pedidos[0].MesaId;
-            var cuentaSaldada = !await _context.Pedidos.AnyAsync(p =>
-                p.MesaId == mesaId && !ids.Contains(p.Id) &&
-                p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
-            if (cuentaSaldada && pedidos[0].Mesa is { } mesa) mesa.Estado = EstadoMesa.Disponible;
+            _context.Pagos.AddRange(registros);
             await _context.SaveChangesAsync();
 
             var factura = new Factura
             {
-                PagoId = pagos[0].Id,
+                PagoId = registros[0].Id,
                 Subtotal = consumo,
                 Propina = dto.Propina,
                 Total = total,
@@ -130,28 +224,40 @@ namespace RestaurantApi.Controllers
             Facturacion.AsignarCliente(factura, dto.NitCliente, dto.NombreCliente);
             await Facturacion.EmitirAsync(_context, factura);
 
-            foreach (var pago in pagos) pago.FacturaId = factura.Id;
-            // Con la cuenta saldada, la solicitud del mesero queda ligada a su factura (y a su comprobante).
+            foreach (var r in registros) r.FacturaId = factura.Id;
+            foreach (var d in cobrados) d.FacturaId = factura.Id;
+            foreach (var p in pagos.Where(p => p.AvisoId != null))
+                avisos.Single(a => a.Id == p.AvisoId).FacturaId = factura.Id;
+
+            // Un pedido queda pagado cuando ya no le queda nada por cobrar.
+            foreach (var p in pedidos.Where(p => !Cuentas.PorCobrar(p).Any()))
+                p.Estado = EstadoPedido.Pagado;
+
+            // `abiertos` y `pedidos` comparten las mismas entidades rastreadas.
+            var pendiente = abiertos.Where(p => p.Estado != EstadoPedido.Pagado).Sum(Cuentas.ConsumoPorCobrar);
+            var cuentaSaldada = abiertos.All(p => p.Estado == EstadoPedido.Pagado);
             if (cuentaSaldada)
             {
-                var solicitudes = await _context.SolicitudesCuenta
-                    .Where(s => s.MesaId == mesaId && s.Estado == SolicitudCuenta.Pendiente)
-                    .ToListAsync();
-                foreach (var s in solicitudes)
+                if (pedidos[0].Mesa is { } mesa) mesa.Estado = EstadoMesa.Disponible;
+                // La solicitud del mesero queda ligada a su factura (y a sus comprobantes).
+                if (solicitud != null)
                 {
-                    s.Estado = SolicitudCuenta.Cobrada;
-                    s.FacturaId = factura.Id;
+                    solicitud.Estado = SolicitudCuenta.Cobrada;
+                    solicitud.FacturaId = factura.Id;
                 }
             }
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
 
+            var efectivo = pagos.Where(p => p.Recibido != null).ToList();
             var detalle = (await Facturacion.ConDetalleAsync(_context, new List<Factura> { factura }))[0];
             return Ok(new CobroDto
             {
                 Factura = detalle,
-                Recibido = recibido,
-                Cambio = recibido is { } r ? r - total : 0
+                Recibido = efectivo.Count > 0 ? efectivo.Sum(p => p.Recibido!.Value) : null,
+                Cambio = efectivo.Sum(p => p.Recibido!.Value - p.Monto),
+                CuentaSaldada = cuentaSaldada,
+                Pendiente = pendiente
             });
         }
 

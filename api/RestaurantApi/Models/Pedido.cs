@@ -1,4 +1,4 @@
-﻿namespace RestaurantApi.Models
+namespace RestaurantApi.Models
 {
     public enum EstadoPedido
     {
@@ -16,6 +16,8 @@
         public int UsuarioId { get; set; }
         public EstadoPedido Estado { get; set; }
         public DateTime Fecha { get; set; }
+        /// <summary>Última vez que el mesero cambió los platos; la cocina lo ve resaltado.</summary>
+        public DateTime? FechaEdicion { get; set; }
 
         // Relaciones de navegación
         public Mesa? Mesa { get; set; }
