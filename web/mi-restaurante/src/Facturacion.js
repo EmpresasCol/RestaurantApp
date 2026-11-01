@@ -23,6 +23,7 @@ function Facturacion() {
   const [vista, setVista] = useState('cobrar');
   const [pedidos, setPedidos] = useState([]);
   const [domicilios, setDomicilios] = useState([]);
+  const [solicitudes, setSolicitudes] = useState([]);
   const [cuentaEnCobro, setCuentaEnCobro] = useState(null);
   const [fecha, setFecha] = useState(hoyLocal);
   const [version, setVersion] = useState(0);
@@ -30,8 +31,13 @@ function Facturacion() {
 
   const cargar = useCallback(async () => {
     try {
-      const [p, d] = await Promise.all([api.getPedidosActivos(), getDomiciliosActivos().catch(() => [])]);
+      const [p, d, s] = await Promise.all([
+        api.getPedidosActivos(),
+        getDomiciliosActivos().catch(() => []),
+        api.getSolicitudesCuenta().catch(() => []),
+      ]);
       setPedidos(p);
+      setSolicitudes(s);
       setDomicilios(Array.isArray(d) ? d.filter((x) => !['Entregado', 'Cancelado'].includes(x.estado)) : []);
     } catch {
       mostrar('No se pudieron cargar las cuentas', 'error');
@@ -47,7 +53,7 @@ function Facturacion() {
     return () => clearInterval(t);
   }, [cargar]);
 
-  const cuentas = useMemo(() => agruparCuentas(pedidos), [pedidos]);
+  const cuentas = useMemo(() => agruparCuentas(pedidos, solicitudes), [pedidos, solicitudes]);
   const porCobrar = cuentas.reduce((t, c) => t + c.total, 0) + domicilios.reduce((t, d) => t + d.total, 0);
 
   const domicilioCobrado = async (d) => {

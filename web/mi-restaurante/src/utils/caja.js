@@ -27,9 +27,10 @@ export const estadoPedido = (estado) => ESTADOS[estado] ?? { texto: estado, tono
 
 /**
  * Cuentas abiertas por mesa: cada envío del QR o del mesero es un pedido aparte,
- * pero la mesa paga una sola cuenta.
+ * pero la mesa paga una sola cuenta. `solicitud`: la cuenta que pidió el mesero desde la app.
+ * Las que piden la cuenta van primero: el mesero está esperando en caja.
  */
-export const agruparCuentas = (pedidos = []) => {
+export const agruparCuentas = (pedidos = [], solicitudes = []) => {
   const porMesa = new Map();
   pedidos
     .filter((p) => ['EnProceso', 'Listo', 'Entregado'].includes(p.estado))
@@ -51,10 +52,21 @@ export const agruparCuentas = (pedidos = []) => {
         totalCobrable: cobrables.reduce((t, p) => t + consumoPedido(p), 0),
         enCocina: pedidosOrdenados.length - cobrables.length,
         platos: pedidosOrdenados.reduce((t, p) => t + p.detalles.reduce((s, d) => s + d.cantidad, 0), 0),
+        solicitud: solicitudes.find((s) => s.mesaId === c.mesaId) ?? null,
       };
     })
-    .sort((a, b) => a.mesaNumero - b.mesaNumero);
+    .sort((a, b) => (!!b.solicitud - !!a.solicitud) || a.mesaNumero - b.mesaNumero);
 };
+
+const PAGO_AVISADO = {
+  Efectivo: 'Paga en efectivo: el mesero lo trae',
+  Tarjeta: 'Pagó con tarjeta en el datáfono',
+  QR: 'Pagó por transferencia',
+};
+
+/** Texto de la solicitud del mesero para la tarjeta de la mesa. */
+export const textoSolicitud = (solicitud) =>
+  !solicitud ? null : solicitud.metodoPago ? PAGO_AVISADO[solicitud.metodoPago] ?? solicitud.metodoPago : 'Pidió la cuenta';
 
 /** Mismo plato al mismo precio en varios pedidos: una sola línea, como en la factura. */
 export const lineasCuenta = (pedidos = []) => {

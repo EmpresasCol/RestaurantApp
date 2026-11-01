@@ -1,7 +1,7 @@
 import {
-  agruparCuentas, billetesSugeridos, cambio, cobrable, cuadreEfectivo, lineasCuenta, propinaSugerida, validarNit,
+  agruparCuentas, billetesSugeridos, cambio, cobrable, cuadreEfectivo, lineasCuenta, propinaSugerida, textoSolicitud, validarNit,
 } from '../utils/caja';
-import { htmlCierre, htmlFactura } from '../utils/recibo';
+import { htmlCierre, htmlCuenta, htmlFactura } from '../utils/recibo';
 import { csvReporte, horasVisibles, rangoPeriodo, sinVentas } from '../utils/reportes';
 
 const pedido = (id, mesa, estado, detalles, fecha = `2026-11-02T1${id}:00:00Z`) => ({
@@ -34,6 +34,17 @@ describe('cuentas por mesa', () => {
 
   test('las cuentas pagadas no aparecen', () => {
     expect(agruparCuentas(pedidos).some((c) => c.mesaNumero === 2)).toBe(false);
+  });
+
+  test('la mesa que pidió la cuenta desde la app va primero y lleva su solicitud', () => {
+    const solicitud = { id: 3, mesaId: 40, metodoPago: null };
+    const [primera, segunda] = agruparCuentas(pedidos, [solicitud]);
+    expect(primera.mesaNumero).toBe(4);
+    expect(primera.solicitud).toBe(solicitud);
+    expect(segunda.solicitud).toBeNull();
+    expect(textoSolicitud(solicitud)).toBe('Pidió la cuenta');
+    expect(textoSolicitud({ metodoPago: 'Tarjeta' })).toBe('Pagó con tarjeta en el datáfono');
+    expect(textoSolicitud(null)).toBeNull();
   });
 
   test('el mismo plato al mismo precio en varios pedidos va en una línea', () => {
@@ -92,6 +103,14 @@ describe('tirillas', () => {
     expect(html).toContain('Impoconsumo (8%) incluido');
     expect(html).toContain('Propina voluntaria');
     expect(html).toContain('Cambio');
+  });
+
+  test('la cuenta de la mesa lleva los platos y el total, y aclara que no es factura', () => {
+    const html = htmlCuenta({ mesaNumero: 4, total: 56000 }, [{ nombre: 'Hamburguesa', cantidad: 2, total: 50000 }, { nombre: 'Limonada', cantidad: 1, total: 6000 }]);
+    expect(html).toContain('Mesa 4');
+    expect(html).toContain('2 × Hamburguesa');
+    expect(html).toMatch(/\$\s?56\.000/);
+    expect(html).toContain('no es una factura');
   });
 
   test('el nombre del cliente se escapa: no inyecta HTML', () => {

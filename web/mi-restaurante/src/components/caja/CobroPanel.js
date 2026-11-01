@@ -5,7 +5,7 @@ import { CheckCircle2, Printer } from 'lucide-react';
 import * as api from '../../services/api';
 import { Boton, Campo, Chip, Panel } from '../inventario/ui';
 import {
-  billetesSugeridos, cambio, cobrable, consumoPedido, estadoPedido, hora, METODOS, pesos, propinaSugerida, validarNit,
+  billetesSugeridos, cambio, cobrable, consumoPedido, estadoPedido, hora, METODOS, pesos, propinaSugerida, textoSolicitud, validarNit,
 } from '../../utils/caja';
 import { etiquetaImpuesto, impuestoIncluido } from '../../utils/impuestos';
 import { htmlFactura, imprimirHtml } from '../../utils/recibo';
@@ -52,16 +52,31 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
   const [nombre, setNombre] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);
+  const [comprobante, setComprobante] = useState(null);
 
-  // Al abrir otra mesa se arranca de cero con todos los pedidos cobrables marcados.
+  // Al abrir otra mesa se arranca de cero con todos los pedidos cobrables marcados
+  // y el método que avisó el mesero desde la app.
   const mesaId = cuenta?.mesaId;
+  const solicitud = cuenta?.solicitud;
   useEffect(() => {
     if (!cuenta) return;
     setSeleccion(cuenta.pedidos.filter(cobrable).map((p) => p.id));
-    setPropinaModo('ninguna'); setPropinaOtra(''); setMetodo('Efectivo'); setRecibido('');
+    setPropinaModo('ninguna'); setPropinaOtra(''); setMetodo(solicitud?.metodoPago ?? 'Efectivo'); setRecibido('');
     setConDatos(false); setNit(''); setNombre(''); setResultado(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesaId]);
+
+  // La foto de la transferencia se pide solo al abrir: la caja la revisa antes de cobrar.
+  const solicitudConFoto = solicitud?.tieneComprobante ? solicitud.id : null;
+  useEffect(() => {
+    setComprobante(null);
+    if (!solicitudConFoto) return undefined;
+    let vigente = true;
+    api.getComprobanteCuenta(solicitudConFoto)
+      .then((foto) => vigente && setComprobante(foto))
+      .catch(() => vigente && mostrar('No se pudo cargar la foto de la transferencia', 'error'));
+    return () => { vigente = false; };
+  }, [solicitudConFoto, mostrar]);
 
   const pedidos = useMemo(() => cuenta?.pedidos ?? [], [cuenta]);
   const elegidos = pedidos.filter((p) => seleccion.includes(p.id) && cobrable(p));
@@ -203,6 +218,25 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
                   </p>
                 )}
               </div>
+            )}
+            {solicitud?.metodoPago && (
+              <p className="mt-2 text-[13px] text-gray-500">
+                {solicitud.meseroNombre || 'El mesero'} avisó desde la app: {textoSolicitud(solicitud).toLowerCase()}.
+              </p>
+            )}
+            {solicitudConFoto && (
+              <figure className="mt-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-100">
+                {comprobante ? (
+                  <a href={comprobante} target="_blank" rel="noreferrer" title="Abrir la foto en grande">
+                    <img src={comprobante} alt="Foto de la transferencia que tomó el mesero" className="max-h-80 w-full object-contain" />
+                  </a>
+                ) : (
+                  <div className="h-40 animate-pulse" aria-label="Cargando la foto" />
+                )}
+                <figcaption className="border-t border-gray-200 bg-white px-3 py-2 text-[12px] text-gray-500">
+                  Revisa que el valor y la cuenta de destino coincidan antes de cobrar.
+                </figcaption>
+              </figure>
             )}
           </section>
 

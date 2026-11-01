@@ -278,6 +278,12 @@ export const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
   }
 };
 
+/** Cocina empieza el pedido: desde ahí el mesero ya no lo edita ni lo cancela. */
+export const prepararPedido = async (pedidoId) => {
+  const response = await fetchWithHeaders(`${API_URL}/pedidos/${pedidoId}/preparar`, { method: 'PUT' });
+  if (!response.ok) throw await errorDe(response, 'No se pudo empezar el pedido');
+};
+
 // ==================== PAGOS ====================
 export const createPago = async (pedidoId, monto, metodoPago, montoPropina = 0) => {
   try {
@@ -340,6 +346,20 @@ export const cobrarCuenta = async (cobro) => {
   });
   if (!response.ok) throw await errorDe(response, 'No se pudo registrar el cobro');
   return await response.json();
+};
+
+/** Cuentas que pidió el mesero desde la app: [{ id, mesaId, mesaNumero, meseroNombre, metodoPago, tieneComprobante }]. */
+export const getSolicitudesCuenta = async () => {
+  const response = await fetchWithHeaders(`${API_URL}/cuentas/solicitudes`);
+  if (!response.ok) throw await errorDe(response, 'No se pudieron cargar las cuentas pedidas');
+  return await response.json();
+};
+
+/** Foto de la transferencia (data URI) que tomó el mesero. */
+export const getComprobanteCuenta = async (solicitudId) => {
+  const response = await fetchWithHeaders(`${API_URL}/cuentas/solicitudes/${solicitudId}/comprobante`);
+  if (!response.ok) throw await errorDe(response, 'No se pudo cargar el comprobante');
+  return (await response.json()).comprobante;
 };
 
 // ==================== CIERRE Y REPORTES ====================

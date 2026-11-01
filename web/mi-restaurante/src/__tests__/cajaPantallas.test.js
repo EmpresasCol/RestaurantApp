@@ -21,6 +21,7 @@ const pedido = (id, estado, detalles, mesa = 4) => ({
 beforeEach(() => {
   jest.clearAllMocks();
   domiciliosApi.getDomiciliosActivos.mockResolvedValue([]);
+  api.getSolicitudesCuenta.mockResolvedValue([]);
 });
 
 describe('Caja', () => {
@@ -78,6 +79,23 @@ describe('Caja', () => {
     fireEvent.click(within(panel).getByRole('button', { name: /Cobrar \$\s?6\.000/ }));
 
     await waitFor(() => expect(api.cobrarCuenta).toHaveBeenCalledWith(expect.objectContaining({ pedidoIds: [2], metodoPago: 'Tarjeta', recibido: null })));
+  });
+
+  test('la cuenta que pidió el mesero por transferencia llega con el método y la foto', async () => {
+    api.getPedidosActivos.mockResolvedValue([pedidos[0]]);
+    api.getSolicitudesCuenta.mockResolvedValue([
+      { id: 9, mesaId: 40, mesaNumero: 4, meseroNombre: 'Juan', fecha: '2026-11-02T18:00:00Z', metodoPago: 'QR', fechaPago: '2026-11-02T18:05:00Z', tieneComprobante: true },
+    ]);
+    api.getComprobanteCuenta.mockResolvedValue('data:image/jpeg;base64,AAAA');
+    render(<Facturacion />);
+
+    expect(await screen.findByText('Pagó por transferencia')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Cobrar \$\s?50\.000/ }));
+    const panel = await screen.findByRole('dialog');
+
+    expect(within(panel).getByRole('radio', { name: 'Transferencia o QR' })).toHaveAttribute('aria-checked', 'true');
+    expect(await within(panel).findByAltText(/Foto de la transferencia/)).toHaveAttribute('src', 'data:image/jpeg;base64,AAAA');
+    expect(api.getComprobanteCuenta).toHaveBeenCalledWith(9);
   });
 
   test('si el efectivo no alcanza no deja cobrar', async () => {

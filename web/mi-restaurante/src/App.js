@@ -187,7 +187,8 @@ function AppContent() {
               notas: d.nota || ''
             })),
             hora: new Date(p.fecha),
-            estado: p.estado
+            estado: p.estado,
+            empezado: p.cocinaEmpezo
           }))
       );
     } catch (error) {

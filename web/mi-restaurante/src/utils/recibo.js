@@ -55,6 +55,30 @@ export const htmlFactura = (f, extra = {}) => {
 </body></html>`;
 };
 
+/**
+ * Cuenta de la mesa (pre-cuenta) que el mesero lleva al cliente antes de pagar.
+ * No es factura: la factura sale cuando la caja cobra.
+ */
+export const htmlCuenta = (cuenta, lineas, ahora = new Date()) => {
+  const items = lineas.map((l) => fila(`${l.cantidad} × ${escapar(l.nombre)}`, pesos(l.total))).join('');
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cuenta mesa ${escapar(cuenta.mesaNumero)}</title><style>${ESTILO}</style></head><body>
+  <h1>Qpro</h1>
+  <p class="centro suave">Cuenta de la mesa</p>
+  <p class="centro"><strong>Mesa ${escapar(cuenta.mesaNumero)}</strong></p>
+  <p class="centro suave">${fechaHora(ahora)}</p>
+  <hr>
+  <table>${items}</table>
+  <hr>
+  <table>
+    ${fila(`<span class="suave">${escapar(etiquetaImpuesto())}</span>`, `<span class="suave">${pesos(impuestoIncluido(cuenta.total))}</span>`)}
+    ${fila('Total', pesos(cuenta.total), 'total')}
+  </table>
+  <hr>
+  <p class="centro">La propina es voluntaria.</p>
+  <p class="centro suave">Este documento no es una factura.</p>
+</body></html>`;
+};
+
 /** HTML del cierre de caja del día. cuadre: { base, contado, esperado, diferencia } (opcional). */
 export const htmlCierre = (c, cuadre) => {
   const metodos = (c.porMetodo ?? []).map((m) => fila(escapar(m.metodo), pesos(m.total))).join('');

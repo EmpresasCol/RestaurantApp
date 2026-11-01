@@ -20,11 +20,13 @@ const tonoEspera = (minutos) =>
       ? { borde: "ring-amber-400/60", chip: "bg-amber-400 text-espresso", texto: "Demorado" }
       : { borde: "ring-white/10", chip: "bg-white/10 text-orange-100", texto: "A tiempo" }
 
-function Ticket({ pedido, minutos, enCarga, onListo }) {
+function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
   const [confirmando, setConfirmando] = useState(false)
   const temporizador = useRef(null)
   const esDomicilio = pedido.tipo === "domicilio"
   const idVisible = esDomicilio ? pedido.domicilioId : pedido.id
+  // Mientras la cocina no lo empieza, el mesero todavía puede cambiarlo desde la app.
+  const porEmpezar = !esDomicilio && pedido.estado === "EnProceso" && !pedido.empezado
   // Un pedido ya listo (vista del administrador) pasa a Entregado.
   const siguiente = pedido.estado === "Listo" ? "Entregado" : "Listo"
   const tono = pedido.estado === "Listo"
@@ -33,8 +35,12 @@ function Ticket({ pedido, minutos, enCarga, onListo }) {
 
   useEffect(() => () => clearTimeout(temporizador.current), [])
 
-  // Dos toques para marcar listo: evita errores sin bloquear la pantalla con un modal.
+  // Empezar es un toque; marcar listo pide dos: evita errores sin bloquear la pantalla con un modal.
   const alTocar = () => {
+    if (porEmpezar) {
+      onEmpezar(pedido)
+      return
+    }
     if (!confirmando) {
       setConfirmando(true)
       clearTimeout(temporizador.current)
@@ -109,9 +115,11 @@ function Ticket({ pedido, minutos, enCarga, onListo }) {
           type="button"
           onClick={alTocar}
           disabled={enCarga}
-          aria-label={confirmando ? `Confirmar orden ${idVisible} como ${siguiente.toLowerCase()}` : `Marcar orden ${idVisible} como ${siguiente.toLowerCase()}`}
+          aria-label={porEmpezar ? `Empezar a preparar la orden ${idVisible}` : confirmando ? `Confirmar orden ${idVisible} como ${siguiente.toLowerCase()}` : `Marcar orden ${idVisible} como ${siguiente.toLowerCase()}`}
           className={`flex min-h-[56px] w-full items-center justify-center gap-2 rounded-2xl text-[17px] font-extrabold transition-[background-color,transform] active:scale-[0.98] disabled:cursor-wait disabled:bg-white/10 disabled:text-white/60 ${
-            confirmando
+            porEmpezar
+              ? "bg-white/[0.08] text-orange-200 ring-1 ring-orange-300/40 hover:bg-orange-500 hover:text-espresso"
+              : confirmando
               ? "bg-white text-espresso"
               : siguiente === "Entregado"
                 ? "bg-white/[0.08] text-orange-200 ring-1 ring-orange-300/40 hover:bg-orange-500 hover:text-espresso"
@@ -122,6 +130,11 @@ function Ticket({ pedido, minutos, enCarga, onListo }) {
             <>
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden="true" />
               Actualizando…
+            </>
+          ) : porEmpezar ? (
+            <>
+              <ChefHat size={22} />
+              Empezar a preparar
             </>
           ) : confirmando ? (
             "Toca otra vez para confirmar"
@@ -180,6 +193,19 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
   const todosLosPedidos = [...(pedidos || []).map((p) => ({ ...p, tipo: "mesa" })), ...domicilios]
 
   const calcularTiempoTranscurrido = (horaInicio) => Math.max(0, Math.floor((horaActual - horaInicio) / 60000))
+
+  const empezar = async (pedido) => {
+    setCargandoEstado(pedido.id)
+    try {
+      await api.prepararPedido(pedido.id)
+      if (onActualizarPedidos) await onActualizarPedidos()
+      setAviso({ tipo: "exito", texto: `Mesa ${pedido.mesa} en preparación` })
+    } catch (error) {
+      setAviso({ tipo: "error", texto: error.message || "No se pudo empezar el pedido." })
+    } finally {
+      setCargandoEstado(null)
+    }
+  }
 
   // Listo para cocina; Entregado solo aparece en la vista del administrador.
   const marcarComoListo = async (pedido, nuevoEstado = "Listo") => {
@@ -313,6 +339,7 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
                     minutos={calcularTiempoTranscurrido(pedido.hora)}
                     enCarga={cargandoEstado === idVisible}
                     onListo={marcarComoListo}
+                    onEmpezar={empezar}
                   />
                 )
               })}

@@ -1,8 +1,9 @@
 // Cuentas abiertas: una tarjeta por mesa (todos sus pedidos) y los domicilios en camino.
 import React from 'react';
-import { Receipt, Truck } from 'lucide-react';
-import { BotonConfirmar, Chip, Lista, Vacio } from '../inventario/ui';
-import { hora, lineasCuenta, pesos } from '../../utils/caja';
+import { BellRing, Printer, Receipt, Truck } from 'lucide-react';
+import { Boton, BotonConfirmar, Chip, Lista, Vacio } from '../inventario/ui';
+import { hora, lineasCuenta, pesos, textoSolicitud } from '../../utils/caja';
+import { htmlCuenta, imprimirHtml } from '../../utils/recibo';
 
 const ESTADO_DOMICILIO = { EnPreparacion: 'En cocina', Listo: 'Listo para salir', Recogido: 'Recogido', EnCamino: 'En camino' };
 
@@ -10,8 +11,9 @@ function TarjetaMesa({ cuenta, onCobrar }) {
   const lineas = lineasCuenta(cuenta.pedidos);
   const visibles = lineas.slice(0, 4);
   const todoEnCocina = cuenta.totalCobrable === 0;
+  const { solicitud } = cuenta;
   return (
-    <li className="flex flex-col rounded-2xl border border-gray-200 bg-white p-4 transition-shadow hover:shadow-card">
+    <li className={`flex flex-col rounded-2xl border bg-white p-4 transition-shadow hover:shadow-card ${solicitud ? 'border-purple-300' : 'border-gray-200'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-[22px] font-extrabold leading-tight tracking-[-0.02em] text-espresso">Mesa {cuenta.mesaNumero}</h3>
@@ -21,6 +23,17 @@ function TarjetaMesa({ cuenta, onCobrar }) {
         </div>
         <p className="tabular text-[22px] font-extrabold tracking-[-0.02em] text-espresso">{pesos(cuenta.total)}</p>
       </div>
+      {solicitud && (
+        <p className="mt-3 flex items-start gap-2 rounded-xl bg-purple-50 px-3 py-2 text-[13px] text-purple-900">
+          <BellRing size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <span>
+            <strong className="font-bold">{textoSolicitud(solicitud)}</strong>
+            <span className="tabular block text-purple-800">
+              {solicitud.meseroNombre || 'Mesero'} · {hora(solicitud.fechaPago ?? solicitud.fecha)}{solicitud.tieneComprobante ? ' · con foto' : ''}
+            </span>
+          </span>
+        </p>
+      )}
       {cuenta.enCocina > 0 && (
         <p className="mt-2"><Chip tono="aviso">{cuenta.enCocina === cuenta.pedidos.length ? 'Todo en cocina' : `${cuenta.enCocina} pedido${cuenta.enCocina === 1 ? '' : 's'} en cocina`}</Chip></p>
       )}
@@ -33,14 +46,25 @@ function TarjetaMesa({ cuenta, onCobrar }) {
         ))}
         {lineas.length > visibles.length && <li className="text-gray-500">y {lineas.length - visibles.length} más</li>}
       </ul>
-      <button
-        type="button"
-        onClick={onCobrar}
-        disabled={todoEnCocina}
-        className="mt-4 h-12 w-full rounded-xl bg-espresso text-[15px] font-bold text-white transition-colors hover:bg-gray-900 disabled:bg-gray-200 disabled:text-gray-500"
-      >
-        {todoEnCocina ? 'Esperando a cocina' : `Cobrar ${pesos(cuenta.totalCobrable)}`}
-      </button>
+      <div className="mt-4 flex gap-2">
+        <Boton
+          variante="secundario"
+          tamano="lg"
+          aria-label={`Imprimir la cuenta de la mesa ${cuenta.mesaNumero}`}
+          title="Imprimir la cuenta para que el mesero la lleve a la mesa"
+          onClick={() => imprimirHtml(htmlCuenta(cuenta, lineas))}
+        >
+          <Printer size={18} aria-hidden="true" />Cuenta
+        </Boton>
+        <button
+          type="button"
+          onClick={onCobrar}
+          disabled={todoEnCocina}
+          className="h-12 flex-1 rounded-xl bg-espresso text-[15px] font-bold text-white transition-colors hover:bg-gray-900 disabled:bg-gray-200 disabled:text-gray-500"
+        >
+          {todoEnCocina ? 'Esperando a cocina' : `Cobrar ${pesos(cuenta.totalCobrable)}`}
+        </button>
+      </div>
     </li>
   );
 }
