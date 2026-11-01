@@ -24,6 +24,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 - **Base de producción:** TiDB Cloud, cluster `Qpro`, base `restaurantebd` (TiDB v8.5.3).
   Las tres migraciones de `migraciones/` (`2026-10-31_presentaciones_compra`, `2026-11-01_activos_y_codigo_qr`, `2026-11-02_caja_cuentas`) **ya están aplicadas** en TiDB y en el MySQL local.
   `2026-11-03_solicitudes_cuenta` también está aplicada en TiDB y en el MySQL local (03/11/2026).
+  **`2026-11-04_cuentas_compartidas_domicilios` está aplicada solo en el MySQL local: falta correrla en TiDB antes de desplegar la API.**
   Regla: toda migración nueva se corre en TiDB **antes** de desplegar la API que la usa (si no, la API falla al leer la columna).
 - **Local:** MySQL 9.6 en `localhost:3306` (cadena en `api/RestaurantApi/appsettings.Development.json`).
   `.claude/launch.json` (no está en git) arranca la API en `:5000` y la web en `:3000`.
@@ -50,7 +51,9 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 | `9e76b4b` | Rediseño web: menú QR, login, cocina y caja |
 | `a123ddc` | Plan de auditoría técnica (seguridad, inventario, caja, estados) |
 
-Pruebas al cierre: **API 176/176**, **web 115/115**, **app 43/43** (`flutter analyze` sin avisos).
+Pruebas al cierre: **API 208/208**, **web 135/135**, **app 51/51** (`flutter analyze` sin avisos).
+Trabajo del 04/11/2026 (sin commit todavía): cuentas compartidas, pagos avisados con varias fotos, domicilios con
+factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el arreglo del cierre de sesión de la app.
 
 ## 4. Arquitectura que conviene saber
 
@@ -83,21 +86,35 @@ Pruebas al cierre: **API 176/176**, **web 115/115**, **app 43/43** (`flutter ana
 ### App móvil (`app/restaurant_app/`)
 - **Un solo login** para meseros y domiciliarios: prueba `usuarios/login-mobile` y, si el usuario no es mesero, `domiciliarios/login`. Otros roles ven "entra por la web".
 - **Capas:** `services/api.dart` (único cliente HTTP: JWT, UTF-8, 40 s, mensajes legibles; un 401 cierra la sesión), `services/realtime.dart` (cliente mínimo de SignalR por WebSocket, sin paquete; mismo evento `cambio` que la web, recarga cada 60 s de respaldo), `providers/` (`AuthProvider`, `SalonProvider` del mesero, `DomiciliarioProvider`, `NotificacionProvider`), `screens/mesero/` y `screens/domiciliario/`. Tema y piezas en `theme/qpro_theme.dart` y `widgets/q.dart`.
-- **Mesero:** salón por mesas con "para servir" primero; carta con disponibilidad del inventario (`disponible`, `porcionesDisponibles`, tope 50 como la web); edita o cancela un pedido solo mientras la cocina no lo empieza (`PedidoDto.cocinaEmpezo`); lo que se pide después va como pedido nuevo de la mesa; sirve (Entregado) con doble toque. **No cobra:** pide la cuenta a caja (`POST api/cuentas/solicitudes`) y luego avisa cómo pagó el cliente (efectivo, tarjeta en datáfono o transferencia al QR con foto del comprobante).
-- **Domiciliario:** para recoger / mis entregas, llamar, WhatsApp (+57), mapa, recoger → salir → entregado y cobrado.
+- **Mesero:** salón por mesas con "para servir" primero; carta con disponibilidad del inventario (`disponible`, `porcionesDisponibles`, tope 50 como la web); edita o cancela un pedido solo mientras la cocina no lo empieza (`PedidoDto.cocinaEmpezo`); lo que se pide después va como pedido nuevo de la mesa; sirve (Entregado) con doble toque. **No cobra:** pide la cuenta a caja (`POST api/cuentas/solicitudes`) y luego avisa cómo pagó la mesa: propina y uno o varios pagos (partes iguales, efectivo + tarjeta, una transferencia por persona, cada una con su foto). Lo ya cobrado de una cuenta dividida se ve apagado.
+- **Domiciliario:** para recoger / mis entregas (incluye lo que le asignaron aún en cocina), llamar, WhatsApp (+57), mapa, cambio a llevar, recoger → salir → "Entregar y cobrar" (método real; foto si transfirió) y el efectivo que debe entregar en caja.
+- **Sesión:** cada sesión monta su propio `Navigator` (`_App` en `main.dart`); antes, al salir, el Navigator viejo seguía vivo y sus pantallas fallaban con `ProviderNotFoundException`. Prueba en `test/sesion_test.dart`.
 - **Push:** Firebase es opcional (sin `GoogleService-Info.plist` en iOS la app funciona con el tiempo real). El sonido de "pedido listo" va dentro de la app (`assets/sounds/listo.wav`). La API sigue enviando a tokens de registro (`getToken`, marcado obsoleto en firebase_messaging 17).
 - **API por defecto:** Render. Otra con `--dart-define=API_BASE_URL=...`. Vista previa web: `flutter build web --dart-define=API_BASE_URL=http://localhost:5000` y la configuración `app-movil` de `.claude/launch.json` (puerto 3001, permitido por CORS).
 
 ### Cuentas de mesa (mesero → caja)
-- `SolicitudesCuenta` (una pendiente por mesa): `MetodoPago` nulo = solo pidió la cuenta; con `QR` la foto (`Comprobante`, data URI) es obligatoria. Al cobrar toda la cuenta (`POST api/pagos/cobro`) queda `Cobrada` con su `FacturaId`; si se cancelan todos los pedidos de la mesa, `Anulada`. Endpoints en `Controllers/CuentasController.cs`; tema realtime `pedidos`.
-- **Caja web:** la mesa que pidió la cuenta va primero con aviso petróleo; botón "Cuenta" imprime la pre-cuenta (`htmlCuenta` en `utils/recibo.js`); el cobro preselecciona el método avisado y muestra la foto de la transferencia.
-- **Cocina web:** "Empezar a preparar" (`PUT api/pedidos/{id}/preparar`, Cocina/Admin) pasa los platos a `EnPreparacion`. Desde ahí el mesero ya no edita ni cancela (`EstadosPedido.CocinaEmpezo`).
+- `SolicitudesCuenta` (una pendiente por mesa) con sus `PagosAvisados` (método, monto, foto si es `QR`, `FacturaId` cuando la caja lo usa) y `Propina`. Avisar otra vez reemplaza los avisos que la caja no ha usado. `Cuadra` = lo avisado cubre exacto lo que debe la mesa + la propina (`Cuentas.AvisoCuadra`). Al saldar la cuenta queda `Cobrada`; si se cancelan todos los pedidos, `Anulada`. Endpoints en `Controllers/CuentasController.cs` (`GET cuentas/pagos/{id}/comprobante` trae la foto de cada pago); tema realtime `pedidos`.
+- **Cobro (`POST api/pagos/cobro`):** por pedidos (`pedidoIds`) o por platos (`lineas: [{detalleId, cantidad}]`, cada quien lo suyo, incluso 1 de 2 unidades: la parte cobrada queda en su propia línea con `PedidoDetalles.FacturaId`). Uno o varios `pagos` (método, monto con propina, recibido en efectivo, `avisoId`); deben sumar exacto el consumo + la propina, que se reparte en proporción (`Cuentas.RepartirPropina`). Cada pago es una fila de `Pagos` ligada a la factura (su `PedidoId` es el primer pedido cobrado). Un pedido queda `Pagado` cuando ya no le quedan platos por cobrar. Si el aviso del mesero cuadra, el cobro debe ser toda la cuenta, con esa propina y esos mismos pagos (409 si no); si no cuadra, lo avisado queda fijo y la caja completa el resto. Lo ya cobrado de un pedido no se cancela ni se edita.
+- **Caja web:** tarjeta coloreada según el aviso (petróleo: pidió la cuenta; ámbar: pagó una parte; verde: ya pagó todo). El panel tiene "Toda la cuenta" / "Cada quien lo suyo", partes iguales, varios pagos y las fotos; si cuadra solo se confirma. Reglas puras en `utils/caja.js`.
+- **Cocina web:** "Empezar a preparar" (`PUT api/pedidos/{id}/preparar` o `PUT api/domicilios/{id}/preparar`, Cocina/Admin). Lo listo pasa a la columna "Listos para entregar" sin botones: la cocina no marca entregado (403 para el rol Cocina); desaparece cuando el mesero sirve o el domiciliario recoge. Un pedido que editó el mesero (`Pedidos.FechaEdicion`) sale con franja ámbar.
 - **Solo Caja o Administrador** ponen un pedido en `Pagado` (403 para el mesero).
+
+### Domicilios
+- Etapas: recibido (`EnPreparacion` sin `InicioPreparacion`; el cliente aún lo edita), en cocina, listo, en camino (`Recogido`/`EnCamino`), entregado. No se tocó el ENUM de `Estado`.
+- Caja o administrador asignan domiciliario (`PUT api/domicilios/{id}/domiciliario`); el asignado lo ve en la app desde la cocina. `PagaCon` guarda el billete y la API calcula el `Cambio`.
+- Al entregar (app: `PUT domiciliarios/{id}/pedidos/{d}/entregar` con `metodoPago` y foto si transfirió; caja: `PUT api/domicilios/{id}/estado` con `metodoPago`) se emite la factura (`Facturas.DomicilioId`, `PagoId` nulo). Reglas en `Services/Entregas.cs`.
+- Efectivo del domiciliario: queda "por liquidar" hasta que la caja lo recibe (`POST api/domicilios/liquidaciones/{domiciliarioId}` → `FechaLiquidacion`). La caja lo entrega en caja sin liquidación aparte.
+- Web: `Domicilios.js` (tablero por etapas y detalle) y `NuevoDomicilio.js` (una pantalla: teléfono → direcciones guardadas → carta con inventario → pago y billete). La caja también entra a Domicilios.
+
+### Cierre de caja
+- `CierresCaja` (una fila por día): base al abrir (`PUT api/reportes/cierre/apertura`) y arqueo al cerrar (`POST api/reportes/cierre`); el administrador reabre (`DELETE api/reportes/cierre?fecha=`).
+- Esperado en el cajón = base + cobros de mesa en efectivo (con su propina) + efectivo que entregaron los domiciliarios − propinas pagadas al equipo − gastos o retiros. Tarjeta y transferencias se comparan con el datáfono y el banco. Lo que falta resolver (mesas abiertas, domicilios en curso, efectivo en domiciliarios) sale arriba.
+- Error corregido: el `[Authorize(Roles = "Administrador")]` de la clase dejaba al cajero sin cierre (403) aunque el método dijera "Administrador,Caja": los atributos se suman con Y.
 
 ### Diseño
 - Sistema "La carta a un toque": espresso `#2A1D15` para acciones, caramelo `#C8955E` para marca y conteos, piedra cálida para lo demás. Manrope con `.tabular` en cifras; solo sombras `card` y `lift`.
 - Tailwind se carga por CDN con un remapeo de paleta en `public/index.html`: `orange` es caramelo, `gray` es piedra y `purple` es petróleo.
-- Ya siguen el sistema: menú QR, login, cocina, caja (por cobrar, facturas y cierre), inventario completo, Platillos, Usuarios, Códigos QR, Reportes y la app móvil. Siguen con el estilo viejo: Domicilios y NuevoDomicilio.
+- Ya siguen el sistema: menú QR, login, cocina, caja (por cobrar, facturas y cierre), inventario completo, Platillos, Usuarios, Códigos QR, Reportes, Domicilios, NuevoDomicilio y la app móvil.
 - **Caja web:** `Facturacion.js` + `components/caja/` (`PorCobrar`, `CobroPanel`, `FacturasDia`, `CierreCaja`); reglas en `utils/caja.js`, tirilla de 80 mm en `utils/recibo.js`. **Reportes:** `Reportes.js` + `utils/reportes.js` (colores de gráficos validados: mesa `#C4762B`, domicilio `#00809A`).
 
 ### Web: módulos del administrador (Platillos, Usuarios, Códigos QR)
@@ -126,6 +143,10 @@ Pruebas al cierre: **API 176/176**, **web 115/115**, **app 43/43** (`flutter ana
 | Siempre queda al menos un Administrador | Evita dejar el sistema sin quien lo gestione |
 | El mesero no cobra: pide la cuenta y avisa el método; la caja cobra y factura | Así trabaja el salón real (cuenta impresa, efectivo a caja, datáfono, foto de la transferencia) |
 | El mesero edita o cancela solo hasta que la cocina empieza el pedido | Lo que ya se cocina no se cambia; lo nuevo va como otro pedido |
+| Una cuenta dividida es una factura por persona; partes iguales o pago mixto es una factura con varios pagos | Cada quien puede pedir su factura; los pagos de una misma factura se cuadran por método |
+| Si el aviso del mesero cubre toda la cuenta, la caja no cambia montos, métodos ni propina | La mesa ya pagó (comprobantes); si no cubre, lo avisado queda fijo y la caja cobra el resto |
+| Servir es del mesero: la cocina solo marca listo | Lo listo se aparta en cocina hasta que llega a la mesa |
+| El domicilio se factura al entregarlo y cobrarlo; el efectivo del domiciliario entra al cajón al liquidarlo | Así el cuadre del cajón cuenta solo el dinero que de verdad está en caja |
 
 ## 6. Pendientes
 
@@ -147,13 +168,15 @@ Pruebas al cierre: **API 176/176**, **web 115/115**, **app 43/43** (`flutter ana
 - [ ] Sin probar en equipo real: la cámara del celular (foto de la transferencia), el push con la app cerrada y una pistola de códigos física. Casos en `tests/PLAN_PRUEBAS_MOVIL.md`.
 
 ### Diseño
-- [ ] Rediseñar las pantallas listadas en §4 Diseño que siguen con el estilo viejo (Domicilios, NuevoDomicilio). Sus 4 avisos de lint son anteriores.
+- [x] Domicilios y NuevoDomicilio rediseñados (04/11/2026).
 - [ ] Caja nueva no tiene "cancelar pedido" (la anterior sí); hoy se cancela desde Cocina o la app.
 
 ### Producto (caja y QR)
 - [ ] Reimprimir los QR de las mesas (los viejos con `?mesa=` ya no permiten pedir).
-- [ ] Caja: pago mixto (parte efectivo, parte tarjeta) y anulación de facturas con nota crédito; hoy un pago facturado no se anula.
-- [ ] Domicilios no emiten factura con consecutivo (solo comprobante); se cobran al marcarlos entregados.
+- [x] Pago mixto, partes iguales y cuenta dividida por consumo (04/11/2026).
+- [ ] Anulación de facturas con nota crédito; hoy un pago facturado no se anula.
+- [x] Domicilios con factura consecutiva al entregarlos (04/11/2026).
+- [ ] Domicilio que no se pudo entregar: hoy se cancela con motivo desde la web; falta el regreso del domiciliario desde la app.
 - [ ] `.impeccable/design.json` está desactualizado frente a `DESIGN.md`; se regenera con `/impeccable document`.
 
 ## 7. Cómo verificar
