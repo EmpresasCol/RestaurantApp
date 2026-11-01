@@ -24,7 +24,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 - **Base de producción:** TiDB Cloud, cluster `Qpro`, base `restaurantebd` (TiDB v8.5.3).
   Las tres migraciones de `migraciones/` (`2026-10-31_presentaciones_compra`, `2026-11-01_activos_y_codigo_qr`, `2026-11-02_caja_cuentas`) **ya están aplicadas** en TiDB y en el MySQL local.
   `2026-11-03_solicitudes_cuenta` también está aplicada en TiDB y en el MySQL local (03/11/2026).
-  **`2026-11-04_cuentas_compartidas_domicilios` está aplicada solo en el MySQL local: falta correrla en TiDB antes de desplegar la API.**
+  **`2026-11-04_cuentas_compartidas_domicilios` y `2026-11-05_recepciones_fotos` están aplicadas solo en el MySQL local: falta correrlas en TiDB antes de desplegar la API.**
   Regla: toda migración nueva se corre en TiDB **antes** de desplegar la API que la usa (si no, la API falla al leer la columna).
 - **Local:** MySQL 9.6 en `localhost:3306` (cadena en `api/RestaurantApi/appsettings.Development.json`).
   `.claude/launch.json` (no está en git) arranca la API en `:5000` y la web en `:3000`.
@@ -51,7 +51,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 | `9e76b4b` | Rediseño web: menú QR, login, cocina y caja |
 | `a123ddc` | Plan de auditoría técnica (seguridad, inventario, caja, estados) |
 
-Pruebas al cierre: **API 208/208**, **web 135/135**, **app 51/51** (`flutter analyze` sin avisos).
+Pruebas al cierre: **API 214/214**, **web 135/135**, **app 51/51** (`flutter analyze` sin avisos).
 Trabajo del 04/11/2026 (sin commit todavía): cuentas compartidas, pagos avisados con varias fotos, domicilios con
 factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el arreglo del cierre de sesión de la app.
 
@@ -64,7 +64,8 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - **QR de mesa:** el enlace es `?m=<CodigoQR>` (24 caracteres hexadecimales al azar). El pedido anónimo se acepta solo con ese código y la API ignora cualquier `MesaId`; con token (mesero) sigue yendo por `MesaId`. El administrador puede cambiar todos los códigos (`POST api/mesas/codigos`).
 - **Estados:** las transiciones permitidas de pedidos y domicilios están en `Services/EstadosPedido.cs`.
 - **Fechas:** se guardan en UTC; los cortes de "hoy" se calculan en hora de Colombia (`Services/HoraLocal.cs`). Las columnas DATE (vencimiento, fecha de orden) no se convierten.
-- **Tiempo real:** hub `Hubs/QproHub.cs` en `/api/hubs/qpro`. Un middleware de `Program.cs` emite `cambio` con un tema (`pedidos`, `mesas`, `domicilios`) tras cada escritura 2xx; el mapeo ruta → tema está en `Services/TemaRealtime.cs`. La web escucha con `useCambios(tema, recargar)` (`src/services/realtime.js`) y además hace polling cada 60 s como respaldo.
+- **Tiempo real:** hub `Hubs/QproHub.cs` en `/api/hubs/qpro`. Un middleware de `Program.cs` emite `cambio` con un tema (`pedidos`, `mesas`, `domicilios`, `inventario` para `api/compras` y `api/inventario`) tras cada escritura 2xx; el mapeo ruta → tema está en `Services/TemaRealtime.cs`. La web escucha con `useCambios(tema, recargar)` (`src/services/realtime.js`) y además hace polling cada 60 s como respaldo.
+- **Respuestas comprimidas:** `UseResponseCompression` (Brotli/gzip, nivel rápido); el JSON de inventario viaja ~5 veces más liviano.
 - **Esquema:** no hay migraciones de EF; los cambios se hacen con SQL a mano en `migraciones/` (idempotente) y también se copian a `restaurantebd.sql`. TiDB no tiene triggers y tiene `tidb_enable_check_constraint` apagado (los CHECK se ignoran).
 
 ### Inventario (lo más trabajado)
@@ -73,8 +74,9 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - **Descuento por recetas** (`Services/InventarioService.cs`): compara el consumo esperado según recetas con lo ya descontado y aplica solo la diferencia. Las referencias usan prefijos exactos ("Pedido #N - "). El stock nunca queda negativo.
 - **Antes de guardar** un pedido o domicilio (mesa, QR, mesero, domicilio interno o público, edición): `VerificarStockPedidoAsync` / `VerificarStockDomicilioAsync`. Sin insumos responde 400 con "Platillo no disponible por el momento…".
 - **Carta:** `PlatilloDto` trae `disponible` y `porcionesDisponibles`. Los insumos opcionales no bloquean; un insumo inactivo o vencido cuenta como 0.
+- **Recepción** (tabla `Recepciones` + `RecepcionFotos`): guarda proveedor, orden, factura, total y hasta 10 fotos (JPEG reducido a 1280 px en el navegador, `utils/imagenes.js`). Cada línea puede ir a otro almacén (`AlmacenId` por línea; si no, el general). `NoVence` en una línea la deja sin fecha y apaga `RequiereCaducidad`/`DiasVencimiento` del insumo. Lotes `R{recepción}-{n}` y referencia `Recepción R-{id} · OC-… · factura`. Todo en una transacción con un solo viaje por el stock.
 - **Lo vencido** (`LotesInventario.VencidoAsync`): sigue en bodega hasta darlo de baja, pero no se vende ni se gasta en recetas.
-- **Endpoints de la operación diaria** (`Controllers/ComprasController.cs`, ruta `api/compras`): `resumen`, `insumos`, `insumos/{id}/ficha`, `codigo/{codigo}`, `presentaciones`, `recepciones`, `reposicion`, `ordenes`, `ordenes/{id}/estado`, `vencimientos`, `lotes/{id}` (PUT, corregir), `lotes/{id}/baja`, `traslados`, `conteos`.
+- **Endpoints de la operación diaria** (`Controllers/ComprasController.cs`, ruta `api/compras`): `resumen`, `insumos`, `insumos/{id}/ficha`, `codigo/{codigo}`, `presentaciones`, `recepciones` (POST registra; GET lista con Id de fotos), `recepciones/fotos/{id}`, `recepciones/{id}/fotos` (sumar fotos), `reposicion`, `ordenes`, `ordenes/{id}/estado`, `vencimientos`, `lotes/{id}` (PUT, corregir), `lotes/{id}/baja`, `traslados`, `conteos`.
 - **Catálogo y CRUD clásico:** `Controllers/InventarioController.cs` (`api/inventario/...`). El código interno se genera solo (PROD-021) y el código de barras es único entre insumos y presentaciones. Los niveles admiten decimales. Una receta siempre usa la unidad de su insumo. Un ajuste guarda la diferencia en el kárdex. Un almacén o proveedor con historial se desactiva en lugar de eliminarse.
 
 ### Web: inventario (`src/Inventario.js` + `src/components/inventario/`)
