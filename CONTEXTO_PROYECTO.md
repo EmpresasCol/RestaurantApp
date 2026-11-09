@@ -155,7 +155,7 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 ### Configuración y operación
 - [ ] `Jwt__Key` fija en Render (32 caracteres o más) y revisar que `EnableSwagger` esté en `false` en producción.
 - [ ] Revisar desde qué rama despliega Render; si es `main`, falta el merge de `RestaurantApp/AppMovil`.
-- [ ] La URL de ngrok sigue como valor por defecto en `.env.production` (la app ya usa Render).
+- [x] `.env.production` apunta a la API de Render (antes ngrok).
 - [ ] Las claves de la semilla SQL siguen en `123`.
 - [ ] Confirmar con el asesor si aplica impoconsumo o IVA.
 
