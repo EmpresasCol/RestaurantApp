@@ -1,0 +1,10 @@
+{
+  "name": "Qpro · Sistema para restaurantes",
+  "short_name": "Qpro",
+  "start_url": "{{base}}",
+  "scope": "{{base}}",
+  "display": "browser",
+  "background_color": "#FBF6F0",
+  "theme_color": "#2A1D15",
+  "icons": [{"src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}]
+}

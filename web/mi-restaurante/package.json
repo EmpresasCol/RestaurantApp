@@ -31,7 +31,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build --remove \"{index.html,*.json,*.ico,*.png,*.txt,static/**}\""
   },
   "eslintConfig": {
     "extends": [

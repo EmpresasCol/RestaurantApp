@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "QPRO/landing/**/*.html"
+        ],
+        "createdAt": "2026-11-09T18:21:37.209Z",
+        "reason": "Brand: #FBF6F0 is caramel-wash from QPRO/DESIGN.md"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "QPRO/landing/**/*.html"
+        ],
+        "createdAt": "2026-11-09T18:21:37.508Z",
+        "reason": "User asked for playful motion; decorative strip with sr-only text, pauses on hover and reduced motion; only on index"
+      }
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "qpro-landing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Landing comercial de Qpro, publicada en GitHub Pages bajo /RestaurantApp/landing/",
+  "scripts": {
+    "build": "node build.cjs",
+    "start": "node serve.cjs",
+    "test": "node verify.cjs",
+    "deploy": "node build.cjs && node deploy.cjs"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
+    "motion": "^12.43.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.26.0",
+    "babel-loader": "^9.2.1",
+    "gh-pages": "^6.3.0",
+    "webpack": "^5.97.0"
+  }
+}

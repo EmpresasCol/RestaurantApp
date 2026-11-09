@@ -1,0 +1,19 @@
+{
+  "nota": "Datos públicos de la landing. Cambia los valores de contacto y responsable por los reales y vuelve a compilar.",
+  "base": "/RestaurantApp/landing/",
+  "url": "https://empresascol.github.io/RestaurantApp/landing/",
+  "appUrl": "https://empresascol.github.io/RestaurantApp/",
+  "contacto": {
+    "whatsapp": "573000000000",
+    "whatsappVisible": "+57 300 000 0000",
+    "correo": "hola@qpro.com.co",
+    "instagram": "qpro.co",
+    "ciudad": "Sincelejo, Sucre"
+  },
+  "responsable": {
+    "nombre": "Qpro",
+    "identificacion": "NIT o cédula del responsable",
+    "direccion": "Dirección de notificaciones, Sincelejo, Sucre"
+  },
+  "legalActualizado": "9 de noviembre de 2026"
+}
