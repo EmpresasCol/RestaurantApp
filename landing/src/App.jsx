@@ -1,14 +1,14 @@
 import React, {useRef, useState, useEffect} from 'react';
-import {createRoot} from 'react-dom/client';
 import {motion, AnimatePresence, useScroll, useTransform, useSpring, useReducedMotion, useInView, useMotionValueEvent} from 'motion/react';
 import {
-  ArrowUpRight, ArrowDown, ArrowRight, Check, CheckCircle, X, List, Plus, Minus, QrCode, CookingPot, Receipt, Moped,
+  ArrowUpRight, ArrowDown, ArrowRight, Check, CheckCircle, Plus, Minus, QrCode, CookingPot, Receipt, Moped,
   Package, ChartBar, WhatsappLogo, EnvelopeSimple, InstagramLogo, MapPin, DeviceMobile, Monitor, DeviceTablet,
   Storefront, Clock, ChefHat, Bell, WarningCircle, Hamburger, Pizza, BowlFood, OrangeSlice, ForkKnife, UserCircle,
   ArrowCounterClockwise, PaperPlaneTilt, Calendar, CallBell
-} from '@phosphor-icons/react';
+} from './icons';
 
 import SITE from '../site.config.json';
+import IMAGENES from './images.json';
 
 /* Los datos de contacto se editan en site.config.json */
 const CONTACTO = SITE.contacto;
@@ -29,10 +29,21 @@ function Reveal({children, className = '', delay = 0, as = 'div'}) {
   );
 }
 
+/* Imágenes en WebP con varios anchos; build.cjs las genera desde public/assets/*.png|jpg según images.json */
+function Pic({name, alt = '', sizes, priority = false, className, width, height}) {
+  const img = IMAGENES[name];
+  const src = w => `assets/${name}-${w}.webp`;
+  return (
+    <img className={className} src={src(img.widths[img.widths.length - 1])} alt={alt}
+      srcSet={img.widths.length > 1 ? img.widths.map(w => `${src(w)} ${w}w`).join(', ') : undefined} sizes={img.widths.length > 1 ? sizes : undefined}
+      width={width || img.w} height={height || img.h} loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} decoding="async" />
+  );
+}
+
 function Logo() {
   return (
     <a className="logo" href="#inicio" aria-label="Qpro, volver al inicio">
-      <img src="assets/logo.jpg" alt="" width="36" height="36" />
+      <Pic name="logo" width={36} height={36} priority />
       <span>Qpro</span>
     </a>
   );
@@ -162,11 +173,12 @@ function Hero() {
         <h1 aria-label={lines.join(' ')}>
           {lines.map((line, i) => (
             <span className="line-mask" key={line} aria-hidden="true">
-              <motion.span className="hero-line" initial={reduced ? {opacity: 0} : {y: '110%'}} animate={reduced ? {opacity: 1} : {y: 0}} transition={{duration: 0.9, ease, delay: 0.15 + i * 0.12}}>{line}</motion.span>
+              <span className="hero-line" style={{animationDelay: `${150 + i * 120}ms`}}>{line}</span>
             </span>
           ))}
         </h1>
-        <motion.div initial={{opacity: 0, y: reduced ? 0 : 24}} animate={{opacity: 1, y: 0}} transition={{duration: 0.8, ease, delay: 0.45}}>
+        {/* Entrada con CSS: se ve con el HTML prerenderizado, sin esperar al JavaScript */}
+        <div className="hero-rest">
           <p className="hero-sub">Qpro conecta la carta, la cocina, la caja, los domicilios y el inventario de tu restaurante en un solo sistema. Menos carreras con papelitos, más tiempo para atender.</p>
           <div className="hero-actions">
             <DemoButton />
@@ -177,14 +189,14 @@ function Hero() {
             <li><Check size={16} weight="bold" />Celular, tablet o computador</li>
             <li><Check size={16} weight="bold" />Pedidos en tiempo real</li>
           </ul>
-        </motion.div>
+        </div>
       </div>
       <div className="hero-visual">
         <motion.svg className="hero-blob" style={{y: blobY}} viewBox="0 0 600 600" aria-hidden="true">
           <path d="M421 64c74 38 140 112 146 196 6 86-48 182-128 236-80 54-186 66-268 26C89 482 31 392 33 302 35 212 97 122 177 76c80-46 170-50 244-12z" />
         </motion.svg>
-        <motion.div className="hero-phone-wrap" style={{y: phoneY}} initial={{opacity: 0, y: 48, rotate: reduced ? 0 : 4}} animate={{opacity: 1, y: 0, rotate: reduced ? 0 : -4}} transition={{duration: 1.1, ease, delay: 0.2}}>
-          <div className="phone"><img src="assets/carrito.png" alt="Pedido de la mesa 3 en el menú QR de Qpro: hamburguesa clásica y limonada natural, total $ 32.000" width="860" height="1864" /></div>
+        <motion.div className="hero-phone-wrap" style={{y: phoneY}}>
+          <div className="phone hero-phone"><Pic name="carrito" priority sizes="(min-width: 1024px) 296px, (min-width: 640px) 272px, 200px" alt="Pedido de la mesa 3 en el menú QR de Qpro: hamburguesa clásica y limonada natural, total $ 32.000" /></div>
         </motion.div>
         <OrderStack />
         <SpinBadge />
@@ -270,6 +282,14 @@ function Demo() {
   const [stock, setStock] = useState(STOCK0);
   const [seconds, setSeconds] = useState(0);
   const reduced = useReducedMotion();
+  const kitchenRef = useRef(null), cashRef = useRef(null);
+  // En móvil los paneles van apilados: lleva la vista al panel que acaba de cambiar
+  const focusPanel = ref => {
+    const el = ref.current;
+    if (!el || window.innerWidth >= 768) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < 80 || r.bottom > window.innerHeight - 96) setTimeout(() => el.scrollIntoView({behavior: reduced ? 'auto' : 'smooth', block: 'center'}), 120);
+  };
 
   useEffect(() => {
     if (!order || stage === 'cobrado') return;
@@ -291,6 +311,7 @@ function Demo() {
     });
     setSeconds(0);
     setStage('nuevo');
+    focusPanel(kitchenRef);
   };
   const reset = () => {setCart({h: 1, l: 1}); setOrder(null); setStage('pidiendo'); setSeconds(0);};
   const usados = order ? [...new Set(order.lines.flatMap(l => Object.keys(l.uses)))] : ['pan', 'carne', 'limon'];
@@ -318,7 +339,7 @@ function Demo() {
         <div className="panel panel-phone">
           <div className="panel-label"><DeviceMobile size={18} />Celular del comensal</div>
           <div className="mini-phone">
-            <div className="mini-top"><img src="assets/logo.jpg" alt="" width="32" height="32" /><div><strong>Qpro</strong><small>Mesa 4 · pide desde aquí</small></div></div>
+            <div className="mini-top"><Pic name="logo" width={32} height={32} /><div><strong>Qpro</strong><small>Mesa 4 · pide desde aquí</small></div></div>
             <ul className="dish-list">
               {PLATOS.map(p => (
                 <li key={p.id}>
@@ -345,7 +366,7 @@ function Demo() {
         </div>
 
         {/* Cocina */}
-        <div className="panel panel-kitchen">
+        <div className="panel panel-kitchen" ref={kitchenRef}>
           <div className="panel-label"><DeviceTablet size={18} />Pantalla de cocina</div>
           <AnimatePresence mode="wait">
             {!order ? (
@@ -363,7 +384,7 @@ function Demo() {
                   {order.lines.map(l => <li key={l.id}><b>{l.qty}</b>{l.name}</li>)}
                 </ul>
                 {stage === 'nuevo' && <button className="kds-btn" onClick={() => setStage('preparando')}><CookingPot size={18} />Empezar a preparar</button>}
-                {stage === 'preparando' && <button className="kds-btn ok" onClick={() => setStage('listo')}><Check size={18} weight="bold" />Marcar listo</button>}
+                {stage === 'preparando' && <button className="kds-btn ok" onClick={() => {setStage('listo'); focusPanel(cashRef);}}><Check size={18} weight="bold" />Marcar listo</button>}
                 {(stage === 'listo' || stage === 'cobrado') && <p className="kds-done"><Bell size={18} weight="fill" />Listo. El mesero ya fue avisado.</p>}
               </motion.div>
             )}
@@ -372,7 +393,7 @@ function Demo() {
 
         {/* Caja + inventario */}
         <div className="panel-col">
-          <div className="panel panel-cash">
+          <div className="panel panel-cash" ref={cashRef}>
             <div className="panel-label"><Monitor size={18} />Caja</div>
             {!order ? <p className="muted">La cuenta de la mesa aparece aquí sola.</p> : (
               <motion.div {...pop} transition={{duration: 0.5, ease, delay: 0.15}}>
@@ -454,11 +475,11 @@ const MODULOS = [
 
 function Shot({m}) {
   return m.phone ? (
-    <div className="phone shot-phone"><img src={`assets/${m.img}.png`} alt={`Pantalla de ${m.name} en Qpro con datos de demostración`} loading="lazy" width="860" height="1864" /></div>
+    <div className="phone shot-phone"><Pic name={m.img} sizes="(min-width: 1024px) 260px, 200px" alt={`Pantalla de ${m.name} en Qpro con datos de demostración`} /></div>
   ) : (
     <div className="browser">
       <div className="browser-bar"><i /><i /><i /><span>qpro · {m.name.toLowerCase()}</span></div>
-      <img src={`assets/${m.img}.png`} alt={`Pantalla de ${m.name} en Qpro con datos de demostración`} loading="lazy" width="2880" height="2000" />
+      <Pic name={m.img} sizes="(min-width: 1024px) 640px, 120vw" alt={`Pantalla de ${m.name} en Qpro con datos de demostración`} />
     </div>
   );
 }
@@ -505,19 +526,45 @@ function Modules() {
           <div className="mod-progress"><motion.div style={{scaleX: bar}} /></div>
         </div>
       </div>
-      {/* Versión apilada para pantallas pequeñas */}
-      <div className="modules-stack">
+      <MobileModules />
+    </section>
+  );
+}
+
+/* Pantallas pequeñas: carrusel deslizable en lugar del panel fijo */
+function MobileModules() {
+  const track = useRef(null);
+  const [index, setIndex] = useState(0);
+  const onScroll = () => {
+    const el = track.current;
+    if (!el) return;
+    const card = el.firstElementChild.offsetWidth + 12;
+    setIndex(Math.min(MODULOS.length - 1, Math.round(el.scrollLeft / card)));
+  };
+  const go = i => {
+    const el = track.current;
+    el.scrollTo({left: i * (el.firstElementChild.offsetWidth + 12), behavior: 'smooth'});
+  };
+  return (
+    <div className="modules-stack">
+      <div className="mod-track" ref={track} onScroll={onScroll} role="region" aria-label="Módulos de Qpro, desliza para ver más" tabIndex={0}>
         {MODULOS.map(x => (
-          <Reveal className="mod-card" key={x.name}>
+          <article className="mod-card" key={x.name}>
             <span className="mod-chip"><x.Icon size={18} weight="fill" />{x.name}</span>
             <h3>{x.title}</h3>
             <p>{x.text}</p>
             <ul>{x.points.map(p => <li key={p}><Check size={16} weight="bold" />{p}</li>)}</ul>
             <Shot m={x} />
-          </Reveal>
+          </article>
         ))}
       </div>
-    </section>
+      <div className="mod-dots">
+        {MODULOS.map((x, i) => (
+          <button key={x.name} aria-label={`Ver ${x.name}`} aria-current={i === index ? 'true' : undefined} onClick={() => go(i)}><span /></button>
+        ))}
+        <span className="mod-count" aria-live="polite">{MODULOS[index].name} · {index + 1} de {MODULOS.length}</span>
+      </div>
+    </div>
   );
 }
 
@@ -593,7 +640,7 @@ function Plans() {
   return (
     <section className="plans" id="planes" aria-labelledby="plans-title">
       <Reveal className="plans-head">
-        <h2 id="plans-title">Un plan a la medida<br />de tu restaurante.</h2>
+        <h2 id="plans-title">Un plan a la medida <br />de tu restaurante.</h2>
         <p>El precio depende de tus mesas, tus puntos de venta y si manejas domicilios. Cuéntanos cómo trabajas y te enviamos una cotización.</p>
       </Reveal>
       <div className="plans-grid">
@@ -630,7 +677,7 @@ function FAQ() {
   return (
     <section className="faq" id="preguntas" aria-labelledby="faq-title">
       <Reveal className="faq-head">
-        <h2 id="faq-title">Lo que nos preguntan<br />antes de empezar.</h2>
+        <h2 id="faq-title">Lo que nos preguntan <br />antes de empezar.</h2>
         <p>¿Tienes otra duda? <a href={waLink('Hola, tengo una pregunta sobre Qpro.')} target="_blank" rel="noreferrer">Escríbenos por WhatsApp</a>.</p>
       </Reveal>
       <div className="faq-list">
@@ -782,7 +829,7 @@ function FinalCTA() {
     <section className="final" ref={ref} aria-labelledby="final-title">
       <motion.span className="final-word" style={{x}} aria-hidden="true">Qpro</motion.span>
       <Reveal className="final-inner">
-        <h2 id="final-title">Que el próximo pedido<br />llegue solo a la cocina.</h2>
+        <h2 id="final-title">Que el próximo pedido <br />llegue solo a la cocina.</h2>
         <div className="final-actions">
           <DemoButton light />
           <a className="text-link light" href={waLink(DEMO_TEXT)} target="_blank" rel="noreferrer"><WhatsappLogo size={18} weight="fill" />Escríbenos ahora</a>
@@ -824,13 +871,20 @@ function Footer() {
 }
 
 function MobileBar() {
-  const {scrollY} = useScroll();
   const [show, setShow] = useState(false);
-  useMotionValueEvent(scrollY, 'change', v => {
-    const contact = document.getElementById('contacto');
-    const nearContact = contact && contact.getBoundingClientRect().top < window.innerHeight;
-    setShow(v > window.innerHeight * 0.8 && !nearContact);
-  });
+  useEffect(() => {
+    // Aparece cuando el botón principal del inicio sale de pantalla y se oculta desde el formulario de contacto
+    const vis = {cta: true, contacto: false};
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.target.id === 'contacto') vis.contacto = e.isIntersecting || e.boundingClientRect.top < 0;
+        else vis.cta = e.isIntersecting || e.boundingClientRect.top > 0;
+      });
+      setShow(!vis.cta && !vis.contacto);
+    });
+    [document.querySelector('.hero-actions'), document.getElementById('contacto')].forEach(el => el && io.observe(el));
+    return () => io.disconnect();
+  }, []);
   return (
     <AnimatePresence>
       {show && (
@@ -871,4 +925,4 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+export default App;

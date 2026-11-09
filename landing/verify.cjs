@@ -7,7 +7,7 @@ const URL=HOST+base;
   fs.mkdirSync(path.join(__dirname,'verification'),{recursive:true});
   const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>r.status()>=400&&!r.url().includes('no-existe')&&errors.push(r.status()+' '+r.url()));
   await page.goto(URL,{waitUntil:'networkidle'});await page.evaluate(()=>document.fonts.ready);await page.waitForTimeout(1500);
   assert.equal(await page.locator('h1').count(),1);
   await page.screenshot({path:path.join(__dirname,'verification/desktop.png')});
@@ -26,7 +26,7 @@ const URL=HOST+base;
   await demo.getByRole('button',{name:'Empezar a preparar'}).click();await demo.getByRole('button',{name:'Marcar listo'}).click();
   await demo.getByRole('button',{name:/Cobrar \$/}).click();await page.waitForTimeout(600);
   assert.match(await demo.locator('.panel-cash').innerText(),/Factura/);
-  await demo.getByRole('button',{name:'Hacer otro pedido'}).click();assert(await demo.locator('.kds-empty').isVisible());
+  await demo.getByRole('button',{name:'Hacer otro pedido'}).click();await demo.locator('.kds-empty').waitFor({timeout:3000});
 
   // Módulos fijos cambian con el scroll
   const track=await page.locator('.modules-track').evaluate(e=>({top:e.getBoundingClientRect().top+scrollY,height:e.offsetHeight}));
@@ -59,6 +59,10 @@ const URL=HOST+base;
       await page.locator('#mobile-nav').getByRole('link',{name:'Preguntas'}).click();await page.waitForTimeout(500);assert.equal(await page.locator('#mobile-nav').count(),0);
       await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));await page.waitForTimeout(800);
       await page.screenshot({path:path.join(__dirname,'verification/mobile.png')});
+      // Carrusel de módulos: los puntos cambian el módulo visible
+      await page.locator('.mod-track').scrollIntoViewIfNeeded();
+      await page.getByRole('button',{name:'Ver Inventario'}).click();await page.waitForTimeout(900);
+      assert.match(await page.locator('.mod-count').innerText(),/Inventario/);
     }
   }
 
