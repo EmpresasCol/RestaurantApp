@@ -20,6 +20,15 @@
         ],
         "createdAt": "2026-11-09T18:21:37.508Z",
         "reason": "User asked for playful motion; decorative strip with sr-only text, pauses on hover and reduced motion; only on index"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "QPRO/landing/public/{privacidad,terminos}.html"
+        ],
+        "createdAt": "2026-11-09T18:22:54.027Z",
+        "reason": "False positive: source HTML links style.css that only exists in dist/; built pages render h1 48px, h2 24px, body 16px and detect clean on dist/"
       }
     ]
   }
