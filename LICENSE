@@ -1,0 +1,64 @@
+LICENCIA PROPIETARIA DE QPRO
+Todos los derechos reservados.
+
+Copyright (c) 2025-2026
+Abrahan Jussep Badel Palmett, Mateo Villalobos y Juan Morales
+(en adelante, "los Titulares").
+
+1. Objeto
+
+Esta licencia cubre todo el contenido de este repositorio (en adelante, "el
+Software"): el código fuente y compilado de la API, la aplicación web, la
+aplicación móvil, la página comercial y las pruebas; la base de datos, sus
+scripts y migraciones; la documentación; el diseño de las interfaces; y el
+nombre "Qpro", su logo y demás signos distintivos.
+
+2. Titularidad
+
+El Software es una obra de los Titulares, protegida por la Ley 23 de 1982, la
+Decisión Andina 351 de 1993 y las demás normas de derecho de autor de la
+República de Colombia y los tratados internacionales aplicables. Los
+Titulares conservan todos los derechos patrimoniales y morales sobre el
+Software. Ningún derecho se transfiere ni se concede por el hecho de que el
+repositorio sea visible.
+
+3. Lo que no está permitido
+
+Sin autorización previa, expresa y por escrito de los Titulares, nadie puede:
+
+  a) usar el Software, total o parcialmente, con o sin fines comerciales;
+  b) copiarlo, reproducirlo, descargarlo para usarlo o alojarlo en servidores;
+  c) modificarlo, adaptarlo, traducirlo o crear obras derivadas a partir de él;
+  d) venderlo, alquilarlo, sublicenciarlo, distribuirlo u ofrecerlo como
+     servicio a terceros;
+  e) quitar, cambiar u ocultar el nombre Qpro, su logo, los avisos de autoría
+     o esta licencia, ni presentar el Software o una parte de él con otra
+     marca o como obra propia.
+
+4. Lo que sí está permitido
+
+Ver el código en este repositorio y hacer copias (forks) dentro de GitHub en
+la medida en que lo exigen los Términos de Servicio de GitHub. Esto no
+concede permiso para usar, ejecutar, modificar ni distribuir el Software
+fuera de lo descrito en este punto.
+
+5. Componentes de terceros
+
+Las librerías, paquetes, fuentes tipográficas y demás componentes de terceros
+incluidos o referenciados en el repositorio conservan sus propias licencias
+(por ejemplo, la fuente Manrope bajo la SIL Open Font License, incluida en
+landing/public/assets/fonts/OFL.txt). Esta licencia no modifica esos
+términos.
+
+6. Sin garantía
+
+El Software se entrega "tal cual", sin garantía de ningún tipo. Los Titulares
+no responden por daños derivados de su uso no autorizado.
+
+7. Permisos y contacto
+
+Para solicitar una licencia de uso, una demostración o cualquier autorización,
+escribe a los Titulares por WhatsApp al +57 301 804 9468.
+
+Cualquier uso no autorizado podrá dar lugar a las acciones civiles y penales
+previstas en la ley colombiana.

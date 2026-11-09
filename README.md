@@ -170,6 +170,12 @@ Proyecto de grado de la Corporación Universitaria del Caribe (CECAR), Sincelejo
 - Mateo Villalobos
 - Juan Morales
 
+## Licencia
+
+**Software propietario. Todos los derechos reservados.** © 2025-2026 Abrahan Jussep Badel Palmett, Mateo Villalobos y Juan Morales.
+
+El código, la base de datos, el diseño, el nombre Qpro y su logo pertenecen al equipo. No se permite usar, copiar, modificar, distribuir ni comercializar el software, ni cambiarle la marca, sin autorización escrita. Que el repositorio sea visible no concede ningún permiso de uso. Lee los términos completos en [`LICENSE`](LICENSE).
+
 <div align="center">
 <br>
 <a href="https://wa.me/573018049468"><img alt="Escríbenos por WhatsApp" src="https://img.shields.io/badge/WhatsApp-%2B57%20301%20804%209468-25D366?logo=whatsapp&logoColor=white&style=for-the-badge"></a>
