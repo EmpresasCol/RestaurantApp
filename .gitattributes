@@ -1,0 +1,2 @@
+Odoo/db_backups/*.sql filter=lfs diff=lfs merge=lfs -text
+Odoo/db_backups/*.tar.gz filter=lfs diff=lfs merge=lfs -text

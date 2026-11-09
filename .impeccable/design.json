@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T00:00:00Z",
+  "title": "Design System: Qpro",
+  "extensions": {
+    "colorMeta": {
+      "espresso": { "role": "primary", "displayName": "Espresso", "canonical": "#2A1D15", "tonalRamp": ["#2A1D15", "#4A3224", "#654430", "#865B35", "#A97644", "#DFB98D", "#F5E9DA", "#FBF6F0"] },
+      "espresso-raised": { "role": "primary", "displayName": "Espresso elevado (comanda)", "canonical": "#3A2A20" },
+      "caramel": { "role": "primary", "displayName": "Caramelo del logo", "canonical": "#C8955E", "tonalRamp": ["#4A3224", "#654430", "#865B35", "#A97644", "#C8955E", "#D3A372", "#EBD3B6", "#FBF6F0"] },
+      "caramel-deep": { "role": "primary", "displayName": "Caramelo profundo", "canonical": "#865B35" },
+      "caramel-light": { "role": "primary", "displayName": "Caramelo claro (texto sobre espresso)", "canonical": "#EBD3B6" },
+      "caramel-soft": { "role": "neutral", "displayName": "Caramelo suave", "canonical": "#F5E9DA" },
+      "caramel-wash": { "role": "neutral", "displayName": "Caramelo lavado", "canonical": "#FBF6F0" },
+      "teal-deep": { "role": "secondary", "displayName": "Petróleo profundo", "canonical": "#1E505A", "tonalRamp": ["#0C2128", "#18363E", "#1E505A", "#23646E", "#2F7D88", "#82BCC3", "#D8ECEE", "#EFF7F7"] },
+      "teal-light": { "role": "secondary", "displayName": "Petróleo claro", "canonical": "#82BCC3" },
+      "teal-wash": { "role": "secondary", "displayName": "Petróleo lavado", "canonical": "#EFF7F7" },
+      "stone-50": { "role": "neutral", "displayName": "Piedra 50 (lienzo del personal)", "canonical": "#FAFAF9", "tonalRamp": ["#1C1917", "#292524", "#44403C", "#57534E", "#78716C", "#A8A29E", "#E7E5E4", "#FAFAF9"] },
+      "stone-200": { "role": "neutral", "displayName": "Línea de piedra", "canonical": "#E7E5E4" },
+      "stone-500": { "role": "neutral", "displayName": "Texto secundario", "canonical": "#78716C" },
+      "success": { "role": "status", "displayName": "Verde listo / pagado", "canonical": "#15803D" },
+      "warning": { "role": "status", "displayName": "Ámbar demorado / pendiente", "canonical": "#FBBF24" },
+      "danger": { "role": "status", "displayName": "Rojo urgente / error", "canonical": "#DC2626" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Solo el panel de marca del login en escritorio." },
+      "amount": { "displayName": "Monto", "purpose": "Total del modal de cobro; tabular." },
+      "headline": { "displayName": "Titular", "purpose": "Títulos de hoja, de pantalla del personal y mesa de la comanda (24 a 30px)." },
+      "section": { "displayName": "Sección", "purpose": "Encabezados de riel por categoría y Destacados." },
+      "title": { "displayName": "Título", "purpose": "Nombre del plato, fila de factura, ítem del carrito." },
+      "body": { "displayName": "Cuerpo", "purpose": "Descripciones y textos de hoja, máximo 65ch." },
+      "small": { "displayName": "Pequeño", "purpose": "Metadatos, conteos, número de factura." },
+      "label": { "displayName": "Etiqueta", "purpose": "Pestañas, filtros, botones." },
+      "kds-item": { "displayName": "Ítem de cocina", "purpose": "Ítems de la comanda, legibles a dos metros." }
+    },
+    "shadows": [
+      { "name": "card", "value": "0 1px 2px rgba(42,29,21,.06), 0 8px 24px -12px rgba(42,29,21,.18)", "purpose": "Tarjeta de plato en reposo, selector de cantidad, botón sobre foto, hover de fila de factura." },
+      { "name": "lift", "value": "0 2px 4px rgba(42,29,21,.06), 0 18px 40px -16px rgba(42,29,21,.28)", "purpose": "Hover de tarjeta, hoja inferior, barra del carrito, modal de cobro, avisos." }
+    ],
+    "motion": [
+      { "name": "ease-out-qpro", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Curva única de la interfaz (--qp-ease-out y ease de motion)." },
+      { "name": "micro", "value": "220ms-250ms", "purpose": "Número del selector, botón − que entra." },
+      { "name": "layout", "value": "350ms-450ms", "purpose": "Crecimiento del selector, indicador deslizante (400ms), hoja (450ms), comanda (450ms)." },
+      { "name": "entrance", "value": "500ms-600ms", "purpose": "Tarjeta al entrar en vista, barra del carrito, CountUp del total (600ms)." },
+      { "name": "carousel", "value": "320ms cubic-bezier(0.2, 0.8, 0.2, 1); autoplay 4500ms", "purpose": "Carrusel de destacados (React Bits)." },
+      { "name": "confirm-reset", "value": "3000ms", "purpose": "El doble toque de la comanda vuelve a reposo." },
+      { "name": "reduced-motion", "value": "MotionConfig reducedMotion=\"user\"; CSS 0.01ms", "purpose": "Respeta la preferencia del sistema." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal del comensal: Agregar, Enviar pedido a cocina.",
+      "html": "<button class=\"ds-btn-primary\"><span>Agregar</span><span class=\"ds-num\">$ 42.000</span></button>",
+      "css": ".ds-btn-primary { display:flex; align-items:center; justify-content:space-between; gap:12px; height:56px; min-width:260px; padding:0 24px; border:none; border-radius:9999px; background:#2A1D15; color:#fff; font:700 15px Manrope, system-ui, sans-serif; cursor:pointer; transition:transform .2s cubic-bezier(0.16,1,0.3,1), background-color .2s; } .ds-btn-primary .ds-num { font-variant-numeric:tabular-nums; } .ds-btn-primary:hover { background:#1C1917; } .ds-btn-primary:active { transform:scale(.98); } .ds-btn-primary:focus-visible { outline:2px solid #C8955E; outline-offset:2px; }"
+    },
+    {
+      "name": "Campo del personal",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Campos de login y caja con foco caramelo.",
+      "html": "<input class=\"ds-input\" placeholder=\"Tu usuario\" />",
+      "css": ".ds-input { display:block; height:48px; width:280px; padding:0 16px; border:1px solid #D6D3D1; border-radius:12px; background:#fff; color:#2A1D15; font:500 15px Manrope, system-ui, sans-serif; caret-color:#C8955E; transition:box-shadow .2s, border-color .2s; } .ds-input::placeholder { color:#78716C; } .ds-input:focus { outline:none; border-color:#C8955E; box-shadow:0 0 0 4px #F5E9DA; }"
+    },
+    {
+      "name": "Pestañas de categoría",
+      "kind": "nav",
+      "refersTo": "category-tab-active",
+      "description": "Píldoras con indicador espresso deslizante.",
+      "html": "<nav class=\"ds-tabs\"><button class=\"ds-tab is-active\">Platos fuertes</button><button class=\"ds-tab\">Entradas</button><button class=\"ds-tab\">Bebidas</button></nav>",
+      "css": ".ds-tabs { display:flex; gap:4px; } .ds-tab { height:40px; padding:0 16px; border:none; border-radius:9999px; background:transparent; color:#57534E; font:700 14px Manrope, system-ui, sans-serif; cursor:pointer; transition:color .2s, background-color .4s cubic-bezier(0.16,1,0.3,1); } .ds-tab:hover { color:#2A1D15; } .ds-tab.is-active { background:#2A1D15; color:#fff; } .ds-tab:focus-visible { outline:2px solid #C8955E; outline-offset:2px; }"
+    },
+    {
+      "name": "Tarjeta de plato con selector",
+      "kind": "card",
+      "refersTo": "dish-card",
+      "description": "Foto 4:3 a 20px con selector − n + sobre la foto.",
+      "html": "<article class=\"ds-dish\"><div class=\"ds-dish-photo\"><div class=\"ds-stepper\"><button aria-label=\"Quitar\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M5 12h14\"/></svg></button><span>2</span><button aria-label=\"Agregar\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\"><path d=\"M5 12h14M12 5v14\"/></svg></button></div></div><h3>Hamburguesa Clásica</h3><p class=\"ds-desc\">Carne de res 200 g, queso mozzarella, tomate y lechuga.</p><p class=\"ds-price\">$ 28.000</p></article>",
+      "css": ".ds-dish { width:240px; font-family:Manrope, system-ui, sans-serif; color:#2A1D15; cursor:pointer; } .ds-dish-photo { position:relative; aspect-ratio:4/3; border-radius:20px; background:linear-gradient(135deg,#EBD3B6,#A97644); box-shadow:0 1px 2px rgba(42,29,21,.06), 0 8px 24px -12px rgba(42,29,21,.18); transition:box-shadow .3s; } .ds-dish:hover .ds-dish-photo { box-shadow:0 2px 4px rgba(42,29,21,.06), 0 18px 40px -16px rgba(42,29,21,.28); } .ds-stepper { position:absolute; right:12px; bottom:12px; display:flex; align-items:center; height:44px; border-radius:9999px; background:#fff; color:#2A1D15; box-shadow:0 1px 2px rgba(42,29,21,.06), 0 8px 24px -12px rgba(42,29,21,.18); } .ds-stepper button { display:grid; place-items:center; width:44px; height:44px; border:none; background:transparent; color:inherit; cursor:pointer; } .ds-stepper button:focus-visible { outline:2px solid #C8955E; outline-offset:2px; border-radius:9999px; } .ds-stepper span { min-width:20px; text-align:center; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; } .ds-dish h3 { margin:12px 4px 0; font-size:16px; font-weight:700; } .ds-desc { margin:4px 4px 0; font-size:13px; line-height:1.6; color:#78716C; } .ds-price { margin:8px 4px 0; font-size:15px; font-weight:800; font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Barra flotante del carrito",
+      "kind": "custom",
+      "refersTo": "cart-bar",
+      "description": "Conteo caramelo, Ver pedido y total animado.",
+      "html": "<button class=\"ds-cartbar\"><span class=\"ds-count\">3</span><span>Ver pedido</span><span class=\"ds-total\">$84.000</span></button>",
+      "css": ".ds-cartbar { display:flex; align-items:center; gap:12px; width:360px; height:64px; padding:0 20px 0 12px; border:none; border-radius:22px; background:#2A1D15; color:#fff; font:700 15px Manrope, system-ui, sans-serif; box-shadow:0 2px 4px rgba(42,29,21,.06), 0 18px 40px -16px rgba(42,29,21,.28); cursor:pointer; transition:transform .2s; } .ds-cartbar:active { transform:scale(.99); } .ds-cartbar:focus-visible { outline:2px solid #C8955E; outline-offset:2px; } .ds-count { display:grid; place-items:center; min-width:40px; height:40px; padding:0 8px; border-radius:16px; background:#C8955E; color:#2A1D15; font-weight:800; font-variant-numeric:tabular-nums; } .ds-total { margin-left:auto; font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; }"
+    },
+    {
+      "name": "Comanda de cocina",
+      "kind": "card",
+      "refersTo": "kitchen-ticket",
+      "description": "Comanda en espresso con anillo de estado y acción de doble toque.",
+      "html": "<article class=\"ds-ticket is-urgent\"><header><div><p class=\"ds-t-mesa\">Mesa 2</p><p class=\"ds-t-id\">Orden #41</p></div><div class=\"ds-t-right\"><span class=\"ds-t-chip\">Urgente</span><span class=\"ds-t-min\">27 min</span></div></header><ul><li><span class=\"ds-t-qty\">2</span>Hamburguesa Clásica</li></ul><button class=\"ds-t-action\">Listo</button></article>",
+      "css": ".ds-ticket { width:320px; padding:16px 20px 20px; border-radius:22px; background:#3A2A20; color:#fff; font-family:Manrope, system-ui, sans-serif; box-shadow:0 0 0 2px rgba(255,255,255,.1); } .ds-ticket.is-urgent { box-shadow:0 0 0 2px rgba(239,68,68,.7); } .ds-ticket header { display:flex; justify-content:space-between; gap:12px; } .ds-ticket p { margin:0; } .ds-t-mesa { font-size:26px; font-weight:800; letter-spacing:-0.02em; } .ds-t-id { font-size:15px; font-weight:600; color:#EBD3B6; font-variant-numeric:tabular-nums; } .ds-t-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; } .ds-t-chip { padding:4px 12px; border-radius:9999px; background:#DC2626; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; } .ds-t-min { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; } .ds-ticket ul { list-style:none; margin:12px 0 16px; padding:0; } .ds-ticket li { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:12px; background:rgba(0,0,0,.2); font-size:22px; font-weight:700; } .ds-t-qty { display:grid; place-items:center; min-width:40px; height:40px; border-radius:8px; background:#C8955E; color:#2A1D15; font-size:20px; font-weight:800; } .ds-t-action { width:100%; min-height:56px; border:none; border-radius:16px; background:rgba(255,255,255,.08); color:#86EFAC; box-shadow:inset 0 0 0 1px rgba(74,222,128,.4); font:800 17px Manrope, system-ui, sans-serif; cursor:pointer; transition:background-color .2s, color .2s, transform .2s; } .ds-t-action:hover { background:#15803D; color:#fff; } .ds-t-action:active { transform:scale(.98); } .ds-t-action:focus-visible { outline:2px solid #C8955E; outline-offset:2px; }"
+    },
+    {
+      "name": "Fila de factura",
+      "kind": "card",
+      "refersTo": "invoice-row",
+      "description": "Fila de caja con tipo, estado, total y Cobrar.",
+      "html": "<div class=\"ds-invoice\"><span class=\"ds-i-type\">M</span><div class=\"ds-i-body\"><strong>Mesa 4</strong> <span class=\"ds-i-num\">F-00123</span> <span class=\"ds-chip-pending\">Pendiente</span><p>Consumidor final · 05:40 p. m.</p></div><span class=\"ds-i-total\">$84.000</span><button class=\"ds-i-cobrar\">Cobrar</button></div>",
+      "css": ".ds-invoice { display:flex; align-items:center; gap:16px; width:640px; padding:16px 20px; border:1px solid #FCD34D; border-radius:16px; background:#fff; color:#2A1D15; font-family:Manrope, system-ui, sans-serif; transition:box-shadow .2s; } .ds-invoice:hover { box-shadow:0 1px 2px rgba(42,29,21,.06), 0 8px 24px -12px rgba(42,29,21,.18); } .ds-i-type { display:grid; place-items:center; width:44px; height:44px; border-radius:12px; background:#FBF6F0; color:#865B35; font-weight:800; } .ds-i-body { flex:1; min-width:0; } .ds-i-body strong { font-size:17px; font-weight:800; } .ds-i-num { font-size:13px; font-weight:600; color:#78716C; font-variant-numeric:tabular-nums; } .ds-i-body p { margin:4px 0 0; font-size:13px; color:#78716C; } .ds-chip-pending { padding:2px 10px; border-radius:9999px; background:#FFFBEB; color:#92400E; font-size:12px; font-weight:700; } .ds-i-total { font-size:18px; font-weight:800; font-variant-numeric:tabular-nums; } .ds-i-cobrar { height:40px; padding:0 16px; border:none; border-radius:12px; background:#2A1D15; color:#fff; font:600 14px Manrope, system-ui, sans-serif; cursor:pointer; } .ds-i-cobrar:hover { background:#1C1917; } .ds-i-cobrar:focus-visible { outline:2px solid #C8955E; outline-offset:2px; }"
+    },
+    {
+      "name": "Chips de estado",
+      "kind": "chip",
+      "refersTo": "chip-paid",
+      "description": "Pagada, pendiente y cancelada en caja.",
+      "html": "<span class=\"ds-chip ds-paid\">Pagada</span> <span class=\"ds-chip ds-pending\">Pendiente</span> <span class=\"ds-chip ds-cancel\">Cancelada</span>",
+      "css": ".ds-chip { display:inline-flex; align-items:center; padding:2px 10px; border-radius:9999px; font:700 12px Manrope, system-ui, sans-serif; } .ds-paid { background:#F0FDF4; color:#166534; } .ds-pending { background:#FFFBEB; color:#92400E; } .ds-cancel { background:#FEF2F2; color:#991B1B; }"
+    },
+    {
+      "name": "Navegación del personal",
+      "kind": "nav",
+      "refersTo": "staff-nav-active",
+      "description": "Barra superior de 64px con píldora caramelo suave deslizante.",
+      "html": "<nav class=\"ds-staffnav\"><button class=\"ds-sn is-active\">Carta</button><button class=\"ds-sn\">Cocina <span class=\"ds-sn-count\">3</span></button><button class=\"ds-sn\">Caja</button></nav>",
+      "css": ".ds-staffnav { display:flex; gap:4px; height:64px; align-items:center; padding:0 16px; background:#fff; border-bottom:1px solid #E7E5E4; } .ds-sn { display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border:none; border-radius:9999px; background:transparent; color:#78716C; font:600 14px Manrope, system-ui, sans-serif; cursor:pointer; transition:color .2s, background-color .4s cubic-bezier(0.16,1,0.3,1); } .ds-sn:hover { color:#2A1D15; } .ds-sn.is-active { background:#F5E9DA; color:#2A1D15; } .ds-sn:focus-visible { outline:2px solid #C8955E; outline-offset:2px; } .ds-sn-count { display:grid; place-items:center; min-width:20px; height:20px; padding:0 6px; border-radius:9999px; background:#2A1D15; color:#fff; font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "La carta a un toque",
+    "overview": "Qpro es el menú digital que todos reconocen, ejecutado sin fricción: blanco limpio, neutros cálidos de piedra, tinta espresso y el caramelo del logo como única voz de marca. La forma es el canon de la categoría (apps de pedidos y cartas digitales), elegida a propósito: el comensal no aprende nada nuevo. El valor está en la ejecución: fotos a escala fija, cifras tabulares, radios generosos, sombras suaves teñidas de espresso y movimiento con desaceleración larga.\n\nEl sistema tiene dos climas. El comensal, la caja y el login viven en claro (blanco o piedra 50). La cocina vive en espresso oscuro, porque se lee a distancia en una pantalla compartida; ahí el caramelo marca cantidades y el color de estado (a tiempo, demorado, urgente, listo) gobierna el borde de cada comanda. La densidad es baja en el menú (una mano, objetivos de 44 px o más) y media en caja.\n\nSe rechaza explícitamente el menú simplón de tarjetas grises con botón naranja y las alertas modales del navegador: cada confirmación vive dentro del flujo (hoja inferior, doble toque, aviso flotante).",
+    "keyCharacteristics": [
+      "Espresso para acción y selección; caramelo para marca, conteos y foco; piedra cálida para todo lo demás.",
+      "Manrope en todas las pantallas, pesos 500 a 800, cifras con `tabular-nums`.",
+      "Píldoras para controles táctiles, radios de 16 a 28 px para superficies.",
+      "Sombras de dos capas teñidas de espresso, nunca grises puras ni duras.",
+      "Una sola curva de movimiento: `cubic-bezier(0.16, 1, 0.3, 1)`.",
+      "Cocina en espresso oscuro; el estado de espera se lee por color del borde y del chip."
+    ],
+    "rules": [
+      { "name": "La Regla del Espresso que Actúa", "body": "El botón primario, la pestaña activa y la barra del carrito son espresso. El caramelo no es color de botón: marca conteos, foco y marca. Un botón naranja relleno es el menú simplón que este sistema rechaza.", "section": "colors" },
+      { "name": "La Regla del Texto sobre Caramelo", "body": "Todo texto sobre caramelo 500 es espresso. El blanco sobre caramelo no pasa contraste.", "section": "colors" },
+      { "name": "La Regla del Estado Reservado", "body": "Verde, ámbar y rojo solo significan estado (tiempo de espera, cobro, error). Nunca decoran.", "section": "colors" },
+      { "name": "La Regla de las Cifras Alineadas", "body": "Todo número que se compara o se cobra lleva `.tabular`. Un precio que baila al contar no es aceptable.", "section": "typography" },
+      { "name": "La Regla de la Distancia", "body": "En cocina nada que se deba leer baja de 13px y los ítems no bajan de 22px: la pantalla se lee a dos metros.", "section": "typography" },
+      { "name": "La Regla de la Sombra Cálida", "body": "Solo existen `card` y `lift`, ambas teñidas de espresso. Nada de sombras grises de Tailwind ni sombras duras desplazadas.", "section": "elevation" },
+      { "name": "La Regla del Tono en Cocina", "body": "Sobre espresso la profundidad es tonal y el borde comunica estado; las sombras no se ven a distancia y no se usan.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** usar espresso para la acción principal y el estado activo, con texto blanco.",
+      "**Do** poner texto espresso sobre caramelo 500 y usar caramelo profundo cuando el caramelo sea texto sobre blanco.",
+      "**Do** aplicar `.tabular` a todo precio, total, cantidad, hora y número de orden.",
+      "**Do** mantener objetivos táctiles de 44px o más en el menú y de 56px en las acciones de cocina.",
+      "**Do** animar con `cubic-bezier(0.16, 1, 0.3, 1)`: 220 a 250ms para microcambios, 350 a 450ms para layout y hojas, 500 a 600ms para entradas.",
+      "**Do** respetar \"reducir movimiento\": `MotionConfig reducedMotion=\"user\"` y la regla global de 0.01ms en `index.css`.",
+      "**Do** resolver las confirmaciones dentro del flujo: hoja inferior, doble toque o aviso flotante.",
+      "**Do** usar solo las sombras `card` y `lift`."
+    ],
+    "donts": [
+      "**Don't** rellenar botones con caramelo ni poner texto blanco sobre caramelo.",
+      "**Don't** usar `alert()`, `confirm()` ni modales para confirmar una acción repetitiva de cocina.",
+      "**Don't** usar verde, ámbar o rojo fuera de su significado de estado.",
+      "**Don't** poner la cocina sobre fondo claro ni bajar sus ítems de 22px.",
+      "**Don't** usar sombras grises de Tailwind (`shadow-lg`, `shadow-xl`) ni sombras duras desplazadas.",
+      "**Don't** introducir otra familia tipográfica ni pesos por debajo de 400.",
+      "**Don't** usar etiquetas pequeñas en mayúsculas sobre los títulos. Las mayúsculas solo van en el chip de estado de la comanda."
+    ]
+  }
+}

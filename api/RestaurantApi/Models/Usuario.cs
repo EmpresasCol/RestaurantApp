@@ -1,0 +1,28 @@
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+namespace RestaurantApi.Models
+{
+    public enum RolUsuario
+    {
+        Administrador,
+        Mesero,
+        Cocina,
+        Caja,
+        Domiciliario
+        
+    }
+
+    public class Usuario
+    {
+        public int Id { get; set; }
+        public string Nombre { get; set; } = null!;
+
+        [Column("Usuario")]
+        public string NombreUsuario { get; set; } = null!;
+
+        public string ClaveHash { get; set; } = null!;
+        public RolUsuario Rol { get; set; }
+        /// <summary>False = no puede iniciar sesión. Se usa en vez de borrar si tiene historial.</summary>
+        public bool Activo { get; set; } = true;
+    }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "555020802279",
+    "project_id": "qpro-7d23e",
+    "storage_bucket": "qpro-7d23e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:555020802279:android:9c8f7f0fb3010ae93a6a42",
+        "android_client_info": {
+          "package_name": "com.qpro.restaurant_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwVUbc0fenJ6tt9Yg5gGz05W2QjKR3Sfk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

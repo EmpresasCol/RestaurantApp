@@ -1,0 +1,62 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "QPRO/landing/**/*.html"
+        ],
+        "createdAt": "2026-11-09T18:21:37.209Z",
+        "reason": "Brand: #FBF6F0 is caramel-wash from QPRO/DESIGN.md"
+      },
+      {
+        "rule": "marquee",
+        "value": "*",
+        "files": [
+          "QPRO/landing/**/*.html"
+        ],
+        "createdAt": "2026-11-09T18:21:37.508Z",
+        "reason": "User asked for playful motion; decorative strip with sr-only text, pauses on hover and reduced motion; only on index"
+      },
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "QPRO/landing/public/{privacidad,terminos}.html"
+        ],
+        "createdAt": "2026-11-09T18:22:54.027Z",
+        "reason": "False positive: source HTML links style.css that only exists in dist/; built pages render h1 48px, h2 24px, body 16px and detect clean on dist/"
+      },
+      {
+        "rule": "nested-cards",
+        "value": "*",
+        "files": [
+          "QPRO/landing/dist/index.html"
+        ],
+        "createdAt": "2026-11-09T20:16:24.975Z",
+        "reason": "Approved desktop design now visible to the detector via prerender: device mockups inside demo panels, full-bleed marquee/final bands, 72px hero h1"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "QPRO/landing/dist/index.html"
+        ],
+        "createdAt": "2026-11-09T20:16:25.227Z",
+        "reason": "Approved desktop design now visible to the detector via prerender: device mockups inside demo panels, full-bleed marquee/final bands, 72px hero h1"
+      },
+      {
+        "rule": "oversized-h1",
+        "value": "*",
+        "files": [
+          "QPRO/landing/dist/index.html"
+        ],
+        "createdAt": "2026-11-09T20:16:25.460Z",
+        "reason": "Approved desktop design now visible to the detector via prerender: device mockups inside demo panels, full-bleed marquee/final bands, 72px hero h1"
+      }
+    ]
+  }
+}

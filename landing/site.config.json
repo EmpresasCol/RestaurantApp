@@ -1,0 +1,19 @@
+{
+  "nota": "Datos públicos de la landing. correo e instagram vacíos no se muestran. Cambia los valores y vuelve a compilar.",
+  "base": "/RestaurantApp/landing/",
+  "url": "https://empresascol.github.io/RestaurantApp/landing/",
+  "appUrl": "https://empresascol.github.io/RestaurantApp/",
+  "contacto": {
+    "whatsapp": "573018049468",
+    "whatsappVisible": "+57 301 804 9468",
+    "correo": "",
+    "instagram": "",
+    "ciudad": "Sincelejo, Sucre"
+  },
+  "responsable": {
+    "nombre": "Qpro",
+    "identificacion": "NIT o cédula del responsable",
+    "direccion": "Dirección de notificaciones, Sincelejo, Sucre"
+  },
+  "legalActualizado": "9 de noviembre de 2026"
+}

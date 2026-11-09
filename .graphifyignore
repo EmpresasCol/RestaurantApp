@@ -1,0 +1,11 @@
+# Imágenes de íconos, splash y capturas: no aportan conceptos al grafo
+*.png
+*.jpg
+*.jpeg
+*.svg
+# Mockups y revisiones de diseño generados por herramientas
+.impeccable/
+# Configuración local del editor
+.claude/
+# Sonidos de la app (no hay nada que transcribir)
+*.wav
