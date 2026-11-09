@@ -757,8 +757,8 @@ function Contact() {
         </Reveal>
         <ul className="channels">
           <li><a href={waLink(DEMO_TEXT)} target="_blank" rel="noreferrer"><span className="ch-icon wa"><WhatsappLogo size={24} weight="fill" /></span><span><small>WhatsApp</small><strong>{CONTACTO.whatsappVisible}</strong></span><ArrowUpRight size={18} /></a></li>
-          <li><a href={`mailto:${CONTACTO.correo}?subject=${encodeURIComponent('Demo de Qpro')}`}><span className="ch-icon"><EnvelopeSimple size={24} weight="fill" /></span><span><small>Correo</small><strong>{CONTACTO.correo}</strong></span><ArrowUpRight size={18} /></a></li>
-          <li><a href={`https://instagram.com/${CONTACTO.instagram}`} target="_blank" rel="noreferrer"><span className="ch-icon"><InstagramLogo size={24} weight="fill" /></span><span><small>Instagram</small><strong>@{CONTACTO.instagram}</strong></span><ArrowUpRight size={18} /></a></li>
+          {CONTACTO.correo && <li><a href={`mailto:${CONTACTO.correo}?subject=${encodeURIComponent('Demo de Qpro')}`}><span className="ch-icon"><EnvelopeSimple size={24} weight="fill" /></span><span><small>Correo</small><strong>{CONTACTO.correo}</strong></span><ArrowUpRight size={18} /></a></li>}
+          {CONTACTO.instagram && <li><a href={`https://instagram.com/${CONTACTO.instagram}`} target="_blank" rel="noreferrer"><span className="ch-icon"><InstagramLogo size={24} weight="fill" /></span><span><small>Instagram</small><strong>@{CONTACTO.instagram}</strong></span><ArrowUpRight size={18} /></a></li>}
           <li><div><span className="ch-icon"><MapPin size={24} weight="fill" /></span><span><small>Estamos en</small><strong>{CONTACTO.ciudad}</strong></span></div></li>
         </ul>
       </div>
@@ -768,7 +768,7 @@ function Contact() {
             <motion.div key="ok" className="form-ok" initial={{opacity: 0, y: 16}} animate={{opacity: 1, y: 0}} transition={{duration: 0.5, ease}} role="status">
               <span className="ok-icon"><PaperPlaneTilt size={32} weight="fill" /></span>
               <h3>Abrimos WhatsApp con tu mensaje.</h3>
-              <p>Solo tienes que tocar enviar. Si la ventana no se abrió, escríbenos al <a href={waLink(message())} target="_blank" rel="noreferrer">{CONTACTO.whatsappVisible}</a> o al correo <a href={`mailto:${CONTACTO.correo}?subject=${encodeURIComponent('Demo de Qpro')}&body=${encodeURIComponent(message())}`}>{CONTACTO.correo}</a>.</p>
+              <p>Solo tienes que tocar enviar. Si la ventana no se abrió, escríbenos al <a href={waLink(message())} target="_blank" rel="noreferrer">{CONTACTO.whatsappVisible}</a>{CONTACTO.correo && <> o al correo <a href={`mailto:${CONTACTO.correo}?subject=${encodeURIComponent('Demo de Qpro')}&body=${encodeURIComponent(message())}`}>{CONTACTO.correo}</a></>}.</p>
               <button className="text-link" onClick={() => setSent(false)}><ArrowCounterClockwise size={16} weight="bold" />Editar mis datos</button>
             </motion.div>
           ) : (
@@ -852,8 +852,8 @@ function Footer() {
         </nav>
         <div className="footer-contact">
           <a href={waLink(DEMO_TEXT)} target="_blank" rel="noreferrer"><WhatsappLogo size={18} />{CONTACTO.whatsappVisible}</a>
-          <a href={`mailto:${CONTACTO.correo}`}><EnvelopeSimple size={18} />{CONTACTO.correo}</a>
-          <a href={`https://instagram.com/${CONTACTO.instagram}`} target="_blank" rel="noreferrer"><InstagramLogo size={18} />@{CONTACTO.instagram}</a>
+          {CONTACTO.correo && <a href={`mailto:${CONTACTO.correo}`}><EnvelopeSimple size={18} />{CONTACTO.correo}</a>}
+          {CONTACTO.instagram && <a href={`https://instagram.com/${CONTACTO.instagram}`} target="_blank" rel="noreferrer"><InstagramLogo size={18} />@{CONTACTO.instagram}</a>}
         </div>
       </div>
       <div className="footer-bottom">
