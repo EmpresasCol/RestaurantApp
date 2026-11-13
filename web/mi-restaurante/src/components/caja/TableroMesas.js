@@ -49,7 +49,7 @@ function TarjetaMesa({ mesa, cuenta, info, onAbrir }) {
           <>
             <p className="tabular text-[17px] font-extrabold text-espresso">{pesos(cuenta.total)}</p>
             <p className="tabular text-[13px] text-gray-500">
-              {cuenta.platos} platos · desde {hora(cuenta.desde)}
+              {cuenta.platos} {cuenta.platos === 1 ? 'plato' : 'platos'} · desde {hora(cuenta.desde)}
             </p>
           </>
         ) : (
@@ -100,7 +100,7 @@ function DetalleMesa({ mesa, cuenta, info, onCerrar, onCobrar, onCambio, mostrar
           )}
           {cuenta && (
             <Boton onClick={() => onCobrar(mesa.id)} disabled={soloEnCocina}>
-              <Receipt size={16} aria-hidden="true" /> Cobrar {pesos(cuenta.totalCobrable)}
+              <Receipt size={16} aria-hidden="true" /> {soloEnCocina ? 'Cobrar' : `Cobrar ${pesos(cuenta.totalCobrable)}`}
             </Boton>
           )}
         </div>

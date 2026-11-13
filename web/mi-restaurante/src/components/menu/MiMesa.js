@@ -53,7 +53,10 @@ export function BotonLlamar({ llamada }) {
       ) : (
         <Icono size={18} aria-hidden="true" />
       )}
-      <span>{viva ? 'Mesero avisado' : 'Llamar al mesero'}</span>
+      {/* En el celular la etiqueta corta deja ver el número de la mesa; el nombre accesible es el completo. */}
+      <span className="sr-only">{viva ? 'Mesero avisado' : 'Llamar al mesero'}</span>
+      <span aria-hidden="true" className="sm:hidden">{viva ? 'Avisado' : 'Llamar'}</span>
+      <span aria-hidden="true" className="hidden sm:inline">{viva ? 'Mesero avisado' : 'Llamar al mesero'}</span>
     </button>
   );
 }
