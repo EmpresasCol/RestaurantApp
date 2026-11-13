@@ -32,9 +32,7 @@ namespace RestaurantApi.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PedidoDto>>> GetPedidos()
         {
-            var pedidos = await ConsultaCompleta()
-                .OrderByDescending(p => p.Fecha)
-                .ToListAsync();
+            var pedidos = await ParaMostrar(_context.Pedidos.OrderByDescending(p => p.Fecha)).ToListAsync();
 
             return pedidos.Select(MapearPedidoADto).ToList();
         }
@@ -46,11 +44,11 @@ namespace RestaurantApi.Controllers
         [HttpGet("activos")]
         public async Task<ActionResult<IEnumerable<PedidoDto>>> GetPedidosActivos()
         {
-            var pedidos = await ConsultaCompleta()
+            var pedidos = await ParaMostrar(_context.Pedidos
                 .Where(p => p.Estado == EstadoPedido.EnProceso
                          || p.Estado == EstadoPedido.Listo
                          || p.Estado == EstadoPedido.Entregado)
-                .OrderBy(p => p.Fecha)
+                .OrderBy(p => p.Fecha))
                 .ToListAsync();
 
             return pedidos.Select(MapearPedidoADto).ToList();
@@ -60,7 +58,7 @@ namespace RestaurantApi.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<PedidoDto>> GetPedido(int id)
         {
-            var pedido = await ConsultaCompleta().FirstOrDefaultAsync(p => p.Id == id);
+            var pedido = await ParaMostrar(_context.Pedidos.Where(p => p.Id == id)).FirstOrDefaultAsync();
             if (pedido == null)
                 return NotFound();
 
@@ -139,7 +137,7 @@ namespace RestaurantApi.Controllers
             await SincronizarInventarioAsync(pedido.Id, cancelar: false);
             await tx.CommitAsync();
 
-            var pedidoCreado = await ConsultaCompleta().FirstAsync(p => p.Id == pedido.Id);
+            var pedidoCreado = await ParaMostrar(_context.Pedidos.Where(p => p.Id == pedido.Id)).FirstAsync();
             var resultado = MapearPedidoADto(pedidoCreado);
             // El comensal del QR recibe la llave de seguimiento de esta visita; el personal no la necesita.
             if (usuarioSesion == null) resultado.Seguimiento = ocupacion.Token;
@@ -272,7 +270,7 @@ namespace RestaurantApi.Controllers
             await SincronizarInventarioAsync(id, cancelar: false);
             await tx!.CommitAsync();
 
-            var pedidoActualizado = await ConsultaCompleta().FirstAsync(p => p.Id == id);
+            var pedidoActualizado = await ParaMostrar(_context.Pedidos.Where(p => p.Id == id)).FirstAsync();
             return MapearPedidoADto(pedidoActualizado);
         }
 
@@ -360,7 +358,7 @@ namespace RestaurantApi.Controllers
             await SincronizarInventarioAsync(id, cancelar: pedido.Estado == EstadoPedido.Cancelado);
             await tx!.CommitAsync();
 
-            var pedidoActualizado = await ConsultaCompleta().FirstAsync(p => p.Id == id);
+            var pedidoActualizado = await ParaMostrar(_context.Pedidos.Where(p => p.Id == id)).FirstAsync();
             return Ok(MapearPedidoADto(pedidoActualizado));
         }
 
@@ -388,11 +386,33 @@ namespace RestaurantApi.Controllers
 
         // ──────────────────────────────────────────────────────────────────
 
-        private IQueryable<Pedido> ConsultaCompleta() => _context.Pedidos
-            .Include(p => p.Mesa)
-            .Include(p => p.Usuario)
-            .Include(p => p.Detalles)
-                .ThenInclude(d => d.Platillo);
+        /// <summary>
+        /// Pedidos listos para mostrar, sin rastreo y solo con las columnas que usa el DTO. Antes se
+        /// incluía el platillo entero y con él su foto en Base64 (LONGTEXT) por cada plato de cada
+        /// pedido, en cada recarga de cocina, caja y la app.
+        /// </summary>
+        public static IQueryable<Pedido> ParaMostrar(IQueryable<Pedido> pedidos) => pedidos.AsNoTracking().Select(p => new Pedido
+        {
+            Id = p.Id,
+            MesaId = p.MesaId,
+            UsuarioId = p.UsuarioId,
+            Estado = p.Estado,
+            Fecha = p.Fecha,
+            FechaEdicion = p.FechaEdicion,
+            Mesa = new Mesa { Numero = p.Mesa!.Numero },
+            Usuario = new Usuario { Nombre = p.Usuario!.Nombre },
+            Detalles = p.Detalles.Select(d => new PedidoDetalle
+            {
+                Id = d.Id,
+                PlatilloId = d.PlatilloId,
+                Cantidad = d.Cantidad,
+                Nota = d.Nota,
+                Estado = d.Estado,
+                PrecioUnitario = d.PrecioUnitario,
+                FacturaId = d.FacturaId,
+                Platillo = new Platillo { Nombre = d.Platillo!.Nombre, Precio = d.Platillo.Precio }
+            }).ToList()
+        });
 
         /// <summary>
         /// Reglas de quién puede llevar un pedido a cada estado; null si el cambio se permite.
