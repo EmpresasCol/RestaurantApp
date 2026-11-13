@@ -426,7 +426,7 @@ namespace RestaurantApi.Controllers
         private static string? ValidarPagaCon(decimal? pagaCon, string metodo, bool pagadoAnticipado, decimal total)
         {
             if (pagaCon == null || metodo != "Efectivo" || pagadoAnticipado) return null;
-            return pagaCon < total ? $"Con {pagaCon:N0} no alcanza para el total de {total:N0}" : null;
+            return pagaCon < total ? $"Con {Cuentas.Pesos(pagaCon)} no alcanza para el total de {Cuentas.Pesos(total)}" : null;
         }
 
         /// <summary>Número de la factura de los domicilios entregados.</summary>

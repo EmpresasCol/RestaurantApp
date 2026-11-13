@@ -6,6 +6,12 @@ namespace RestaurantApi.Services
     /// <summary>Cálculos de la cuenta que comparten caja, facturas y reportes.</summary>
     public static class Cuentas
     {
+        /// <summary>Monto en pesos como se lee en Colombia: 25.000 (no 25,000, que parece decimal).</summary>
+        public static string Pesos(decimal valor)
+            => Math.Round(valor).ToString("#,0", System.Globalization.CultureInfo.InvariantCulture).Replace(',', '.');
+
+        public static string Pesos(decimal? valor) => Pesos(valor ?? 0);
+
         /// <summary>Precio con que se vendió el plato; los pedidos viejos sin precio usan el de la carta.</summary>
         public static decimal Precio(PedidoDetalle d) => d.PrecioUnitario ?? d.Platillo?.Precio ?? 0;
 

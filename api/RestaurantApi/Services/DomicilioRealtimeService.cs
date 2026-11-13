@@ -53,7 +53,7 @@ namespace RestaurantApi.Services
         {
             await SendToTopicAsync("admin_domicilios",
                 "🚲 Nuevo pedido a domicilio",
-                $"Pedido #{d.Id} por ${d.Total:N0}",
+                $"Pedido #{d.Id} por ${Cuentas.Pesos(d.Total)}",
                 new Dictionary<string, string>
                 {
                     ["tipo"]        = "nuevo_domicilio",

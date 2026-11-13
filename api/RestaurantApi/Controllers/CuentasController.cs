@@ -216,7 +216,7 @@ namespace RestaurantApi.Controllers
             }
             var suma = pagos.Sum(p => p.Monto);
             return suma - total >= 0.01m
-                ? $"Los pagos suman {suma - total:N0} pesos más que la cuenta: si es propina, regístrala como propina"
+                ? $"Los pagos suman {Cuentas.Pesos(suma - total)} pesos más que la cuenta: si es propina, regístrala como propina"
                 : null;
         }
 

@@ -187,7 +187,7 @@ namespace RestaurantApi.Controllers
                     var debe = abiertos.Sum(Cuentas.ConsumoPorCobrar);
                     return Conflict(new
                     {
-                        message = $"La mesa {mesa.Numero} tiene {abiertos.Count} pedido(s) abierto(s) por {debe:N0} pesos. Cóbralos o cancélalos antes de liberarla."
+                        message = $"La mesa {mesa.Numero} tiene {abiertos.Count} pedido(s) abierto(s) por {Cuentas.Pesos(debe)} pesos. Cóbralos o cancélalos antes de liberarla."
                     });
                 }
                 // Liberar es cerrar la visita: el seguimiento del comensal y sus llamadas terminan aquí.

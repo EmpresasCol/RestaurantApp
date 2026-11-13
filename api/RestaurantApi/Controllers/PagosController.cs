@@ -145,7 +145,7 @@ namespace RestaurantApi.Controllers
                     return BadRequest(new { message = "Cada pago debe ser mayor que cero" });
                 var recibido = metodo == MetodoPago.Efectivo ? p.Recibido : null;
                 if (recibido < p.Monto)
-                    return BadRequest(new { message = $"El efectivo recibido no alcanza: faltan {p.Monto - recibido:N0} pesos" });
+                    return BadRequest(new { message = $"El efectivo recibido no alcanza: faltan {Cuentas.Pesos(p.Monto - recibido)} pesos" });
                 pagos.Add((metodo, p.Monto, recibido, p.AvisoId));
             }
             var pagado = pagos.Sum(p => p.Monto);
@@ -153,8 +153,8 @@ namespace RestaurantApi.Controllers
                 return BadRequest(new
                 {
                     message = pagado < total
-                        ? $"Los pagos no cubren la cuenta: faltan {total - pagado:N0} pesos"
-                        : $"Los pagos suman {pagado - total:N0} pesos de más: súmalos a la propina o corrige un pago"
+                        ? $"Los pagos no cubren la cuenta: faltan {Cuentas.Pesos(total - pagado)} pesos"
+                        : $"Los pagos suman {Cuentas.Pesos(pagado - total)} pesos de más: súmalos a la propina o corrige un pago"
                 });
 
             // ── Lo que avisó el mesero no se cambia ───────────────────────
