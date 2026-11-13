@@ -114,4 +114,21 @@ public class AuditoriaSalonTests
         var registro = Assert.Single(ctx.UsuariosFCM.AsNoTracking());
         Assert.Equal(TestDb.MeseroId, registro.UsuarioId);
     }
+
+    [Fact]
+    public async Task Al_cerrar_sesion_el_dispositivo_deja_de_recibir_los_avisos_del_mesero()
+    {
+        using var ctx = TestDb.Crear();
+        ctx.UsuariosFCM.Add(new UsuarioFCM { UsuarioId = TestDb.MeseroId, FcmToken = "tok-1", FechaRegistro = DateTime.UtcNow });
+        ctx.UsuariosFCM.Add(new UsuarioFCM { UsuarioId = TestDb.MeseroId, FcmToken = "tok-2", FechaRegistro = DateTime.UtcNow });
+        ctx.SaveChanges();
+        var controlador = TestDb.ComoMesero(new UsuariosController(ctx));
+
+        // Otro usuario no puede quitar los tokens del mesero.
+        Assert.IsType<ForbidResult>(await controlador.QuitarTokenFCM(TestDb.AdminId + 999, new UsuariosController.TokenFCMDto { FcmToken = "tok-1" }));
+
+        Assert.IsType<NoContentResult>(await controlador.QuitarTokenFCM(TestDb.MeseroId, new UsuariosController.TokenFCMDto { FcmToken = "tok-1" }));
+        Assert.IsType<NoContentResult>(await controlador.QuitarTokenFCM(TestDb.MeseroId, new UsuariosController.TokenFCMDto { FcmToken = "tok-1" }));
+        Assert.Equal("tok-2", Assert.Single(ctx.UsuariosFCM.AsNoTracking()).FcmToken);
+    }
 }

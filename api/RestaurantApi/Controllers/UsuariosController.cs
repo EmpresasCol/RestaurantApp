@@ -113,6 +113,23 @@ namespace RestaurantApi.Controllers
             return Ok(new { message = "Token registrado correctamente" });
         }
 
+        /// <summary>
+        /// Al cerrar sesión el dispositivo deja de recibir los avisos de ese usuario (llamadas de
+        /// mesa, pedidos listos). Idempotente: un token que ya no está responde igual.
+        /// </summary>
+        [HttpDelete("{id}/fcm-token")]
+        public async Task<IActionResult> QuitarTokenFCM(int id, [FromBody] TokenFCMDto dto)
+        {
+            if (QproClaims.IdUsuario(User) != id && !QproClaims.EsAdministrador(User))
+                return Forbid();
+            if (string.IsNullOrWhiteSpace(dto.FcmToken))
+                return NoContent();
+
+            _context.UsuariosFCM.RemoveRange(_context.UsuariosFCM.Where(u => u.UsuarioId == id && u.FcmToken == dto.FcmToken));
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
         public class TokenFCMDto
         {
             public string FcmToken { get; set; } = string.Empty;
