@@ -11,6 +11,7 @@ import '../../theme/qpro_theme.dart';
 import '../../utils/formato.dart';
 import '../../widgets/q.dart';
 import 'avisos_screen.dart';
+import 'llamada_tarjeta.dart';
 import 'mesa_screen.dart';
 
 enum _Filtro { todas, ocupadas, libres }
@@ -38,6 +39,7 @@ class _SalonScreenState extends State<SalonScreen> {
     final cuentas = salon.cuentas;
     final ocupadas = cuentas.where((c) => !c.libre).length;
     final porServir = salon.porServir;
+    final llamadas = salon.llamadas;
     final visibles = switch (_filtro) {
       _Filtro.todas => cuentas,
       _Filtro.ocupadas => cuentas.where((c) => !c.libre).toList(),
@@ -94,6 +96,20 @@ class _SalonScreenState extends State<SalonScreen> {
                     ]),
                   ),
                 ),
+                if (llamadas.isNotEmpty) ...[
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                    sliver: SliverToBoxAdapter(child: Text('Te llaman', style: t.titleLarge)),
+                  ),
+                  SliverList.separated(
+                    itemCount: llamadas.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: TarjetaLlamada(llamada: llamadas[i], onAbrir: () => _abrirMesa(llamadas[i].mesaId)),
+                    ),
+                  ),
+                ],
                 if (porServir.isNotEmpty) ...[
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
@@ -143,7 +159,11 @@ class _SalonScreenState extends State<SalonScreen> {
                         mainAxisExtent: 128,
                       ),
                       itemCount: visibles.length,
-                      itemBuilder: (_, i) => _TarjetaMesa(cuenta: visibles[i], onTap: () => _abrirMesa(visibles[i].mesa.id)),
+                      itemBuilder: (_, i) => _TarjetaMesa(
+                        cuenta: visibles[i],
+                        llama: salon.llamadaDe(visibles[i].mesa.id) != null,
+                        onTap: () => _abrirMesa(visibles[i].mesa.id),
+                      ),
                     ),
                   ),
               ]),
@@ -259,9 +279,10 @@ Future<void> servirPedido(BuildContext context, Pedido pedido) async {
 }
 
 class _TarjetaMesa extends StatelessWidget {
-  const _TarjetaMesa({required this.cuenta, required this.onTap});
+  const _TarjetaMesa({required this.cuenta, required this.onTap, this.llama = false});
 
   final CuentaMesa cuenta;
+  final bool llama;
   final VoidCallback onTap;
 
   @override
@@ -279,18 +300,21 @@ class _TarjetaMesa extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: 'Mesa ${cuenta.mesa.numero}, ${cuenta.resumen}${cuenta.libre ? '' : ', ${pesos(cuenta.total)}'}',
+      label: 'Mesa ${cuenta.mesa.numero}${llama ? ', llama al mesero' : ''}, ${cuenta.resumen}${cuenta.libre ? '' : ', ${pesos(cuenta.total)}'}',
       excludeSemantics: true,
       child: QTarjeta(
         onTap: onTap,
-        borde: borde,
+        borde: llama ? QColors.caramel : borde,
         color: cuenta.libre ? QColors.stone50 : QColors.white,
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
             Text('${cuenta.mesa.numero}', style: t.headlineMedium?.copyWith(fontSize: 30, fontFeatures: tabular)),
             const Spacer(),
-            if (!cuenta.libre) Text(plural(cuenta.platos, 'plato'), style: t.bodySmall),
+            if (llama)
+              const Icon(Icons.notifications_active_rounded, size: 20, color: QColors.caramelDeep)
+            else if (!cuenta.libre)
+              Text(plural(cuenta.platos, 'plato'), style: t.bodySmall),
           ]),
           const Spacer(),
           Row(children: [

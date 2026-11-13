@@ -34,7 +34,7 @@ class Api {
   Future<dynamic> get(String ruta) => _enviar('GET', ruta);
   Future<dynamic> post(String ruta, [Object? cuerpo]) => _enviar('POST', ruta, cuerpo);
   Future<dynamic> put(String ruta, [Object? cuerpo]) => _enviar('PUT', ruta, cuerpo);
-  Future<dynamic> delete(String ruta) => _enviar('DELETE', ruta);
+  Future<dynamic> delete(String ruta, [Object? cuerpo]) => _enviar('DELETE', ruta, cuerpo);
 
   Future<dynamic> _enviar(String metodo, String ruta, [Object? cuerpo]) async {
     final peticion = http.Request(metodo, Uri.parse('${ApiConfig.apiUrl}/$ruta'))

@@ -9,6 +9,7 @@ import '../../theme/qpro_theme.dart';
 import '../../utils/formato.dart';
 import '../../widgets/q.dart';
 import 'carta_screen.dart';
+import 'llamada_tarjeta.dart';
 import 'pago_sheet.dart';
 import 'salon_screen.dart' show servirPedido;
 
@@ -51,6 +52,7 @@ class MesaScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
+            if (salon.llamadaDe(mesaId) case final llamada?) ...[TarjetaLlamada(llamada: llamada), const SizedBox(height: 12)],
             if (cuenta.solicitud != null) ...[_AvisoCuenta(solicitud: cuenta.solicitud!), const SizedBox(height: 12)],
             if (cuenta.libre)
               Vacio(

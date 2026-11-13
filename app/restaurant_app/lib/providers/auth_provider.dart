@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -45,6 +46,8 @@ class AuthProvider with ChangeNotifier {
         if (usuario.rol == RolUsuario.mesero || usuario.rol == RolUsuario.domiciliario) {
           _usuario = usuario;
           Realtime.instancia.iniciar();
+          // Firebase pudo renovar el token mientras la app estaba cerrada.
+          registrarPush();
         }
       }
     } catch (_) {
@@ -92,26 +95,42 @@ class AuthProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_claveUsuario, json.encode(_usuario!.toJson()));
       Realtime.instancia.iniciar();
-      if (rol == RolUsuario.mesero) _registrarPush(_usuario!.id);
+      registrarPush();
     } finally {
       _cargando = false;
       notifyListeners();
     }
   }
 
-  /// Avisos de "pedido listo" en este celular. Si falla, el login sigue igual.
-  Future<void> _registrarPush(int usuarioId) async {
-    final token = await NotificationService().getToken();
+  /// Avisos del mesero en este celular (pedido listo, mesa que llama). Se llama al entrar, al
+  /// recuperar la sesión y cada vez que Firebase renueva el token. Si falla, la sesión sigue igual.
+  Future<void> registrarPush([String? nuevo]) async {
+    final usuario = _usuario;
+    if (usuario == null || usuario.rol != RolUsuario.mesero) return;
+    final token = nuevo ?? await NotificationService().getToken();
     if (token == null) return;
     try {
-      await _api.post('usuarios/$usuarioId/fcm-token', {'fcmToken': token});
+      await _api.post('usuarios/${usuario.id}/fcm-token', {'fcmToken': token});
     } catch (e) {
       debugPrint('No se registró el token de notificaciones: $e');
     }
   }
 
+  /// Al salir, este celular deja de recibir los avisos del mesero. No hace esperar al salir:
+  /// la petición sale con la sesión actual antes de borrarla.
+  Future<void> _quitarPush(Usuario usuario) async {
+    if (usuario.rol != RolUsuario.mesero) return;
+    final token = await NotificationService().getToken();
+    if (token == null) return;
+    unawaited(_api.delete('usuarios/${usuario.id}/fcm-token', {'fcmToken': token}).catchError((Object e) {
+      debugPrint('No se quitó el token de notificaciones: $e');
+    }));
+  }
+
   Future<void> cerrarSesion({bool vencida = false}) async {
     if (_usuario == null && !vencida) return;
+    // Con la sesión vencida la API ya no acepta el token: la baja queda para el próximo dueño.
+    if (_usuario != null && !vencida) await _quitarPush(_usuario!);
     Realtime.instancia.detener();
     _usuario = null;
     _vencida = vencida;

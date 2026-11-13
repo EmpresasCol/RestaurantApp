@@ -109,6 +109,38 @@ void main() {
     salon.dispose();
   });
 
+  testWidgets('mesa: la llamada del comensal se toma con "Voy" y se cierra con "Atendida"', (tester) async {
+    tester.view.physicalSize = const Size(1080, 3000);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+    Map<String, dynamic> llamada(String estado, {String? mesero}) =>
+        {'id': 9, 'mesaId': 3, 'mesaNumero': 3, 'fecha': '2026-11-13T20:00:00Z', 'estado': estado, 'meseroId': mesero == null ? null : 2, 'meseroNombre': mesero};
+    final servidor = _salon()
+      ..responder('GET llamadas', [llamada('Pendiente')])
+      ..responder('PUT llamadas/9/tomar', llamada('EnCamino', mesero: 'Juan'));
+    final salon = await _cargado(servidor);
+    final auth = AuthProvider(api: servidor.api());
+    await tester.pumpWidget(_app(const MesaScreen(mesaId: 3), salon: salon, auth: auth));
+
+    expect(find.text('Mesa 3 te llama'), findsOneWidget);
+    expect(find.textContaining('Esperando mesero'), findsOneWidget);
+
+    servidor.responder('GET llamadas', [llamada('EnCamino', mesero: 'Juan')]);
+    await tester.tap(find.text('Voy'));
+    await tester.pumpAndSettle();
+    expect(servidor.veces('PUT llamadas/9/tomar'), 1);
+    expect(find.textContaining('Juan va'), findsOneWidget);
+
+    servidor
+      ..responder('PUT llamadas/9/atender', llamada('Atendida', mesero: 'Juan'))
+      ..responder('GET llamadas', []);
+    await tester.tap(find.text('Atendida'));
+    await tester.pumpAndSettle();
+    expect(servidor.veces('PUT llamadas/9/atender'), 1);
+    expect(find.text('Mesa 3 te llama'), findsNothing);
+    salon.dispose();
+  });
+
   testWidgets('mesa: pedir la cuenta la envía a caja y luego se registra el pago', (tester) async {
     final servidor = _salon()..responder('POST cuentas/solicitudes', solicitudJson());
     final salon = await _cargado(servidor);

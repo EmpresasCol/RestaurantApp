@@ -39,13 +39,16 @@ Future<void> main() async {
   final push = NotificationService();
   push.onAviso = (a) => _alLlegarAviso(avisos, a);
   push.onAbrir = (a) => _abrirMesa(a.mesaNumero);
+  push.onToken = auth.registrarPush;
   push.initialize();
 }
 
 AudioPlayer? _reproductor;
 
-/// "Pedido listo" con la app abierta: sonido incluido, vibración y aviso en pantalla.
+/// "Pedido listo" o "la mesa te llama" con la app abierta: sonido, vibración y aviso en pantalla.
+/// La llamada ya llegó también por tiempo real; recargar aquí cubre un socket caído.
 Future<void> _alLlegarAviso(NotificacionProvider avisos, AvisoPush aviso) async {
+  if (aviso.esLlamada) _navegador?.currentContext?.read<SalonProvider?>()?.cargar(silencioso: true);
   HapticFeedback.heavyImpact();
   try {
     await (_reproductor ??= AudioPlayer()).play(AssetSource('sounds/listo.wav'));
@@ -55,14 +58,24 @@ Future<void> _alLlegarAviso(NotificacionProvider avisos, AvisoPush aviso) async 
   await avisos.agregar(pedidoId: aviso.pedidoId, mesaNumero: aviso.mesaNumero, titulo: aviso.titulo, mensaje: aviso.mensaje);
   final contexto = _mensajero?.currentContext;
   if (contexto != null && contexto.mounted) {
-    avisar(contexto, aviso.mesaNumero > 0 ? 'Mesa ${aviso.mesaNumero}: pedido listo para servir' : aviso.titulo);
+    avisar(
+      contexto,
+      aviso.mesaNumero <= 0
+          ? aviso.titulo
+          : aviso.esLlamada
+              ? 'Mesa ${aviso.mesaNumero} te llama'
+              : 'Mesa ${aviso.mesaNumero}: pedido listo para servir',
+    );
   }
 }
 
-void _abrirMesa(int numero) {
-  final contexto = _navegador?.currentContext;
-  if (contexto == null || numero <= 0) return;
-  final mesa = contexto.read<SalonProvider?>()?.mesaPorNumero(numero);
+/// Al tocar un aviso: abre la mesa con su estado recién leído de la API. Con la app recién
+/// abierta desde el aviso el salón puede no haber cargado todavía.
+Future<void> _abrirMesa(int numero) async {
+  final salon = _navegador?.currentContext?.read<SalonProvider?>();
+  if (salon == null || numero <= 0) return;
+  await salon.cargar(silencioso: true);
+  final mesa = salon.mesaPorNumero(numero);
   if (mesa != null) navegador?.push(MaterialPageRoute(builder: (_) => MesaScreen(mesaId: mesa.id)));
 }
 

@@ -7,15 +7,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/notificacion_provider.dart';
 
-/// Aviso de push en datos simples: lo que la API manda con "pedido listo".
-typedef AvisoPush = ({String titulo, String mensaje, int pedidoId, int mesaNumero});
+/// Aviso de push en datos simples: "pedido listo" o una mesa que llama al mesero
+/// (`tipo: llamada_mesero`). El estado real se lee siempre de la API al abrirlo.
+typedef AvisoPush = ({String titulo, String mensaje, int pedidoId, int mesaNumero, bool esLlamada});
 
-AvisoPush avisoDe(RemoteMessage m) => (
-      titulo: m.notification?.title ?? 'Pedido listo',
-      mensaje: m.notification?.body ?? '',
-      pedidoId: int.tryParse(m.data['pedidoId']?.toString() ?? '') ?? 0,
-      mesaNumero: int.tryParse(m.data['mesaNumero']?.toString() ?? '') ?? 0,
-    );
+AvisoPush avisoDe(RemoteMessage m) => avisoDeDatos(m.data, titulo: m.notification?.title, mensaje: m.notification?.body);
+
+AvisoPush avisoDeDatos(Map<String, dynamic> datos, {String? titulo, String? mensaje}) {
+  final esLlamada = datos['tipo'] == 'llamada_mesero';
+  return (
+    titulo: titulo ?? (esLlamada ? 'Una mesa te llama' : 'Pedido listo'),
+    mensaje: mensaje ?? '',
+    pedidoId: int.tryParse(datos['pedidoId']?.toString() ?? '') ?? 0,
+    mesaNumero: int.tryParse(datos['mesaNumero']?.toString() ?? '') ?? 0,
+    esLlamada: esLlamada,
+  );
+}
 
 /// Con la app cerrada o minimizada: guarda el aviso para mostrarlo al abrirla.
 @pragma('vm:entry-point')
@@ -51,6 +58,8 @@ class NotificationService {
 
   void Function(AvisoPush aviso)? onAviso;
   void Function(AvisoPush aviso)? onAbrir;
+  /// Firebase entregó o renovó el token: hay que volver a registrarlo en la API.
+  void Function(String token)? onToken;
 
   Future<void> initialize() async {
     try {
@@ -89,6 +98,7 @@ class NotificationService {
   Future<void> _guardarToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_claveToken, token);
+    onToken?.call(token);
   }
 
   Future<String?> getToken() async {

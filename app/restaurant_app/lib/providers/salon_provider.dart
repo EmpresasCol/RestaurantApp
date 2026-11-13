@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/cuenta.dart';
+import '../models/llamada.dart';
 import '../models/mesa.dart';
 import '../models/pedido.dart';
 import '../models/platillo.dart';
@@ -31,7 +32,8 @@ class LineaPedido {
 class SalonProvider with ChangeNotifier {
   SalonProvider({Api? api, Stream<String>? cambios, bool recargaPeriodica = true}) : _api = api ?? Api.instancia {
     _suscripcion = (cambios ?? Realtime.instancia.cambios).listen((tema) {
-      if (tema == 'pedidos' || tema == 'mesas' || tema == Realtime.reconectado) cargar(silencioso: true);
+      // Cobrar o cancelar cierra la visita y resuelve su llamada: también llega como "pedidos".
+      if (tema == 'pedidos' || tema == 'mesas' || tema == 'llamadas' || tema == Realtime.reconectado) cargar(silencioso: true);
     });
     if (recargaPeriodica) _respaldo = Timer.periodic(const Duration(seconds: 60), (_) => cargar(silencioso: true));
   }
@@ -44,6 +46,7 @@ class SalonProvider with ChangeNotifier {
   List<Pedido> _pedidos = [];
   List<SolicitudCuenta> _solicitudes = [];
   List<Platillo> _carta = [];
+  List<Llamada> _llamadas = [];
   bool _cargando = false;
   bool _cargado = false;
   String? _error;
@@ -52,6 +55,10 @@ class SalonProvider with ChangeNotifier {
   List<Mesa> get mesas => _mesas;
   List<Pedido> get pedidos => _pedidos;
   List<Platillo> get carta => _carta;
+
+  /// Llamadas vivas de los comensales, de la más antigua a la más nueva.
+  List<Llamada> get llamadas => _llamadas;
+  Llamada? llamadaDe(int mesaId) => _llamadas.where((l) => l.mesaId == mesaId).firstOrNull;
   bool get cargando => _cargando;
   bool get cargado => _cargado;
   String? get error => _error;
@@ -100,12 +107,39 @@ class SalonProvider with ChangeNotifier {
       _mesas = (r[0] as List).map((m) => Mesa.fromJson(m)).toList()..sort((a, b) => a.numero.compareTo(b.numero));
       _pedidos = (r[1] as List).map((p) => Pedido.fromJson(p)).toList();
       _solicitudes = (r[2] as List).map((s) => SolicitudCuenta.fromJson(s)).toList();
+      _llamadas = await _cargarLlamadas();
       _error = null;
       _cargado = true;
     } on ApiException catch (e) {
       _error = e.mensaje;
     } finally {
       _cargando = false;
+      notifyListeners();
+    }
+  }
+
+  /// Una API sin llamadas (o caída solo ahí) no deja al mesero sin salón.
+  Future<List<Llamada>> _cargarLlamadas() async {
+    try {
+      final datos = await _api.get('llamadas') as List;
+      return datos.map((l) => Llamada.fromJson(l)).toList()..sort((a, b) => a.fecha.compareTo(b.fecha));
+    } on ApiException {
+      return _llamadas;
+    }
+  }
+
+  /// "Voy yo": la toma este mesero. Si otro la tomó antes, la API responde 409 con su nombre.
+  Future<void> tomarLlamada(int id) => _resolverLlamada('llamadas/$id/tomar');
+
+  /// La mesa quedó atendida. Repetirlo no falla (la API es idempotente).
+  Future<void> atenderLlamada(int id) => _resolverLlamada('llamadas/$id/atender');
+
+  Future<void> _resolverLlamada(String ruta) async {
+    try {
+      await _api.put(ruta, {});
+    } finally {
+      // Gane o pierda la carrera, todos ven el mismo estado.
+      _llamadas = await _cargarLlamadas();
       notifyListeners();
     }
   }

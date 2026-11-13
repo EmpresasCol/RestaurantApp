@@ -11,6 +11,7 @@ import 'package:restaurant_app/providers/auth_provider.dart';
 import 'package:restaurant_app/providers/domiciliario_provider.dart';
 import 'package:restaurant_app/providers/salon_provider.dart';
 import 'package:restaurant_app/services/api.dart';
+import 'package:restaurant_app/services/notification_service.dart';
 import 'package:restaurant_app/services/sesion.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -209,6 +210,85 @@ void main() {
       expect(servidor.veces('GET mesas'), 1);
       p.dispose();
       await cambios.close();
+    });
+  });
+
+  group('Llamadas de mesa', () {
+    Map<String, dynamic> llamadaJson({int id = 9, String estado = 'Pendiente', int? meseroId, String? meseroNombre}) => {
+          'id': id, 'mesaId': 3, 'mesaNumero': 3, 'fecha': '2026-11-13T20:00:00Z', 'estado': estado,
+          'meseroId': meseroId, 'meseroNombre': meseroNombre,
+        };
+    ServidorFalso salon({List<Map<String, dynamic>>? llamadas}) => ServidorFalso()
+      ..responder('GET mesas', [mesaJson(3, estado: 'Ocupada')])
+      ..responder('GET pedidos/activos', [])
+      ..responder('GET cuentas/solicitudes', [])
+      ..responder('GET llamadas', llamadas ?? [llamadaJson()]);
+
+    test('el aviso "llamadas" recarga y la llamada queda ligada a su mesa', () async {
+      final servidor = salon();
+      final cambios = StreamController<String>();
+      final p = SalonProvider(api: servidor.api(), cambios: cambios.stream, recargaPeriodica: false);
+      cambios.add('llamadas');
+      await pumpEventQueue();
+      expect(p.llamadaDe(3)!.mesaNumero, 3);
+      expect(p.llamadaDe(1), isNull);
+      p.dispose();
+      await cambios.close();
+    });
+
+    test('sin el endpoint de llamadas (API vieja) el salón carga igual', () async {
+      final servidor = salon()..rutas.remove('GET llamadas');
+      final p = SalonProvider(api: servidor.api(), cambios: const Stream.empty(), recargaPeriodica: false);
+      await p.cargar();
+      expect(p.error, isNull);
+      expect(p.mesas, hasLength(1));
+      expect(p.llamadas, isEmpty);
+      p.dispose();
+    });
+
+    test('si otro mesero la tomó primero, llega su nombre y todos ven el mismo estado', () async {
+      final servidor = salon()
+        ..responder('PUT llamadas/9/tomar', {'message': 'Ana ya va para la mesa 3'}, status: 409);
+      final p = SalonProvider(api: servidor.api(), cambios: const Stream.empty(), recargaPeriodica: false);
+      await p.cargar();
+      servidor.responder('GET llamadas', [llamadaJson(estado: 'EnCamino', meseroId: 7, meseroNombre: 'Ana')]);
+
+      await expectLater(p.tomarLlamada(9), throwsA(isA<ApiException>().having((e) => e.mensaje, 'mensaje', contains('Ana'))));
+      expect(p.llamadaDe(3)!.tomada, isTrue);
+      expect(p.llamadaDe(3)!.meseroNombre, 'Ana');
+      p.dispose();
+    });
+
+    test('atender la quita del salón', () async {
+      final servidor = salon()..responder('PUT llamadas/9/atender', llamadaJson(estado: 'Atendida'));
+      final p = SalonProvider(api: servidor.api(), cambios: const Stream.empty(), recargaPeriodica: false);
+      await p.cargar();
+      servidor.responder('GET llamadas', []);
+      await p.atenderLlamada(9);
+      expect(servidor.veces('PUT llamadas/9/atender'), 1);
+      expect(p.llamadas, isEmpty);
+      p.dispose();
+    });
+  });
+
+  group('Push del mesero', () {
+    test('el aviso de llamada se distingue del de pedido listo', () {
+      final llamada = avisoDeDatos({'tipo': 'llamada_mesero', 'mesaNumero': '4', 'llamadaId': '9'});
+      expect(llamada.esLlamada, isTrue);
+      expect(llamada.mesaNumero, 4);
+      expect(llamada.titulo, 'Una mesa te llama');
+      final listo = avisoDeDatos({'pedidoId': '15', 'mesaNumero': '3'}, titulo: 'Pedido listo');
+      expect(listo.esLlamada, isFalse);
+      expect(listo.pedidoId, 15);
+    });
+
+    test('al cerrar sesión no se espera a la API y la sesión se borra', () async {
+      SharedPreferences.setMockInitialValues({'usuario': '{"id":2,"nombre":"Juan","nombreUsuario":"juan","rol":"mesero"}', 'token': 't'});
+      final auth = AuthProvider(api: ServidorFalso().api());
+      await auth.cargarUsuario();
+      await auth.cerrarSesion();
+      expect(auth.usuario, isNull);
+      expect(Sesion.token, isNull);
     });
   });
 
