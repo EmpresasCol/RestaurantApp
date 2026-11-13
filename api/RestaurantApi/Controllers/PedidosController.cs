@@ -14,6 +14,8 @@ namespace RestaurantApi.Controllers
     public class PedidosController : ControllerBase
     {
         private const int CantidadMaximaPorLinea = 100;
+        public const int MaximoLineas = 60;
+        public const int MaximoNota = 200;
 
         private readonly RestauranteContext _context;
         private readonly ILogger<PedidosController> _logger;
@@ -96,7 +98,8 @@ namespace RestaurantApi.Controllers
             }
 
             var lineas = crearPedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
-            var error = await ValidarDetallesAsync(lineas)
+            var error = ErrorDeForma(lineas.Count, crearPedido.Detalles.Select(d => d.Nota))
+                        ?? await ValidarDetallesAsync(lineas)
                         ?? await _inventarioService.VerificarStockPedidoAsync(0, lineas);
             if (error != null)
                 return BadRequest(error);
@@ -146,24 +149,9 @@ namespace RestaurantApi.Controllers
             if (!Enum.TryParse<EstadoPedido>(dto.Estado, true, out var estadoEnum) || !Enum.IsDefined(estadoEnum))
                 return BadRequest($"Estado inválido: {dto.Estado}");
 
-            if (!EstadosPedido.PuedeCambiar(pedido.Estado, estadoEnum))
-                return Conflict(new { message = $"No se puede pasar un pedido de {pedido.Estado} a {estadoEnum}" });
-
-            // Cobrar es de la caja (POST api/pagos/cobro emite la factura); el mesero solo lleva la cuenta.
-            if (estadoEnum == EstadoPedido.Pagado && pedido.Estado != estadoEnum && !EsCajaOAdmin())
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "El pago se registra en caja" });
-
-            if (estadoEnum == EstadoPedido.Cancelado && pedido.Estado != estadoEnum
-                && User.IsInRole(nameof(RolUsuario.Mesero)) && EstadosPedido.CocinaEmpezo(pedido))
-                return Conflict(new { message = "La cocina ya empezó este pedido. Pide a cocina o al administrador que lo cancele." });
-
-            // Lo que ya se cobró en una factura no se cancela: la factura emitida no se reescribe.
-            if (estadoEnum == EstadoPedido.Cancelado && pedido.Estado != estadoEnum && pedido.Detalles.Any(d => d.FacturaId != null))
-                return Conflict(new { message = "Ya se cobró parte de este pedido; no se puede cancelar" });
-
-            // Servir es del mesero: la cocina solo marca listo y el pedido sigue a la vista hasta que llegue a la mesa.
-            if (estadoEnum == EstadoPedido.Entregado && pedido.Estado != estadoEnum && User.IsInRole(nameof(RolUsuario.Cocina)))
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = "El mesero marca el pedido como servido" });
+            var rechazo = RechazoDeCambio(pedido, estadoEnum);
+            if (rechazo != null)
+                return rechazo;
 
             var cambio = pedido.Estado != estadoEnum;
             pedido.Estado = estadoEnum;
@@ -240,7 +228,8 @@ namespace RestaurantApi.Controllers
             var lineas = dto.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
             // Un platillo que se ocultó después de pedirlo puede seguir en el pedido que se edita.
             var yaPedidos = pedido.Detalles.Select(d => d.PlatilloId).ToHashSet();
-            var error = await ValidarDetallesAsync(lineas, yaPedidos)
+            var error = ErrorDeForma(lineas.Count, dto.Detalles.Select(d => d.Nota))
+                        ?? await ValidarDetallesAsync(lineas, yaPedidos)
                         ?? await _inventarioService.VerificarStockPedidoAsync(id, lineas);
             if (error != null)
                 return BadRequest(error);
@@ -290,14 +279,18 @@ namespace RestaurantApi.Controllers
             {
                 if (!Enum.TryParse<EstadoPedido>(actualizarDto.Estado, true, out var nuevoEstado) || !Enum.IsDefined(nuevoEstado))
                     return BadRequest($"Estado inválido: {actualizarDto.Estado}");
-                if (!EstadosPedido.PuedeCambiar(pedido.Estado, nuevoEstado))
-                    return Conflict(new { message = $"No se puede pasar un pedido de {pedido.Estado} a {nuevoEstado}" });
+                // Mismas reglas de rol que PUT {id}/estado: por aquí tampoco cobra el mesero ni sirve la cocina.
+                var rechazo = RechazoDeCambio(pedido, nuevoEstado);
+                if (rechazo != null)
+                    return rechazo;
                 pedido.Estado = nuevoEstado;
             }
 
             var detalles = actualizarDto.Detalles ?? new List<ActualizarPedidoDetalleDto>();
             if (detalles.Count > 0)
             {
+                var forma = ErrorDeForma(detalles.Count, detalles.Select(d => d.Nota));
+                if (forma != null) return BadRequest(forma);
                 if (!EstadosPedido.EsEditable(estadoAnterior))
                     return Conflict(new { message = $"Un pedido {estadoAnterior} no se puede modificar" });
                 if (pedido.Detalles.Any(d => d.FacturaId != null))
@@ -382,6 +375,43 @@ namespace RestaurantApi.Controllers
             .Include(p => p.Detalles)
                 .ThenInclude(d => d.Platillo);
 
+        /// <summary>
+        /// Reglas de quién puede llevar un pedido a cada estado; null si el cambio se permite.
+        /// Las comparten PUT {id}/estado y PUT {id} para que ninguna ruta se las salte.
+        /// </summary>
+        private IActionResult? RechazoDeCambio(Pedido pedido, EstadoPedido nuevo)
+        {
+            if (!EstadosPedido.PuedeCambiar(pedido.Estado, nuevo))
+                return Conflict(new { message = $"No se puede pasar un pedido de {pedido.Estado} a {nuevo}" });
+            if (pedido.Estado == nuevo)
+                return null;
+
+            // Cobrar es de la caja (POST api/pagos/cobro emite la factura); el mesero solo lleva la cuenta.
+            if (nuevo == EstadoPedido.Pagado && !EsCajaOAdmin())
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "El pago se registra en caja" });
+
+            if (nuevo == EstadoPedido.Cancelado && User?.IsInRole(nameof(RolUsuario.Mesero)) == true && EstadosPedido.CocinaEmpezo(pedido))
+                return Conflict(new { message = "La cocina ya empezó este pedido. Pide a cocina o al administrador que lo cancele." });
+
+            // Lo que ya se cobró en una factura no se cancela: la factura emitida no se reescribe.
+            if (nuevo == EstadoPedido.Cancelado && pedido.Detalles.Any(d => d.FacturaId != null))
+                return Conflict(new { message = "Ya se cobró parte de este pedido; no se puede cancelar" });
+
+            // Servir es del mesero: la cocina solo marca listo y el pedido sigue a la vista hasta que llegue a la mesa.
+            if (nuevo == EstadoPedido.Entregado && User?.IsInRole(nameof(RolUsuario.Cocina)) == true)
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "El mesero marca el pedido como servido" });
+
+            return null;
+        }
+
+        /// <summary>Tope de líneas y de texto: el pedido del QR es anónimo y su tamaño no se confía al cliente.</summary>
+        private static string? ErrorDeForma(int lineas, IEnumerable<string?> notas)
+        {
+            if (lineas > MaximoLineas)
+                return $"Un pedido admite máximo {MaximoLineas} líneas";
+            return notas.Any(n => n?.Length > MaximoNota) ? $"Cada indicación admite máximo {MaximoNota} caracteres" : null;
+        }
+
         /// <summary>Al menos un platillo, todos existentes y con cantidad entre 1 y el máximo.</summary>
         private async Task<string?> ValidarDetallesAsync(List<(int PlatilloId, int Cantidad)> detalles, ISet<int>? permitidosOcultos = null)
         {
@@ -432,7 +462,7 @@ namespace RestaurantApi.Controllers
         }
 
         private bool EsCajaOAdmin()
-            => User.IsInRole(nameof(RolUsuario.Caja)) || User.IsInRole(nameof(RolUsuario.Administrador));
+            => User?.IsInRole(nameof(RolUsuario.Caja)) == true || User?.IsInRole(nameof(RolUsuario.Administrador)) == true;
 
         private async Task SincronizarInventarioAsync(int pedidoId, bool cancelar)
         {

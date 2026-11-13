@@ -92,8 +92,12 @@ namespace RestaurantApi.Controllers
             if (usuario == null)
                 return NotFound("Usuario no encontrado");
 
-            var tokenExistente = await _context.UsuariosFCM
-                .AnyAsync(u => u.UsuarioId == id && u.FcmToken == dto.FcmToken);
+            // El token es del dispositivo: si antes lo usó otro usuario, deja de recibir sus avisos.
+            var registros = await _context.UsuariosFCM.Where(u => u.FcmToken == dto.FcmToken).ToListAsync();
+            _context.UsuariosFCM.RemoveRange(registros.Where(u => u.UsuarioId != id));
+            var tokenExistente = registros.Any(u => u.UsuarioId == id);
+            if (registros.Count > (tokenExistente ? 1 : 0))
+                await _context.SaveChangesAsync();
 
             if (!tokenExistente)
             {

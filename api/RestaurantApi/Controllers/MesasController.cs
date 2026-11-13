@@ -123,7 +123,8 @@ namespace RestaurantApi.Controllers
             {
                 if (!Enum.TryParse<EstadoMesa>(dto.Estado, true, out var estado) || !Enum.IsDefined(estado))
                     return BadRequest($"Estado inválido: {dto.Estado}");
-                mesa.Estado = estado;
+                var rechazo = await CambiarEstadoAsync(mesa, estado);
+                if (rechazo != null) return rechazo;
             }
 
             await _context.SaveChangesAsync();
@@ -145,7 +146,8 @@ namespace RestaurantApi.Controllers
                 return BadRequest($"Estado inválido: {dto.Estado}. Estados válidos: Disponible, Ocupada, EsperandoPago");
             }
 
-            mesa.Estado = estadoEnum;
+            var rechazo = await CambiarEstadoAsync(mesa, estadoEnum);
+            if (rechazo != null) return rechazo;
             await _context.SaveChangesAsync();
 
             return Ok(new MesaDto
@@ -154,6 +156,28 @@ namespace RestaurantApi.Controllers
                 Numero = mesa.Numero,
                 Estado = mesa.Estado.ToString()
             });
+        }
+
+        /// <summary>
+        /// Una mesa con consumo abierto no se libera cambiándole el estado: primero se cobra o se
+        /// cancela lo pendiente. Devuelve el rechazo (409 con el motivo) o null si el cambio se aplicó.
+        /// </summary>
+        private async Task<IActionResult?> CambiarEstadoAsync(Mesa mesa, EstadoMesa estado)
+        {
+            if (estado == EstadoMesa.Disponible)
+            {
+                var abiertos = await Cuentas.AbiertosDeMesaAsync(_context, mesa.Id);
+                if (abiertos.Count > 0)
+                {
+                    var debe = abiertos.Sum(Cuentas.ConsumoPorCobrar);
+                    return Conflict(new
+                    {
+                        message = $"La mesa {mesa.Numero} tiene {abiertos.Count} pedido(s) abierto(s) por {debe:N0} pesos. Cóbralos o cancélalos antes de liberarla."
+                    });
+                }
+            }
+            mesa.Estado = estado;
+            return null;
         }
 
         public const int MaximoMesas = 200;
