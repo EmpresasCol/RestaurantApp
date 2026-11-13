@@ -52,3 +52,15 @@ describe('useCambios', () => {
     expect(recargar).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('reintentoSinFin', () => {
+  const { reintentoSinFin } = require('../services/realtime');
+  test('nunca se rinde y espera como mucho 30 s entre intentos', () => {
+    const espera = (n) => reintentoSinFin.nextRetryDelayInMilliseconds({ previousRetryCount: n });
+    expect(espera(0)).toBe(1000);
+    expect(espera(3)).toBe(8000);
+    // La política por defecto devuelve null desde el 5.º intento: la conexión moría.
+    expect(espera(5)).toBe(30000);
+    expect(espera(500)).toBe(30000);
+  });
+});

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 import { getApiBaseUrl } from './sesion';
+import { reintentoSinFin } from './realtime';
 
 const API = () => getApiBaseUrl();
 const claveLlave = (codigo) => `qpro:seguimiento:${codigo}`;
@@ -182,7 +183,7 @@ export function useSeguimiento(codigo, llave) {
 
     const conexion = new HubConnectionBuilder()
       .withUrl(`${API()}/hubs/mesa?mesa=${encodeURIComponent(codigo)}`)
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(reintentoSinFin)
       .configureLogging(LogLevel.Warning)
       .build();
     const seguir = () => conexion.invoke('Seguir', codigo, llave).catch(() => {});

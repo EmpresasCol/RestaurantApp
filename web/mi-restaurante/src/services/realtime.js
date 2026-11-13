@@ -6,6 +6,15 @@ import { useEffect, useRef } from 'react';
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
 import { EVENTO_SESION_EXPIRADA, getApiBaseUrl, obtenerToken } from './sesion';
 
+/**
+ * La política por defecto de SignalR se rinde tras 4 intentos (unos 42 s): después de una caída
+ * más larga (la API de Render arrancando en frío) el tiempo real no volvía sin recargar la página.
+ * Se reintenta siempre, con espera creciente hasta 30 s.
+ */
+export const reintentoSinFin = {
+  nextRetryDelayInMilliseconds: ({ previousRetryCount }) => Math.min(30000, 1000 * 2 ** previousRetryCount),
+};
+
 const suscriptores = new Set();
 let conexion = null;
 
@@ -15,7 +24,7 @@ const obtenerConexion = () => {
   if (conexion) return conexion;
   conexion = new HubConnectionBuilder()
     .withUrl(`${getApiBaseUrl()}/hubs/qpro`, { accessTokenFactory: () => obtenerToken() || '' })
-    .withAutomaticReconnect()
+    .withAutomaticReconnect(reintentoSinFin)
     .configureLogging(LogLevel.Warning)
     .build();
   conexion.on('cambio', (tema) => avisar(tema));
