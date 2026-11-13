@@ -125,6 +125,8 @@ namespace RestaurantApi.Controllers
         {
             if (id != dto.Id) return BadRequest();
 
+            // Mismo candado que PUT {id}/estado: liberar no debe cruzarse con un pedido nuevo de la mesa.
+            await using var tx = await Ocupaciones.BloquearMesaAsync(_context, id);
             var mesa = await _context.Mesas.FindAsync(id);
             if (mesa == null) return NotFound();
 
@@ -138,6 +140,7 @@ namespace RestaurantApi.Controllers
             }
 
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
             return NoContent();
         }
 
