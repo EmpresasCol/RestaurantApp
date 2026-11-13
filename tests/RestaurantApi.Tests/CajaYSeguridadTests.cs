@@ -163,6 +163,10 @@ public class SeguridadTests
             "PlatillosController.GetPlatillos", "PlatillosController.GetPlatillo",
             "PedidosController.PostPedido", // menú QR del comensal
             "MesasController.GetMesaPorCodigo", // el comensal ve el número de su mesa
+            // Comensal del QR: cada acción exige el código de la mesa y, para ver la cuenta, la llave de la visita.
+            "ClienteMesaController.Unirse", "ClienteMesaController.GetSeguimiento",
+            "ClienteMesaController.Llamar", "ClienteMesaController.GetLlamada",
+            "ClienteMesaController.GetClavePush", "ClienteMesaController.Suscribir", "ClienteMesaController.Desuscribir",
         };
 
         var controllers = typeof(UsuariosController).Assembly.GetTypes()

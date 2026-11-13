@@ -32,6 +32,14 @@ namespace RestaurantApi.Services
             => pedido.Estado != EstadoPedido.EnProceso
                || pedido.Detalles.Any(d => d.Estado is EstadoDetalle.EnPreparacion or EstadoDetalle.Listo);
 
+        /// <summary>
+        /// Estado que ve el comensal: "Recibido" hasta que la cocina lo empieza y "EnPreparacion"
+        /// después; el resto son los estados reales del pedido. No hay tiempos estimados.
+        /// </summary>
+        public static string ParaCliente(Pedido pedido) => pedido.Estado != EstadoPedido.EnProceso
+            ? pedido.Estado.ToString()
+            : CocinaEmpezo(pedido) ? "EnPreparacion" : "Recibido";
+
         private static readonly Dictionary<string, string[]> Domicilio = new()
         {
             ["EnPreparacion"] = new[] { "Listo", "Cancelado" },

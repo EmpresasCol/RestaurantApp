@@ -39,6 +39,19 @@ namespace RestaurantApi.Services
             => ctx.Ocupaciones.FirstOrDefaultAsync(o => o.MesaId == mesaId && o.Abierta == true);
 
         /// <summary>
+        /// Visita que esa llave puede seguir en tiempo real: abierta y de la mesa de ese QR.
+        /// Una llave de una visita cerrada, o de otra mesa, no entra a ningún canal.
+        /// </summary>
+        public static async Task<int?> IdParaSeguirAsync(RestauranteContext ctx, string? codigoMesa, string? llave)
+        {
+            if (string.IsNullOrWhiteSpace(codigoMesa) || string.IsNullOrWhiteSpace(llave)) return null;
+            return await ctx.Ocupaciones
+                .Where(o => o.Token == llave && o.Abierta == true && o.Mesa!.CodigoQR == codigoMesa)
+                .Select(o => (int?)o.Id)
+                .FirstOrDefaultAsync();
+        }
+
+        /// <summary>
         /// La ocupación abierta de la mesa o una nueva. Una mesa libre pasa a Ocupada; la que
         /// espera el pago sigue así (la cuenta pedida no se pierde por un plato más). No guarda.
         /// </summary>

@@ -10,6 +10,7 @@ namespace RestaurantApi.Services
         public const string Mesas = "mesas";
         public const string Domicilios = "domicilios";
         public const string Inventario = "inventario";
+        public const string Llamadas = "llamadas";
 
         public static string? Desde(string? path)
         {
@@ -27,6 +28,9 @@ namespace RestaurantApi.Services
                 "mesas" => Mesas,
                 "domicilios" or "domiciliarios" => Domicilios,
                 "compras" or "inventario" => Inventario,
+                // El comensal llama (api/cliente-mesa/llamadas) o un mesero la toma o la atiende.
+                "llamadas" => Llamadas,
+                "cliente-mesa" when segmentos.Length > 2 && segmentos[2] == "llamadas" => Llamadas,
                 _ => null
             };
         }

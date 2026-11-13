@@ -6,6 +6,10 @@ using RestaurantApi.Models;
 
 namespace RestaurantApi.Services
 {
+    /// <summary>
+    /// Push a la app de los meseros (FCM). Es un refuerzo: lo que avisa ya está guardado y la app
+    /// lo ve por tiempo real o al recargar. Sin credenciales de Firebase simplemente no envía.
+    /// </summary>
     public class FirebaseNotificationService
     {
         private readonly RestauranteContext _context;
@@ -34,54 +38,50 @@ namespace RestaurantApi.Services
             }
         }
 
-        public async Task EnviarNotificacionPedidoListo(int pedidoId, int mesaNumero)
-        {
-            try
-            {
-                Console.WriteLine($"🔔 Iniciando envío de notificación para pedido {pedidoId}");
-
-                // ✅ OBTENER TOKENS DE TODOS LOS MESEROS (no solo el que creó el pedido)
-                var meseros = await _context.Usuarios
-                    .Where(u => u.Rol == RolUsuario.Mesero && u.Activo)
-                    .Select(u => u.Id)
-                    .ToListAsync();
-
-                Console.WriteLine($"👥 Meseros encontrados: {meseros.Count}");
-
-                var tokens = await _context.UsuariosFCM
-                    .Where(u => meseros.Contains(u.UsuarioId))
-                    .Select(u => u.FcmToken)
-                    .ToListAsync();
-
-                Console.WriteLine($"📱 Tokens FCM encontrados: {tokens.Count}");
-
-                if (!tokens.Any())
-                {
-                    Console.WriteLine($"⚠️ No hay tokens FCM registrados para meseros");
-                    return;
-                }
-
-                // Sin credenciales de Firebase no hay a quién enviar (los tokens nunca se imprimen).
-                if (FirebaseMessaging.DefaultInstance == null)
-                {
-                    Console.WriteLine("⚠️ Firebase no está inicializado; se omite la notificación");
-                    return;
-                }
-
-                var message = new MulticastMessage()
-                {
-                    Tokens = tokens,
-                    Notification = new Notification
-                    {
-                        Title = "🔔 Pedido Listo",
-                        Body = $"El pedido #{pedidoId} de la mesa {mesaNumero} está listo para entregar"
-                    },
-                    Data = new Dictionary<string, string>()
+        public Task EnviarNotificacionPedidoListo(int pedidoId, int mesaNumero) => EnviarAMeserosAsync(
+            "🔔 Pedido Listo",
+            $"El pedido #{pedidoId} de la mesa {mesaNumero} está listo para entregar",
+            new Dictionary<string, string>
             {
                 { "pedidoId", pedidoId.ToString() },
                 { "mesaNumero", mesaNumero.ToString() },
                 { "tipo", "pedido_listo" }
-            },
+            });
+
+        public Task EnviarLlamadaAsync(int llamadaId, int mesaId, int mesaNumero) => EnviarAMeserosAsync(
+            $"Mesa {mesaNumero} llama",
+            $"Un cliente de la mesa {mesaNumero} pide que lo atiendan",
+            new Dictionary<string, string>
+            {
+                { "llamadaId", llamadaId.ToString() },
+                { "mesaId", mesaId.ToString() },
+                { "mesaNumero", mesaNumero.ToString() },
+                { "tipo", "llamada_mesero" }
+            });
+
+        /// <summary>
+        /// A todos los meseros activos (no hay asignación de mesas). Los tokens que Firebase
+        /// reporta como dados de baja se borran para no seguir enviándoles.
+        /// </summary>
+        private async Task EnviarAMeserosAsync(string titulo, string cuerpo, Dictionary<string, string> datos)
+        {
+            try
+            {
+                var tokens = await _context.UsuariosFCM
+                    .Where(t => _context.Usuarios.Any(u => u.Id == t.UsuarioId && u.Rol == RolUsuario.Mesero && u.Activo))
+                    .Select(t => t.FcmToken)
+                    .Distinct()
+                    .ToListAsync();
+
+                // Sin tokens o sin credenciales de Firebase no hay a quién enviar (los tokens nunca se imprimen).
+                if (tokens.Count == 0 || FirebaseMessaging.DefaultInstance == null)
+                    return;
+
+                var message = new MulticastMessage()
+                {
+                    Tokens = tokens,
+                    Notification = new Notification { Title = titulo, Body = cuerpo },
+                    Data = datos,
                     Android = new AndroidConfig
                     {
                         Priority = Priority.High,
@@ -94,22 +94,17 @@ namespace RestaurantApi.Services
                     }
                 };
 
-                Console.WriteLine($"📤 Enviando notificación a {tokens.Count} dispositivo(s)...");
-
                 var response = await FirebaseMessaging.DefaultInstance.SendEachForMulticastAsync(message);
+                if (response.FailureCount == 0) return;
 
-                Console.WriteLine($"✅ Notificaciones enviadas: {response.SuccessCount}/{tokens.Count}");
-
-                if (response.FailureCount > 0)
+                var caducados = tokens
+                    .Where((_, i) => response.Responses[i].Exception?.MessagingErrorCode == MessagingErrorCode.Unregistered)
+                    .ToList();
+                Console.WriteLine($"❌ Push a meseros: {response.FailureCount} fallo(s), {caducados.Count} token(s) dado(s) de baja");
+                if (caducados.Count > 0)
                 {
-                    Console.WriteLine($"❌ Fallos: {response.FailureCount}");
-                    for (int i = 0; i < response.Responses.Count; i++)
-                    {
-                        if (!response.Responses[i].IsSuccess)
-                        {
-                            Console.WriteLine($"   Error en token {i}: {response.Responses[i].Exception?.Message}");
-                        }
-                    }
+                    _context.UsuariosFCM.RemoveRange(_context.UsuariosFCM.Where(t => caducados.Contains(t.FcmToken)));
+                    await _context.SaveChangesAsync();
                 }
             }
             catch (Exception ex)

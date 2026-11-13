@@ -80,6 +80,15 @@ builder.Services.AddRateLimiter(options =>
             ? "u:" + ctx.User.Identity.Name
             : "ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "anon"),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+    // Comensal del QR: se limita por mesa (cabecera X-Mesa), no por IP. Tras un proxy todas las
+    // mesas comparten IP y el seguimiento de una no debe agotar el cupo de las demás.
+    options.AddPolicy("cliente-mesa", ctx =>
+    {
+        var mesa = ctx.Request.Headers[RestaurantApi.Controllers.ClienteMesaController.CabeceraMesa].ToString();
+        return RateLimitPartition.GetFixedWindowLimiter(
+            mesa.Length is >= 8 and <= 64 ? "m:" + mesa : "ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "anon"),
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 90, Window = TimeSpan.FromMinutes(1) });
+    });
 });
 
 builder.Services.AddControllers();
@@ -111,6 +120,12 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddSignalR();
 builder.Services.AddScoped<DomicilioRealtimeService>();
 builder.Services.AddScoped<IInventarioService, InventarioService>();
+
+// Avisos al comensal: Web Push (VAPID) solo si están las claves Push:ClavePublica y Push:ClavePrivada.
+var pushOptions = builder.Configuration.GetSection("Push").Get<PushOptions>() ?? new PushOptions();
+builder.Services.AddSingleton(pushOptions);
+builder.Services.AddHttpClient<PushWeb>(c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<AvisosCliente>();
 
 // ── CORS: solo los frontends conocidos (Cors:Origenes separados por coma) ──
 var origenes = (builder.Configuration["Cors:Origenes"]
@@ -176,6 +191,11 @@ app.Use(async (context, next) =>
     await next();
 
     if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method)) return;
+
+    // Lo que esta petición guardó sobre una mesa se avisa a sus comensales (canal aparte del personal).
+    await context.RequestServices.GetRequiredService<AvisosCliente>()
+        .DespacharAsync(context.RequestServices.GetRequiredService<RestauranteContext>());
+
     if (context.Response.StatusCode is < 200 or >= 300) return;
     var tema = TemaRealtime.Desde(context.Request.Path.Value);
     if (tema is null) return;
@@ -198,6 +218,10 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "Healthy", timestamp =
 
 app.MapControllers();
 app.MapHub<QproHub>("/api/hubs/qpro");
+app.MapHub<ClienteHub>("/api/hubs/mesa").RequireRateLimiting("publico");
+
+if (!pushOptions.ClavePublica.Any())
+    app.Logger.LogInformation("Push:ClavePublica no está configurada: los comensales no recibirán avisos con la página cerrada.");
 
 // Inicializar recetas predeterminadas en arranque de la aplicación
 try

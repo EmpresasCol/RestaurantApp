@@ -11,13 +11,55 @@ namespace RestaurantApi
         public override int SaveChanges(bool acceptAllChangesOnSuccess)
         {
             CongelarPrecios();
+            RegistrarMesasTocadas();
             return base.SaveChanges(acceptAllChangesOnSuccess);
         }
 
         public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
         {
             CongelarPrecios();
+            RegistrarMesasTocadas();
             return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+
+        /// <summary>Mesas cuyos pedidos, cuenta, llamadas o visita cambiaron en esta petición (ver Services/AvisosCliente).</summary>
+        public HashSet<int> MesasTocadas { get; } = new();
+
+        /// <summary>De esas, las que tuvieron un cambio que el comensal quiere saber aunque no esté mirando la página.</summary>
+        public HashSet<int> MesasConAviso { get; } = new();
+
+        /// <summary>
+        /// Anota qué mesas toca lo que se va a guardar. Un solo lugar para todos los controladores:
+        /// ninguno tiene que acordarse de avisar al comensal.
+        /// </summary>
+        private void RegistrarMesasTocadas()
+        {
+            foreach (var e in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).ToList())
+            {
+                var cambioEstado = e.State == EntityState.Modified && e.Properties.Any(p => p.Metadata.Name == "Estado" && p.IsModified);
+                switch (e.Entity)
+                {
+                    case Pedido p:
+                        MesasTocadas.Add(p.MesaId);
+                        if (cambioEstado && p.Estado is EstadoPedido.Listo or EstadoPedido.Cancelado) MesasConAviso.Add(p.MesaId);
+                        break;
+                    case PedidoDetalle { Pedido: { } pedido } d:
+                        MesasTocadas.Add(pedido.MesaId);
+                        if (cambioEstado && d.Estado == EstadoDetalle.EnPreparacion) MesasConAviso.Add(pedido.MesaId);
+                        break;
+                    case Ocupacion o:
+                        MesasTocadas.Add(o.MesaId);
+                        if (e.State == EntityState.Modified && o.Abierta != true) MesasConAviso.Add(o.MesaId);
+                        break;
+                    case LlamadaMesero l:
+                        MesasTocadas.Add(l.MesaId);
+                        if (cambioEstado && l.Estado == LlamadaMesero.EnCamino) MesasConAviso.Add(l.MesaId);
+                        break;
+                    case SolicitudCuenta s:
+                        MesasTocadas.Add(s.MesaId);
+                        break;
+                }
+            }
         }
 
         /// <summary>
