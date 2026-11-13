@@ -135,6 +135,30 @@ export const updateEstadoMesa = async (id, estado) => {
   }
 };
 
+/** Libera la mesa (cierra la visita). La API responde 409 con el motivo si aún debe algo. */
+export const liberarMesa = async (id) => {
+  const response = await fetchWithHeaders(`${API_URL}/mesas/${id}/estado`, {
+    method: 'PUT',
+    body: JSON.stringify({ estado: 'Disponible' })
+  });
+  if (!response.ok) throw await errorDe(response, 'No se pudo liberar la mesa');
+  return await response.json();
+};
+
+/** Llamadas vivas de los comensales: [{ id, mesaId, mesaNumero, fecha, estado, meseroId, meseroNombre }]. */
+export const getLlamadas = async () => {
+  const response = await fetchWithHeaders(`${API_URL}/llamadas`);
+  if (!response.ok) throw await errorDe(response, 'No se pudieron cargar las llamadas');
+  return await response.json();
+};
+
+/** Marca atendida la llamada de una mesa (idempotente). */
+export const atenderLlamada = async (id) => {
+  const response = await fetchWithHeaders(`${API_URL}/llamadas/${id}/atender`, { method: 'PUT' });
+  if (!response.ok) throw await errorDe(response, 'No se pudo marcar la llamada');
+  return await response.json();
+};
+
 /** Número de la mesa a partir del código de su QR (público); null si el código no existe. */
 export const getMesaPorCodigo = async (codigo) => {
   const response = await fetchWithHeaders(`${API_URL}/mesas/qr/${encodeURIComponent(codigo)}`);

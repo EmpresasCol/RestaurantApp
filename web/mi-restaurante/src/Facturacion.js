@@ -2,7 +2,7 @@
 // las facturas del día y cerrar la caja. Se actualiza en tiempo real (SignalR) con respaldo cada 60 s.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Calculator, FileText, Receipt } from 'lucide-react';
+import { Calculator, FileText, LayoutGrid, Receipt } from 'lucide-react';
 import * as api from './services/api';
 import { useCambios } from './services/realtime';
 import { actualizarEstadoDomicilio, getDomiciliosActivos, getLiquidaciones, liquidarDomiciliario } from './services/domiciliosApi';
@@ -11,9 +11,11 @@ import PorCobrar from './components/caja/PorCobrar';
 import CobroPanel from './components/caja/CobroPanel';
 import FacturasDia from './components/caja/FacturasDia';
 import CierreCaja from './components/caja/CierreCaja';
+import TableroMesas from './components/caja/TableroMesas';
 import { agruparCuentas, hoyLocal, pesos } from './utils/caja';
 
 const TITULOS = {
+  mesas: ['Mesas', 'Todas las mesas con su estado, lo que deben y quién está llamando.'],
   cobrar: ['Caja', 'Cuentas abiertas por mesa, domicilios en curso y el efectivo de los domiciliarios.'],
   facturas: ['Facturas', 'Lo cobrado en el día (mesas y domicilios), con su detalle para reimprimir.'],
   cierre: ['Cierre de caja', 'Abre con la base, cuenta el cajón al final y compáralo con lo que dice el sistema.'],
@@ -29,6 +31,7 @@ function Facturacion() {
   const [fecha, setFecha] = useState(hoyLocal);
   const [version, setVersion] = useState(0);
   const [aviso, mostrar] = useAviso();
+  const [salon, setSalon] = useState({ mesas: [], llamadas: [], cargando: true, error: false });
 
   const cargar = useCallback(async () => {
     try {
@@ -50,6 +53,28 @@ function Facturacion() {
 
   useCambios('pedidos', cargar);
   useCambios('domicilios', cargar);
+
+  // El tablero pide mesas y llamadas solo mientras está a la vista.
+  const enMesas = vista === 'mesas';
+  const cargarSalon = useCallback(async () => {
+    if (!enMesas) return;
+    try {
+      const [m, l] = await Promise.all([api.getMesas(), api.getLlamadas().catch(() => [])]);
+      setSalon({ mesas: m, llamadas: l, cargando: false, error: false });
+    } catch {
+      setSalon((s) => ({ ...s, cargando: false, error: true }));
+    }
+  }, [enMesas]);
+  useCambios('mesas', cargarSalon);
+  useCambios('llamadas', cargarSalon);
+  useCambios('pedidos', cargarSalon);
+  useEffect(() => {
+    cargarSalon();
+    if (!enMesas) return undefined;
+    const t = setInterval(cargarSalon, 60000);
+    return () => clearInterval(t);
+  }, [enMesas, cargarSalon]);
+  const recargarTodo = () => { cargar(); cargarSalon(); };
   useEffect(() => {
     cargar();
     const t = setInterval(cargar, 60000);
@@ -82,6 +107,7 @@ function Facturacion() {
   };
 
   const vistas = [
+    { id: 'mesas', label: 'Mesas', icon: LayoutGrid },
     { id: 'cobrar', label: 'Por cobrar', icon: Receipt, contador: cuentas.length + domicilios.length + liquidaciones.length },
     { id: 'facturas', label: 'Facturas', icon: FileText },
     { id: 'cierre', label: 'Cierre del día', icon: Calculator },
@@ -130,11 +156,18 @@ function Facturacion() {
             onCobrar={(c) => setMesaEnCobro(c.mesaId)} onDomicilioCobrado={domicilioCobrado} onLiquidar={liquidar}
           />
         )}
+        {vista === 'mesas' && (
+          <TableroMesas
+            mesas={salon.mesas} cuentas={cuentas} llamadas={salon.llamadas}
+            cargando={salon.cargando} error={salon.error} onReintentar={recargarTodo}
+            onCobrar={setMesaEnCobro} onCambio={recargarTodo} mostrar={mostrar}
+          />
+        )}
         {vista === 'facturas' && <FacturasDia fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} />}
         {vista === 'cierre' && <CierreCaja fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} onLiquidar={liquidar} />}
       </main>
 
-      <CobroPanel cuenta={cuentaEnCobro} onCerrar={() => setMesaEnCobro(null)} onCobrado={cargar} mostrar={mostrar} />
+      <CobroPanel cuenta={cuentaEnCobro} onCerrar={() => setMesaEnCobro(null)} onCobrado={recargarTodo} mostrar={mostrar} />
       {aviso}
     </div>
   );

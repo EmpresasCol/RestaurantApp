@@ -211,3 +211,21 @@ export const hoyLocal = () => {
 };
 
 export const hora = (fecha) => new Date(fecha).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * Estado de la mesa en el tablero: `libre`, `ocupada` o `pago` (pidió la cuenta o está
+ * esperando pago). Lo abierto manda sobre el campo Estado: una mesa con consumo nunca se ve libre.
+ * Los indicadores (llamada, platos listos) van aparte del estado.
+ */
+export const estadoTablero = (mesa, cuenta = null, llamada = null) => {
+  const abierta = !!cuenta && cuenta.pedidos.length > 0;
+  const pidioCuenta = mesa?.estado === 'EsperandoPago' || (abierta && !!cuenta.solicitud);
+  const estado = pidioCuenta ? 'pago' : abierta || mesa?.estado === 'Ocupada' ? 'ocupada' : 'libre';
+  return {
+    estado,
+    listos: cuenta ? cuenta.pedidos.filter((p) => p.estado === 'Listo').length : 0,
+    llamada: llamada ?? null,
+    // Solo una mesa sin pedidos abiertos se libera; la API vuelve a validarlo.
+    puedeLiberar: estado !== 'libre' && !abierta,
+  };
+};
