@@ -20,6 +20,9 @@ namespace RestaurantApi.Dtos
         /// <summary>Lo que falta cobrar de este pedido (sin los platos ya facturados).</summary>
         public decimal PorCobrar { get; set; }
 
+        /// <summary>Llave de seguimiento de la visita; solo se entrega al comensal que pidió por el QR.</summary>
+        public string? Seguimiento { get; set; }
+
         public List<PedidoDetalleDto> Detalles { get; set; } = new();
     }
 }

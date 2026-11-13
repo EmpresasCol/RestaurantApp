@@ -264,6 +264,15 @@ namespace RestaurantApi.Services
             var deseado = await ConsumoDeseadoAsync(lineas, soloObligatorios: true);
             if (deseado.Count == 0) return null;
 
+            // Dentro de una transacción se toman las existencias con candado: dos pedidos por la
+            // última porción se validan uno tras otro y el segundo ya ve el descuento del primero.
+            // (La transacción debe ser READ COMMITTED para que la lectura siguiente sea la actual.)
+            if (_context.Database.IsRelational() && _context.Database.CurrentTransaction != null)
+            {
+                var insumosIds = string.Join(",", deseado.Keys.OrderBy(id => id)); // enteros de las recetas, no texto del cliente
+                await _context.Database.ExecuteSqlRawAsync($"SELECT Id FROM Stock WHERE ProductoId IN ({insumosIds}) ORDER BY Id FOR UPDATE");
+            }
+
             var yaConsumido = origen.Id > 0
                 ? (await MovimientosDeAsync(origen))
                     .GroupBy(m => m.ProductoId)

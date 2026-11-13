@@ -169,6 +169,8 @@ namespace RestaurantApi.Controllers
                 solicitud.FechaPago = ahora;
             }
 
+            // Con la cuenta pedida la mesa espera el pago (ámbar en el tablero) hasta que la caja cobre.
+            mesa.Estado = EstadoMesa.EsperandoPago;
             await _context.SaveChangesAsync();
 
             var pendientes = solicitud.Pagos.Where(p => p.FacturaId == null).ToList();
@@ -230,6 +232,8 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = "La caja ya cobró parte de esta cuenta con estos pagos" });
 
             solicitud.Estado = SolicitudCuenta.Anulada;
+            var mesa = await _context.Mesas.FindAsync(solicitud.MesaId);
+            if (mesa is { Estado: EstadoMesa.EsperandoPago }) mesa.Estado = EstadoMesa.Ocupada;
             await _context.SaveChangesAsync();
             return NoContent();
         }

@@ -51,9 +51,11 @@ CREATE TABLE Pedidos (
     Estado ENUM('EnProceso','Listo','Entregado','Pagado','Cancelado') DEFAULT 'EnProceso',
     Fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
     FechaEdicion DATETIME NULL,
+    OcupacionId INT NULL,
     FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE RESTRICT,
     FOREIGN KEY (UsuarioId) REFERENCES Usuarios(Id) ON DELETE RESTRICT,
-    INDEX idx_estado (Estado)
+    INDEX idx_estado (Estado),
+    INDEX idx_pedidos_ocupacion (OcupacionId)
 ) ENGINE=InnoDB;
 
 CREATE TABLE PedidoDetalles (
@@ -155,6 +157,51 @@ CREATE TABLE CierresCaja (
     UsuarioCierreId INT NULL,
     FechaCierre DATETIME NULL,
     UNIQUE INDEX ux_cierres_fecha (FechaCaja)
+) ENGINE=InnoDB;
+
+-- Visitas de mesa, llamadas al mesero y avisos al comensal
+-- (ver migraciones/2026-11-13_ocupaciones_llamadas_push.sql).
+CREATE TABLE Ocupaciones (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    MesaId INT NOT NULL,
+    Token CHAR(32) NOT NULL,
+    Pin CHAR(6) NOT NULL,
+    IntentosPin INT NOT NULL DEFAULT 0,
+    Inicio DATETIME NOT NULL,
+    Cierre DATETIME NULL,
+    Abierta TINYINT(1) NULL DEFAULT 1,
+    UNIQUE INDEX ux_ocupaciones_token (Token),
+    UNIQUE INDEX ux_ocupaciones_mesa_abierta (MesaId, Abierta),
+    FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE LlamadasMesero (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    MesaId INT NOT NULL,
+    OcupacionId INT NULL,
+    Clave CHAR(24) NOT NULL,
+    Fecha DATETIME NOT NULL,
+    Estado VARCHAR(10) NOT NULL DEFAULT 'Pendiente',
+    MeseroId INT NULL,
+    FechaTomada DATETIME NULL,
+    FechaAtendida DATETIME NULL,
+    Activa TINYINT(1) NULL DEFAULT 1,
+    UNIQUE INDEX ux_llamadas_clave (Clave),
+    UNIQUE INDEX ux_llamadas_mesa_activa (MesaId, Activa),
+    INDEX idx_llamadas_mesa_fecha (MesaId, Fecha),
+    FOREIGN KEY (MesaId) REFERENCES Mesas(Id) ON DELETE CASCADE,
+    FOREIGN KEY (MeseroId) REFERENCES Usuarios(Id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE SuscripcionesPush (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    OcupacionId INT NOT NULL,
+    Endpoint VARCHAR(1000) NOT NULL,
+    Huella CHAR(64) NOT NULL,
+    Fecha DATETIME NOT NULL,
+    UNIQUE INDEX ux_suscripciones_huella (Huella),
+    INDEX idx_suscripciones_ocupacion (OcupacionId),
+    FOREIGN KEY (OcupacionId) REFERENCES Ocupaciones(Id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- =====================================================

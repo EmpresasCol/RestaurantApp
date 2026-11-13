@@ -49,7 +49,17 @@ namespace RestaurantApi.Controllers
                 await _context.SaveChangesAsync();
             }
 
-            return mesas.Select(ADto).ToList();
+            var dtos = mesas.Select(ADto).ToList();
+
+            // Quien atiende el salón ve el código para sumar a otro comensal al seguimiento de la mesa.
+            if (User?.IsInRole(nameof(RolUsuario.Administrador)) == true || User?.IsInRole(nameof(RolUsuario.Caja)) == true
+                || User?.IsInRole(nameof(RolUsuario.Mesero)) == true)
+            {
+                var pines = await _context.Ocupaciones.Where(o => o.Abierta == true)
+                    .ToDictionaryAsync(o => o.MesaId, o => o.Pin);
+                foreach (var d in dtos) d.PinSeguimiento = pines.GetValueOrDefault(d.Id);
+            }
+            return dtos;
         }
 
         /// <summary>Lo único que el comensal sabe de su mesa: el número, a partir del código de su QR.</summary>
@@ -135,6 +145,7 @@ namespace RestaurantApi.Controllers
         [Authorize(Roles = "Administrador,Caja,Mesero")]
         public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoMesaDto dto)
         {
+            await using var tx = await Ocupaciones.BloquearMesaAsync(_context, id);
             var mesa = await _context.Mesas.FindAsync(id);
 
             if (mesa == null)
@@ -149,6 +160,7 @@ namespace RestaurantApi.Controllers
             var rechazo = await CambiarEstadoAsync(mesa, estadoEnum);
             if (rechazo != null) return rechazo;
             await _context.SaveChangesAsync();
+            await tx.CommitAsync();
 
             return Ok(new MesaDto
             {
@@ -175,6 +187,9 @@ namespace RestaurantApi.Controllers
                         message = $"La mesa {mesa.Numero} tiene {abiertos.Count} pedido(s) abierto(s) por {debe:N0} pesos. Cóbralos o cancélalos antes de liberarla."
                     });
                 }
+                // Liberar es cerrar la visita: el seguimiento del comensal y sus llamadas terminan aquí.
+                await Ocupaciones.CerrarAsync(_context, mesa);
+                return null;
             }
             mesa.Estado = estado;
             return null;

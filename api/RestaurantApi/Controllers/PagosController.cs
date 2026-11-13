@@ -74,6 +74,11 @@ namespace RestaurantApi.Controllers
             if (pedidoIds.Count == 0)
                 return BadRequest(new { message = "Elige al menos un plato o pedido para cobrar" });
 
+            // Candado de la mesa antes de leer la cuenta: dos cobros a la vez (doble clic, dos cajas)
+            // se validan uno tras otro y el segundo encuentra los platos ya cobrados.
+            var mesasDelCobro = await _context.Pedidos.Where(p => pedidoIds.Contains(p.Id)).Select(p => p.MesaId).Distinct().ToListAsync();
+            await using var tx = mesasDelCobro.Count == 1 ? await Ocupaciones.BloquearMesaAsync(_context, mesasDelCobro[0]) : null;
+
             var pedidos = await _context.Pedidos
                 .Include(p => p.Mesa)
                 .Include(p => p.Detalles).ThenInclude(d => d.Platillo)
@@ -181,7 +186,6 @@ namespace RestaurantApi.Controllers
             }
 
             // ── Registrar ─────────────────────────────────────────────────
-            using var tx = await _context.Database.BeginTransactionAsync();
             var ahora = DateTime.UtcNow;
 
             // Cobrar solo una parte de un plato: la parte que se paga queda en su propia línea.
@@ -238,16 +242,17 @@ namespace RestaurantApi.Controllers
             var cuentaSaldada = abiertos.All(p => p.Estado == EstadoPedido.Pagado);
             if (cuentaSaldada)
             {
-                if (pedidos[0].Mesa is { } mesa) mesa.Estado = EstadoMesa.Disponible;
                 // La solicitud del mesero queda ligada a su factura (y a sus comprobantes).
                 if (solicitud != null)
                 {
                     solicitud.Estado = SolicitudCuenta.Cobrada;
                     solicitud.FacturaId = factura.Id;
                 }
+                // Pago total confirmado: se cierra la visita y la mesa queda libre.
+                if (pedidos[0].Mesa is { } mesa) await Ocupaciones.CerrarAsync(_context, mesa);
             }
             await _context.SaveChangesAsync();
-            await tx.CommitAsync();
+            await tx!.CommitAsync();
 
             var efectivo = pagos.Where(p => p.Recibido != null).ToList();
             var detalle = (await Facturacion.ConDetalleAsync(_context, new List<Factura> { factura }))[0];
@@ -277,6 +282,11 @@ namespace RestaurantApi.Controllers
             if (crearPago.MontoPropina < 0)
                 return BadRequest("La propina no puede ser negativa");
 
+            var mesaDelPago = await _context.Pedidos.Where(p => p.Id == crearPago.PedidoId).Select(p => (int?)p.MesaId).FirstOrDefaultAsync();
+            if (mesaDelPago == null)
+                return NotFound("Pedido no encontrado");
+            await using var tx = await Ocupaciones.BloquearMesaAsync(_context, mesaDelPago.Value);
+
             var pedido = await _context.Pedidos
                 .Include(p => p.Mesa)
                 .Include(p => p.Detalles).ThenInclude(d => d.Platillo)
@@ -298,8 +308,6 @@ namespace RestaurantApi.Controllers
             if (Math.Abs(crearPago.Monto - consumo) > Tolerancia)
                 return BadRequest($"El monto ({crearPago.Monto:0}) no coincide con el consumo del pedido ({consumo:0})");
 
-            using var tx = await _context.Database.BeginTransactionAsync();
-
             var pago = new Pago
             {
                 PedidoId = pedido.Id,
@@ -312,12 +320,7 @@ namespace RestaurantApi.Controllers
 
             pedido.Estado = EstadoPedido.Pagado;
             if (pedido.Mesa != null)
-            {
-                var otrosAbiertos = await _context.Pedidos.AnyAsync(p =>
-                    p.MesaId == pedido.MesaId && p.Id != pedido.Id &&
-                    p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
-                if (!otrosAbiertos) pedido.Mesa.Estado = EstadoMesa.Disponible;
-            }
+                await Ocupaciones.CerrarSiSaldadaAsync(_context, pedido.Mesa, pedido.Id);
 
             await _context.SaveChangesAsync();
             await tx.CommitAsync();
@@ -366,14 +369,22 @@ namespace RestaurantApi.Controllers
                 return Conflict(new { message = "El pago ya tiene factura emitida" });
 
             var pedido = await _context.Pedidos.Include(p => p.Mesa).FirstOrDefaultAsync(p => p.Id == pago.PedidoId);
+            await using var tx = pedido == null ? null : await Ocupaciones.BloquearMesaAsync(_context, pedido.MesaId);
             if (pedido is { Estado: EstadoPedido.Pagado })
             {
                 pedido.Estado = EstadoPedido.Entregado;
-                if (pedido.Mesa != null) pedido.Mesa.Estado = EstadoMesa.Ocupada;
+                if (pedido.Mesa != null)
+                {
+                    // La cuenta se reabre en la visita que tenga la mesa ahora (o en una nueva).
+                    var ocupacion = await Ocupaciones.AbrirAsync(_context, pedido.Mesa);
+                    await _context.SaveChangesAsync();
+                    pedido.OcupacionId = ocupacion.Id;
+                }
             }
 
             _context.Pagos.Remove(pago);
             await _context.SaveChangesAsync();
+            if (tx != null) await tx.CommitAsync();
 
             return NoContent();
         }

@@ -99,17 +99,28 @@ namespace RestaurantApi.Controllers
 
             var lineas = crearPedido.Detalles.Select(d => (d.PlatilloId, d.Cantidad)).ToList();
             var error = ErrorDeForma(lineas.Count, crearPedido.Detalles.Select(d => d.Nota))
-                        ?? await ValidarDetallesAsync(lineas)
-                        ?? await _inventarioService.VerificarStockPedidoAsync(0, lineas);
+                        ?? await ValidarDetallesAsync(lineas);
             if (error != null)
                 return BadRequest(error);
 
             var usuarioId = usuarioSesion ?? await ObtenerUsuarioGenericoQR();
 
+            // Con el candado de la mesa: validar insumos, abrir la ocupación, guardar y descontar
+            // son un solo paso frente a otro pedido, al cobro final o a la liberación de la mesa.
+            await using var tx = await Ocupaciones.BloquearMesaAsync(_context, mesa.Id);
+            await _context.Entry(mesa).ReloadAsync();
+            var sinStock = await _inventarioService.VerificarStockPedidoAsync(0, lineas);
+            if (sinStock != null)
+                return BadRequest(sinStock);
+
+            var ocupacion = await Ocupaciones.AbrirAsync(_context, mesa);
+            await _context.SaveChangesAsync();
+
             // Pedido y detalles en un solo SaveChanges: o se crea todo o nada.
             var pedido = new Pedido
             {
                 MesaId = mesa.Id,
+                OcupacionId = ocupacion.Id,
                 UsuarioId = usuarioId,
                 Estado = EstadoPedido.EnProceso,
                 Fecha = DateTime.UtcNow,
@@ -122,22 +133,23 @@ namespace RestaurantApi.Controllers
                 }).ToList()
             };
 
-            // TiDB Cloud no admite triggers: marcar la mesa aquí conserva
-            // la misma regla que antes aplicaba la base de datos.
-            mesa.Estado = EstadoMesa.Ocupada;
             _context.Pedidos.Add(pedido);
             await _context.SaveChangesAsync();
 
             await SincronizarInventarioAsync(pedido.Id, cancelar: false);
+            await tx.CommitAsync();
 
             var pedidoCreado = await ConsultaCompleta().FirstAsync(p => p.Id == pedido.Id);
             var resultado = MapearPedidoADto(pedidoCreado);
+            // El comensal del QR recibe la llave de seguimiento de esta visita; el personal no la necesita.
+            if (usuarioSesion == null) resultado.Seguimiento = ocupacion.Token;
             return CreatedAtAction(nameof(GetPedido), new { id = resultado.Id }, resultado);
         }
 
         [HttpPut("{id}/estado")]
         public async Task<IActionResult> ActualizarEstado(int id, [FromBody] ActualizarEstadoPedidoDto dto)
         {
+            await using var tx = await BloquearMesaDePedidoAsync(id);
             var pedido = await _context.Pedidos
                 .Include(p => p.Mesa)
                 .Include(p => p.Detalles)
@@ -157,6 +169,7 @@ namespace RestaurantApi.Controllers
             pedido.Estado = estadoEnum;
             await ActualizarMesaAsync(pedido);
             await _context.SaveChangesAsync();
+            await tx!.CommitAsync();
 
             if (cambio && estadoEnum == EstadoPedido.Listo)
             {
@@ -212,6 +225,7 @@ namespace RestaurantApi.Controllers
         [HttpPut("{id}/actualizar")]
         public async Task<ActionResult<PedidoDto>> ActualizarPedidoCompleto(int id, ActualizarPedidoCompletoDto dto)
         {
+            await using var tx = await BloquearMesaDePedidoAsync(id);
             var pedido = await _context.Pedidos
                 .Include(p => p.Detalles)
                 .FirstOrDefaultAsync(p => p.Id == id);
@@ -256,6 +270,7 @@ namespace RestaurantApi.Controllers
 
             await _context.SaveChangesAsync();
             await SincronizarInventarioAsync(id, cancelar: false);
+            await tx!.CommitAsync();
 
             var pedidoActualizado = await ConsultaCompleta().FirstAsync(p => p.Id == id);
             return MapearPedidoADto(pedidoActualizado);
@@ -265,6 +280,7 @@ namespace RestaurantApi.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> PutPedido(int id, ActualizarPedidoDto actualizarDto)
         {
+            await using var tx = await BloquearMesaDePedidoAsync(id);
             var pedido = await _context.Pedidos
                 .Include(p => p.Detalles)
                 .Include(p => p.Mesa)
@@ -342,6 +358,7 @@ namespace RestaurantApi.Controllers
             await ActualizarMesaAsync(pedido);
             await _context.SaveChangesAsync();
             await SincronizarInventarioAsync(id, cancelar: pedido.Estado == EstadoPedido.Cancelado);
+            await tx!.CommitAsync();
 
             var pedidoActualizado = await ConsultaCompleta().FirstAsync(p => p.Id == id);
             return Ok(MapearPedidoADto(pedidoActualizado));
@@ -352,6 +369,7 @@ namespace RestaurantApi.Controllers
         [Authorize(Roles = "Administrador")]
         public async Task<IActionResult> DeletePedido(int id)
         {
+            await using var tx = await BloquearMesaDePedidoAsync(id);
             var pedido = await _context.Pedidos.Include(p => p.Mesa).FirstOrDefaultAsync(p => p.Id == id);
             if (pedido == null)
                 return NotFound();
@@ -363,6 +381,7 @@ namespace RestaurantApi.Controllers
             await ActualizarMesaAsync(pedido);
             _context.Pedidos.Remove(pedido);
             await _context.SaveChangesAsync();
+            await tx!.CommitAsync();
 
             return NoContent();
         }
@@ -442,23 +461,19 @@ namespace RestaurantApi.Controllers
 
             if (EstadosPedido.EsEditable(pedido.Estado))
             {
-                pedido.Mesa.Estado = EstadoMesa.Ocupada;
+                if (pedido.Mesa.Estado == EstadoMesa.Disponible) pedido.Mesa.Estado = EstadoMesa.Ocupada;
                 return;
             }
 
-            var otrosAbiertos = await _context.Pedidos.AnyAsync(p =>
-                p.MesaId == pedido.MesaId && p.Id != pedido.Id &&
-                p.Estado != EstadoPedido.Pagado && p.Estado != EstadoPedido.Cancelado);
+            // Sin más pedidos abiertos se cierra la visita: mesa libre, llamadas y cuenta pedida resueltas.
+            await Ocupaciones.CerrarSiSaldadaAsync(_context, pedido.Mesa, pedido.Id);
+        }
 
-            if (!otrosAbiertos)
-            {
-                pedido.Mesa.Estado = EstadoMesa.Disponible;
-                // Sin cuenta abierta, una solicitud de cuenta pendiente ya no aplica.
-                var pendientes = await _context.SolicitudesCuenta
-                    .Where(s => s.MesaId == pedido.MesaId && s.Estado == SolicitudCuenta.Pendiente)
-                    .ToListAsync();
-                foreach (var s in pendientes) s.Estado = SolicitudCuenta.Anulada;
-            }
+        /// <summary>Candado de la mesa del pedido (ver <see cref="Ocupaciones.BloquearMesaAsync"/>); null si el pedido no existe.</summary>
+        private async Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction?> BloquearMesaDePedidoAsync(int pedidoId)
+        {
+            var mesaId = await _context.Pedidos.Where(p => p.Id == pedidoId).Select(p => (int?)p.MesaId).FirstOrDefaultAsync();
+            return mesaId == null ? null : await Ocupaciones.BloquearMesaAsync(_context, mesaId.Value);
         }
 
         private bool EsCajaOAdmin()

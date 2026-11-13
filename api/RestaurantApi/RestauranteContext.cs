@@ -49,6 +49,9 @@ namespace RestaurantApi
         public DbSet<SolicitudCuenta> SolicitudesCuenta { get; set; }
         public DbSet<PagoAvisado> PagosAvisados { get; set; }
         public DbSet<CierreCaja> CierresCaja { get; set; }
+        public DbSet<Ocupacion> Ocupaciones { get; set; }
+        public DbSet<LlamadaMesero> LlamadasMesero { get; set; }
+        public DbSet<SuscripcionPush> SuscripcionesPush { get; set; }
 
         // Domicilios
         public DbSet<Cliente> Clientes { get; set; }
@@ -123,6 +126,31 @@ namespace RestaurantApi
             modelBuilder.Entity<Pedido>()
                 .Property(p => p.Estado)
                 .HasConversion<string>();
+
+            modelBuilder.Entity<Pedido>().HasIndex(p => p.OcupacionId);
+
+            // Ocupaciones, llamadas y avisos del comensal (migraciones/2026-11-13_ocupaciones_llamadas_push.sql).
+            modelBuilder.Entity<Ocupacion>(e =>
+            {
+                e.ToTable("Ocupaciones");
+                e.HasIndex(o => o.Token).IsUnique();
+                e.HasIndex(o => new { o.MesaId, o.Abierta }).IsUnique();
+            });
+            modelBuilder.Entity<LlamadaMesero>(e =>
+            {
+                e.ToTable("LlamadasMesero");
+                e.HasIndex(l => l.Clave).IsUnique();
+                e.HasIndex(l => new { l.MesaId, l.Activa }).IsUnique();
+                // Dos meseros a la vez: el segundo en guardar recibe un conflicto en lugar de pisar al primero.
+                e.Property(l => l.Estado).IsConcurrencyToken();
+                e.HasOne(l => l.Mesero).WithMany().HasForeignKey(l => l.MeseroId).OnDelete(DeleteBehavior.SetNull);
+            });
+            modelBuilder.Entity<SuscripcionPush>(e =>
+            {
+                e.ToTable("SuscripcionesPush");
+                e.HasIndex(s => s.Huella).IsUnique();
+                e.HasIndex(s => s.OcupacionId);
+            });
 
             modelBuilder.Entity<PedidoDetalle>()
                 .Property(pd => pd.PrecioUnitario)
