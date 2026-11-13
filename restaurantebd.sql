@@ -4,6 +4,9 @@
 -- Motor: TiDB Cloud (compatibilidad MySQL 8)
 -- =====================================================
 
+-- Las tildes de la semilla se leen como UTF-8 aunque el cliente use otro juego de caracteres.
+SET NAMES utf8mb4;
+
 DROP DATABASE IF EXISTS restaurantebd;
 CREATE DATABASE IF NOT EXISTS restaurantebd CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE restaurantebd;
