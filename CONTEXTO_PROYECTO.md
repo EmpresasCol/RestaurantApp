@@ -1,4 +1,4 @@
-# Qpro: contexto del proyecto (03/11/2026)
+# Qpro: contexto del proyecto (13/11/2026)
 
 Resumen para retomar el trabajo sin leer todo el repositorio. Para detalles de un módulo
 concreto, consulta primero el grafo (`graphify-out/GRAPH_REPORT.md` o `/graphify query "..."`).
@@ -25,9 +25,10 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
   Las tres migraciones de `migraciones/` (`2026-10-31_presentaciones_compra`, `2026-11-01_activos_y_codigo_qr`, `2026-11-02_caja_cuentas`) **ya están aplicadas** en TiDB y en el MySQL local.
   `2026-11-03_solicitudes_cuenta` también está aplicada en TiDB y en el MySQL local (03/11/2026).
   **`2026-11-04_cuentas_compartidas_domicilios` y `2026-11-05_recepciones_fotos` están aplicadas solo en el MySQL local: falta correrlas en TiDB antes de desplegar la API.**
+  **`2026-11-13_ocupaciones_llamadas_push` no está aplicada ni en TiDB ni en el MySQL local** (se probó en un MySQL 8 desechable: idempotente y deja el mismo esquema que `restaurantebd.sql`). La API de esta rama la necesita.
   Regla: toda migración nueva se corre en TiDB **antes** de desplegar la API que la usa (si no, la API falla al leer la columna).
 - **Local:** MySQL 9.6 en `localhost:3306` (cadena en `api/RestaurantApi/appsettings.Development.json`).
-  `.claude/launch.json` (no está en git) arranca la API en `:5000` y la web en `:3000`.
+  Una configuración local del editor (fuera de git) arranca la API en `:5000` y la web en `:3000`.
   - `dotnet run --environment X` no sirve: `dotnet run` se queda con esa opción. Usa la variable `ASPNETCORE_ENVIRONMENT=Development` y `--contentRoot` con ruta absoluta.
   - Usuario de prueba de la semilla: `admin` (Administrador); su clave está en `restaurantebd.sql`.
   - Sin `Jwt__Key` la API usa una clave temporal: cada reinicio cierra la sesión de la web.
@@ -36,6 +37,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 
 | Commit | Qué hizo |
 | --- | --- |
+| `7d1044c` a `2be8c88` (13/11) | Visitas de mesa con llave de seguimiento, llamar al mesero, seguimiento del comensal con Web Push, tablero de mesas en la caja, llamadas en la app, cupos por cliente real detrás de Render, tiempo real que se recupera solo y semilla en UTF-8 (detalle en `HANDOFF.md`) |
 | `1418ad6` | Docs: la app móvil en DESIGN.md y plan de pruebas en celular |
 | `30e683a` | App móvil rehecha: sistema de la web, salón del mesero, carta con inventario, cuenta pedida a caja con foto, domiciliario; Gradle/AGP/Kotlin al mínimo de Flutter 3.47 |
 | `373783d` | Web: cocina "Empezar a preparar"; caja ve la cuenta pedida, imprime la pre-cuenta y muestra la foto de la transferencia |
@@ -51,7 +53,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 | `9e76b4b` | Rediseño web: menú QR, login, cocina y caja |
 | `a123ddc` | Plan de auditoría técnica (seguridad, inventario, caja, estados) |
 
-Pruebas al cierre: **API 214/214**, **web 135/135**, **app 51/51** (`flutter analyze` sin avisos).
+Pruebas al cierre (13/11/2026): **API 270/270**, **web 157/157**, **app 58/58** (`flutter analyze` sin avisos; Flutter 3.44 en Docker, ver `HANDOFF.md`).
 Trabajo del 04/11/2026 (sin commit todavía): cuentas compartidas, pagos avisados con varias fotos, domicilios con
 factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el arreglo del cierre de sesión de la app.
 
@@ -66,6 +68,11 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - **Fechas:** se guardan en UTC; los cortes de "hoy" se calculan en hora de Colombia (`Services/HoraLocal.cs`). Las columnas DATE (vencimiento, fecha de orden) no se convierten.
 - **Tiempo real:** hub `Hubs/QproHub.cs` en `/api/hubs/qpro`. Un middleware de `Program.cs` emite `cambio` con un tema (`pedidos`, `mesas`, `domicilios`, `inventario` para `api/compras` y `api/inventario`) tras cada escritura 2xx; el mapeo ruta → tema está en `Services/TemaRealtime.cs`. La web escucha con `useCambios(tema, recargar)` (`src/services/realtime.js`) y además hace polling cada 60 s como respaldo.
 - **Respuestas comprimidas:** `UseResponseCompression` (Brotli/gzip, nivel rápido); el JSON de inventario viaja ~5 veces más liviano.
+- **Visitas de mesa** (`Ocupaciones`, `Services/Ocupaciones.cs`): se abre con el primer pedido de la mesa y se cierra al saldar o cancelar todo (libera la mesa, resuelve sus llamadas y anula la cuenta pedida; no borra pedidos, pagos ni facturas). Cada visita tiene una llave (`Token`) que recibe quien pide por el QR y un código de 6 dígitos (`Pin`) para sumar a otro comensal; cambia tras varios intentos fallidos. Candado por mesa (`SELECT … FOR UPDATE`, READ COMMITTED) en pedido nuevo, cobro, cambio de estado y liberación.
+- **Comensal** (`api/cliente-mesa`, anónimo, cupo por mesa): `POST llamadas` (una viva por mesa, 45 s entre llamadas), `GET llamadas/{clave}`, `POST unirse`, `GET seguimiento` (cabeceras `X-Mesa` y `X-Seguimiento`; 410 cuando la visita se cerró) y `push` (Web Push). Hub aparte `/api/hubs/mesa`: solo une al grupo de la visita con código y llave válidos y emite `cambio` sin datos.
+- **Llamadas** (`api/llamadas`, Administrador/Caja/Mesero): no hay asignación de mesas; se avisa a todos los meseros activos por FCM y por el tema `llamadas`. "Tomar" (Mesero/Admin) deja al primero como responsable (token de concurrencia en `Estado`; el segundo recibe 409 con quién va); "atender" es idempotente.
+- **Web Push del comensal:** `Push:ClavePublica`/`Push:ClavePrivada` (VAPID, base64url). Aviso sin contenido, TTL 1 h; el service worker (`public/sw-qpro.js`) lee el estado real a la API, así un aviso viejo no muestra un estado atrasado. Se borran las suscripciones 404/410 y se desligan al cerrar la visita.
+- **Cupos detrás de proxy:** `Proxy:CabeceraIp` (en Render se toma sola `CF-Connecting-IP` por la variable `RENDER`). No se usa `X-Forwarded-For`: Render conserva el que manda el cliente.
 - **Esquema:** no hay migraciones de EF; los cambios se hacen con SQL a mano en `migraciones/` (idempotente) y también se copian a `restaurantebd.sql`. TiDB no tiene triggers y tiene `tidb_enable_check_constraint` apagado (los CHECK se ignoran).
 
 ### Inventario (lo más trabajado)
@@ -92,7 +99,7 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - **Domiciliario:** para recoger / mis entregas (incluye lo que le asignaron aún en cocina), llamar, WhatsApp (+57), mapa, cambio a llevar, recoger → salir → "Entregar y cobrar" (método real; foto si transfirió) y el efectivo que debe entregar en caja.
 - **Sesión:** cada sesión monta su propio `Navigator` (`_App` en `main.dart`); antes, al salir, el Navigator viejo seguía vivo y sus pantallas fallaban con `ProviderNotFoundException`. Prueba en `test/sesion_test.dart`.
 - **Push:** Firebase es opcional (sin `GoogleService-Info.plist` en iOS la app funciona con el tiempo real). El sonido de "pedido listo" va dentro de la app (`assets/sounds/listo.wav`). La API sigue enviando a tokens de registro (`getToken`, marcado obsoleto en firebase_messaging 17).
-- **API por defecto:** Render. Otra con `--dart-define=API_BASE_URL=...`. Vista previa web: `flutter build web --dart-define=API_BASE_URL=http://localhost:5000` y la configuración `app-movil` de `.claude/launch.json` (puerto 3001, permitido por CORS).
+- **API por defecto:** Render. Otra con `--dart-define=API_BASE_URL=...`. Vista previa web: `flutter build web --dart-define=API_BASE_URL=http://localhost:5000` y la configuración local `app-movil` (puerto 3001, permitido por CORS).
 
 ### Cuentas de mesa (mesero → caja)
 - `SolicitudesCuenta` (una pendiente por mesa) con sus `PagosAvisados` (método, monto, foto si es `QR`, `FacturaId` cuando la caja lo usa) y `Propina`. Avisar otra vez reemplaza los avisos que la caja no ha usado. `Cuadra` = lo avisado cubre exacto lo que debe la mesa + la propina (`Cuentas.AvisoCuadra`). Al saldar la cuenta queda `Cobrada`; si se cancelan todos los pedidos, `Anulada`. Endpoints en `Controllers/CuentasController.cs` (`GET cuentas/pagos/{id}/comprobante` trae la foto de cada pago); tema realtime `pedidos`.
@@ -117,7 +124,9 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - Sistema "La carta a un toque": espresso `#2A1D15` para acciones, caramelo `#C8955E` para marca y conteos, piedra cálida para lo demás. Manrope con `.tabular` en cifras; solo sombras `card` y `lift`.
 - Tailwind se carga por CDN con un remapeo de paleta en `public/index.html`: `orange` es caramelo, `gray` es piedra y `purple` es petróleo.
 - Ya siguen el sistema: menú QR, login, cocina, caja (por cobrar, facturas y cierre), inventario completo, Platillos, Usuarios, Códigos QR, Reportes, Domicilios, NuevoDomicilio y la app móvil.
-- **Caja web:** `Facturacion.js` + `components/caja/` (`PorCobrar`, `CobroPanel`, `FacturasDia`, `CierreCaja`); reglas en `utils/caja.js`, tirilla de 80 mm en `utils/recibo.js`. **Reportes:** `Reportes.js` + `utils/reportes.js` (colores de gráficos validados: mesa `#C4762B`, domicilio `#00809A`).
+- **Menú QR:** `components/menu/MenuQR.js` + `MiMesa.js` (botón "Llamar al mesero", "Tu pedido", unirse con el código y avisos) y `services/clienteMesa.js` (`useSeguimiento`, `useLlamada`). El navegador solo guarda la llave de la visita y la clave de la última llamada; el estado sale siempre de la API.
+- **Tablero de mesas:** pestaña "Mesas" de la caja (`components/caja/TableroMesas.js`, regla `estadoTablero` en `utils/caja.js`): libre (verde), ocupada (rojo), esperando pago (ámbar), con texto e ícono; aparte "Llama" y "N para servir". Cobrar abre el mismo `CobroPanel`; "Liberar mesa" solo sin pedidos abiertos.
+- **Caja web:** `Facturacion.js` + `components/caja/` (`PorCobrar`, `CobroPanel`, `FacturasDia`, `CierreCaja`, `TableroMesas`); reglas en `utils/caja.js`, tirilla de 80 mm en `utils/recibo.js`. **Reportes:** `Reportes.js` + `utils/reportes.js` (colores de gráficos validados: mesa `#C4762B`, domicilio `#00809A`).
 
 ### Web: módulos del administrador (Platillos, Usuarios, Códigos QR)
 - **Platillos** (`GestionPlatillos.js`): tarjetas con el estado que calcula el inventario (agotado, quedan N, sin receta) y el costo de la receta en % del precio. La ficha lateral edita el platillo y su receta con `EditorReceta` (exportado de `components/inventario/RecetasConfig.js`, el mismo de Configuración > Recetas). La foto se reduce a 1000 px antes de guardarse en Base64.
@@ -136,6 +145,8 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 | Precios con impoconsumo del 8 % incluido (`src/utils/impuestos.js`) | Pendiente de confirmar con el asesor |
 | SignalR solo avisa qué cambió; los datos se recargan por REST | Sin DTOs duplicados y los permisos se quedan en los endpoints |
 | Commits en Conventional Commits, cuerpo en español, **sin coautor** | Preferencia del usuario |
+| El seguimiento del comensal se autoriza con la llave de la visita, nunca con el Id ni solo con el QR | El QR impreso no cambia entre clientes: con él solo, quien se siente después vería la cuenta anterior |
+| El comensal solo ve "recibida" cuando la API guardó la llamada | Un push fallido no debe parecer una llamada perdida: queda en la app del mesero |
 | Gerente de inventario = rol Administrador | No hay rol "Inventario" (requeriría un ALTER del ENUM) |
 | Platillo o usuario con historial no se elimina (409): se oculta o se desactiva (`Activo`) | Pedidos y domicilios los referencian |
 | Una factura por cuenta de mesa; lo que sigue en cocina no se cobra | Cada envío del QR es un pedido; cobrar en cocina borraba la comanda |
@@ -160,14 +171,16 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - [ ] Confirmar con el asesor si aplica impoconsumo o IVA.
 
 ### Técnicos
-- [ ] **Concurrencia de stock:** dos pedidos simultáneos por la última porción pueden pasar la validación; además, sin token de concurrencia en `Stock` se pueden perder actualizaciones.
+- [x] **Concurrencia de stock:** la existencia se valida con candado dentro de la transacción; probado contra MySQL 8 (3 carreras por la última porción: pasa una, el stock no queda negativo).
+- [ ] Aplicar `migraciones/2026-11-13_ocupaciones_llamadas_push.sql` en TiDB **antes** de desplegar esta API.
+- [ ] Render: claves VAPID (`Push__ClavePublica`, `Push__ClavePrivada`) para los avisos del comensal; sin ellas el seguimiento funciona igual, sin avisos con la página cerrada.
 - [ ] **Unidades:** la receta no convierte unidades; se fuerza la del insumo.
-- [ ] El menú QR no se actualiza en tiempo real (el hub exige sesión); se refresca al abrirlo y al enviar.
+- [x] El comensal sigue su pedido en tiempo real (hub `/api/hubs/mesa`). La carta (disponibilidad) se sigue refrescando al abrirla y al enviar.
 - [ ] Imágenes de platos en Base64 dentro de la base de datos; conviene moverlas a almacenamiento de archivos.
 - [ ] Métodos de pago no unificados entre Pagos y Domicilios (requiere ALTER del ENUM).
 - [ ] Tailwind por CDN (aviso en consola de producción); instalarlo con PostCSS.
 - [ ] iOS: falta `ios/Runner/GoogleService-Info.plist` para el push; compilar y probar en un Mac.
-- [ ] Sin probar en equipo real: la cámara del celular (foto de la transferencia), el push con la app cerrada y una pistola de códigos física. Casos en `tests/PLAN_PRUEBAS_MOVIL.md`.
+- [ ] Sin probar en equipo real: la cámara del celular (foto de la transferencia), el push con la app cerrada (pedido listo y llamada de mesa), Web Push del comensal en Android e iPhone y una pistola de códigos física. Casos en `tests/PLAN_PRUEBAS_MOVIL.md`.
 
 ### Diseño
 - [x] Domicilios y NuevoDomicilio rediseñados (04/11/2026).
@@ -179,7 +192,7 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - [ ] Anulación de facturas con nota crédito; hoy un pago facturado no se anula.
 - [x] Domicilios con factura consecutiva al entregarlos (04/11/2026).
 - [ ] Domicilio que no se pudo entregar: hoy se cancela con motivo desde la web; falta el regreso del domiciliario desde la app.
-- [ ] `.impeccable/design.json` está desactualizado frente a `DESIGN.md`; se regenera con `/impeccable document`.
+- [ ] `.impeccable/design.json` está desactualizado frente a `DESIGN.md`.
 
 ## 7. Cómo verificar
 
@@ -208,9 +221,9 @@ cd app/restaurant_app && flutter test && flutter analyze
 
 ## 8. Avisos del entorno (Windows)
 
-- El MySQL local ya no tiene triggers, igual que TiDB (se quitaron con `migraciones/local_quitar_triggers_mysql.sql`; respaldo en `.claude/respaldo_triggers_local.sql`). Los procedimientos `sp_*` viejos siguen en la base pero nada los llama.
+- El MySQL local ya no tiene triggers, igual que TiDB (se quitaron con `migraciones/local_quitar_triggers_mysql.sql`; el respaldo quedó en una carpeta local fuera de git). Los procedimientos `sp_*` viejos siguen en la base pero nada los llama.
 
 - Hay un `inspect.py` suelto en `C:\Users\Abraham\AppData\Local\Temp\` que reemplaza al módulo estándar. Ejecuta los scripts de Python con `-I` y nunca desde esa carpeta.
 - La consola usa cp1252: al pasar texto con `→` o tildes por stdin, codificarlo en UTF-8 (`input=...encode('utf-8')`).
-- Dejar fuera de git a propósito: `.claude/`, `graphify-out/`, `.impeccable/` y `app/restaurant_app/analysis_options.yaml`. `.impeccable/` y `graphify-out/` aparecen agregados al índice sin haberse commiteado; revisar antes de cada commit y hacer commit solo de rutas explícitas.
-- El grafo (`graphify-out/`) se actualizó el 03/11/2026 (commit `1418ad6`): 3.551 nodos, 8.137 aristas y 213 comunidades (código, CONTEXTO_PROYECTO.md, DESIGN.md y planes de prueba). `.graphifyignore` excluye imágenes, sonidos (`*.wav`), `.impeccable/` y `.claude/`. Para refrescarlo: `/graphify --update`. Si un documento se vuelve a extraer y sus nodos cambian de ID, el guardián de `to_json` se niega a escribir; se fuerza solo cuando los nodos perdidos son de esos mismos documentos.
+- Dejar fuera de git a propósito: la configuración local del editor, `graphify-out/`, `.impeccable/` y `app/restaurant_app/analysis_options.yaml`. `.impeccable/` y `graphify-out/` aparecen agregados al índice sin haberse commiteado; revisar antes de cada commit y hacer commit solo de rutas explícitas.
+- El grafo (`graphify-out/`) se regeneró completo el 13/11/2026 (commit `cd94fef`): 4.103 nodos, 9.779 aristas y 213 comunidades (código, documentos y las 10 imágenes de `docs/readme/`). Resumen del estado en `HANDOFF.md`. `.graphifyignore` excluye imágenes, sonidos (`*.wav`) e `.impeccable/`. Se refresca con la actualización incremental de graphify. Si un documento se vuelve a extraer y sus nodos cambian de ID, el guardián de `to_json` se niega a escribir; se fuerza solo cuando los nodos perdidos son de esos mismos documentos.

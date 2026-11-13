@@ -33,6 +33,10 @@ recorrido completo con la web de cocina y caja. Usuarios de la semilla: `juan.me
 | MOV-16 | El mesero no cobra | (API) `PUT pedidos/{id}/estado` con `Pagado` y token de mesero | 403 "El pago se registra en caja" |
 | MOV-17 | Sin red | Activar modo avión con la app abierta | Aviso "Sin conexión…" y se ve lo último que cargó; al volver la red se actualiza sola |
 | MOV-18 | Sesión vencida | Reiniciar la API sin `Jwt__Key` | La app vuelve al login con "Tu sesión venció" |
+| MOV-19 | Llamada de mesa | Desde el QR de la mesa 4: "Llamar al mesero" | En el salón aparece "Te llaman · Mesa 4 te llama" y la mesa lleva campana; el comensal ve "Solicitud recibida" |
+| MOV-20 | Dos meseros a la vez | Dos celulares con la llamada; tocar "Voy" casi al mismo tiempo | Uno queda "Vas tú"; al otro le sale "<Nombre> ya va para la mesa 4" y ve el mismo estado |
+| MOV-21 | Atendida | "Atendida" en la tarjeta | Desaparece en los dos celulares y en el tablero de Caja; el comensal ve "Ya te atendieron" |
+| MOV-22 | Salir quita los avisos | Cerrar sesión y llamar desde el QR | Ese celular ya no recibe el push de la llamada |
 
 ## Domiciliario
 
@@ -47,3 +51,10 @@ recorrido completo con la web de cocina y caja. Usuarios de la semilla: `juan.me
 
 - Cámara del celular (MOV-14) en Android e iPhone.
 - Push con la app cerrada (MOV-09) en Android. En iPhone requiere `GoogleService-Info.plist`.
+- Push de llamada con la app en segundo plano y cerrada (MOV-19): al tocarlo abre la mesa. Anotar modelo, versión de Android, si estaba en ahorro de batería y cuánto tardó.
+- Avisos del comensal (Web Push), en la URL https de producción:
+  - Android Chrome: "Avisarme cuando cambie mi pedido" → aceptar → bloquear el teléfono → Cocina marca Listo. Debe llegar "Mesa N: tu pedido está listo…"; al tocarlo abre la carta con el estado al día.
+  - iPhone (iOS 16.4 o posterior): sin agregar a inicio la página explica cómo hacerlo; agregada a inicio y abierta desde ahí, aceptar y repetir el caso anterior.
+  - Rechazar el permiso: el seguimiento se sigue viendo en la página.
+  - Pagar toda la cuenta en Caja: llega "Tu cuenta quedó pagada" y la página deja de mostrar los pedidos.
+  - Con el teléfono apagado no llega nada en ese momento; al encenderlo y abrir la página se ve el estado real (el aviso vence a la hora).
