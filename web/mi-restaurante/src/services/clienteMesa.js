@@ -181,7 +181,7 @@ export function useSeguimiento(codigo, llave) {
     if (!codigo || !llave) return undefined;
 
     const conexion = new HubConnectionBuilder()
-      .withUrl(`${API()}/hubs/mesa`)
+      .withUrl(`${API()}/hubs/mesa?mesa=${encodeURIComponent(codigo)}`)
       .withAutomaticReconnect()
       .configureLogging(LogLevel.Warning)
       .build();

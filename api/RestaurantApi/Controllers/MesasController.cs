@@ -65,7 +65,7 @@ namespace RestaurantApi.Controllers
         /// <summary>Lo único que el comensal sabe de su mesa: el número, a partir del código de su QR.</summary>
         [HttpGet("qr/{codigo}")]
         [AllowAnonymous]
-        [EnableRateLimiting("publico")]
+        [EnableRateLimiting("cliente-mesa")]
         public async Task<ActionResult<MesaPublicaDto>> GetMesaPorCodigo(string codigo)
         {
             var mesa = await _context.Mesas.FirstOrDefaultAsync(m => m.CodigoQR == codigo);

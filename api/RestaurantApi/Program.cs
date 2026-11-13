@@ -68,27 +68,25 @@ builder.Services.AddAuthorization(options =>
 });
 
 // ── Límite de intentos (login y endpoints públicos) ──────────────────────
+// Detrás de Render todas las conexiones traen la IP del proxy: la real viene en la cabecera de Cloudflare.
+var cabeceraIp = CupoPeticiones.CabeceraIp(builder.Configuration);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy("login", ctx => RateLimitPartition.GetFixedWindowLimiter(
-        ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+        CupoPeticiones.Ip(ctx, cabeceraIp),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
     // Meseros autenticados comparten la IP del restaurante: se limita por usuario.
     options.AddPolicy("publico", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.User.Identity?.IsAuthenticated == true
             ? "u:" + ctx.User.Identity.Name
-            : "ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "anon"),
+            : "ip:" + CupoPeticiones.Ip(ctx, cabeceraIp),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
-    // Comensal del QR: se limita por mesa (cabecera X-Mesa), no por IP. Tras un proxy todas las
-    // mesas comparten IP y el seguimiento de una no debe agotar el cupo de las demás.
-    options.AddPolicy("cliente-mesa", ctx =>
-    {
-        var mesa = ctx.Request.Headers[RestaurantApi.Controllers.ClienteMesaController.CabeceraMesa].ToString();
-        return RateLimitPartition.GetFixedWindowLimiter(
-            mesa.Length is >= 8 and <= 64 ? "m:" + mesa : "ip:" + (ctx.Connection.RemoteIpAddress?.ToString() ?? "anon"),
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 90, Window = TimeSpan.FromMinutes(1) });
-    });
+    // Comensal del QR: se limita por mesa, no por IP. Todas las mesas del local salen por la misma
+    // IP y el seguimiento de una no debe agotar el cupo de las demás.
+    options.AddPolicy("cliente-mesa", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        CupoPeticiones.PorMesa(ctx, cabeceraIp),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 90, Window = TimeSpan.FromMinutes(1) }));
 });
 
 builder.Services.AddControllers();
@@ -218,7 +216,7 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "Healthy", timestamp =
 
 app.MapControllers();
 app.MapHub<QproHub>("/api/hubs/qpro");
-app.MapHub<ClienteHub>("/api/hubs/mesa").RequireRateLimiting("publico");
+app.MapHub<ClienteHub>("/api/hubs/mesa").RequireRateLimiting("cliente-mesa");
 
 if (!pushOptions.ClavePublica.Any())
     app.Logger.LogInformation("Push:ClavePublica no está configurada: los comensales no recibirán avisos con la página cerrada.");
