@@ -9,6 +9,11 @@ import Carousel from '../reactbits/Carousel/Carousel';
 import CountUp from '../reactbits/CountUp/CountUp';
 import ClickSpark from '../reactbits/ClickSpark/ClickSpark';
 import logo from '../logo.jpg';
+import HojaInferior from './HojaInferior';
+import { AvisoLlamada, BotonLlamar, HojaMesa, ResumenMesa } from './MiMesa';
+import {
+  activarAvisos, guardarLlave, leerLlave, olvidarVisita, useLlamada, useSeguimiento
+} from '../../services/clienteMesa';
 
 const ease = [0.16, 1, 0.3, 1];
 const NOTAS_RAPIDAS = ['Sin cebolla', 'Sin salsas', 'Bien cocido', 'Término medio', 'Sin picante'];
@@ -138,55 +143,6 @@ function TarjetaPlato({ platillo, cantidad, onAbrir, onSumar, onRestar }) {
   );
 }
 
-/** Hoja inferior reutilizable: entra desde abajo y se cierra arrastrando o con Escape. */
-function HojaInferior({ abierta, onCerrar, titulo, children, pie }) {
-  useEffect(() => {
-    if (!abierta) return undefined;
-    const alTeclear = (e) => e.key === 'Escape' && onCerrar();
-    document.addEventListener('keydown', alTeclear);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', alTeclear);
-      document.body.style.overflow = overflow;
-    };
-  }, [abierta, onCerrar]);
-
-  return (
-    <AnimatePresence>
-      {abierta && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" role="dialog" aria-modal="true" aria-label={titulo}>
-          <motion.div
-            className="absolute inset-0 bg-espresso/55"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            onClick={onCerrar}
-          />
-          <motion.div
-            className="relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] bg-white shadow-lift md:max-w-lg md:rounded-[28px]"
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ duration: 0.45, ease }}
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.4 }}
-            onDragEnd={(_, info) => { if (info.offset.y > 120 || info.velocity.y > 600) onCerrar(); }}
-          >
-            <div className="flex justify-center pt-3 md:hidden" aria-hidden="true">
-              <span className="h-1.5 w-10 rounded-full bg-gray-300" />
-            </div>
-            <div className="flex-1 overflow-y-auto overscroll-contain">{children}</div>
-            {pie && <div className="border-t border-gray-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">{pie}</div>}
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
-  );
-}
-
 function HojaPlato({ platillo, onCerrar, onAgregar }) {
   const [nota, setNota] = useState('');
   const [cantidad, setCantidad] = useState(1);
@@ -295,6 +251,40 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
   const destacadosRef = useRef(null);
   const [anchoDestacados, setAnchoDestacados] = useState(0);
 
+  // Seguimiento de la visita: la llave llega al pedir por el QR o al unirse con el código.
+  const [llave, setLlave] = useState(() => leerLlave(mesaId));
+  useEffect(() => setLlave(leerLlave(mesaId)), [mesaId]);
+  const [seguimiento, recargarSeguimiento] = useSeguimiento(mesaId, llave);
+  const llamada = useLlamada(mesaId, seguimiento.datos?.llamada);
+  const [hojaMesa, setHojaMesa] = useState(false);
+  const [cierre, setCierre] = useState(null);
+  const avisosRenovados = useRef(null);
+
+  const cambiarLlave = (nueva) => {
+    guardarLlave(mesaId, nueva);
+    setLlave(nueva);
+  };
+
+  // Visita cerrada (pagada o cancelada): se retira el seguimiento y se olvida la llave.
+  useEffect(() => {
+    if (seguimiento.estado !== 'cerrada') return;
+    if (seguimiento.previo === 'activo') setCierre(seguimiento.mensaje);
+    guardarLlave(mesaId, null);
+    setLlave(null);
+    setHojaMesa(false);
+    olvidarVisita();
+  }, [seguimiento.estado, seguimiento.previo, seguimiento.mensaje, mesaId]);
+
+  // Quien ya aceptó los avisos los recibe también en su visita nueva, sin volver a preguntarle.
+  useEffect(() => {
+    if (seguimiento.estado !== 'activo' || !llave || avisosRenovados.current === llave) return;
+    let activos = false;
+    try { activos = localStorage.getItem('qpro:avisos') === '1'; } catch { /* sin almacenamiento */ }
+    if (!activos || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    avisosRenovados.current = llave;
+    activarAvisos(mesaId, llave, numeroMesa).catch(() => {});
+  }, [seguimiento.estado, llave, mesaId, numeroMesa]);
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return q ? platillos.filter((p) => `${p.nombre} ${p.descripcion ?? ''}`.toLowerCase().includes(q)) : platillos;
@@ -389,7 +379,10 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
     if (!mesaId || !carrito.length) return;
     setEnvio({ estado: 'enviando', error: null, resumen: null });
     try {
-      await onEnviarPedido(mesaId, carrito);
+      const creado = await onEnviarPedido(mesaId, carrito);
+      setCierre(null);
+      if (creado?.seguimiento) cambiarLlave(creado.seguimiento);
+      else recargarSeguimiento();
       setEnvio({ estado: 'enviado', error: null, resumen: { unidades: totalUnidades, total } });
       setCarrito([]);
       totalAnterior.current = 0;
@@ -420,6 +413,8 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
               </p>
             </div>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+          {mesaId && <BotonLlamar llamada={llamada} />}
           <button
             type="button"
             onClick={() => setCarritoAbierto(true)}
@@ -442,6 +437,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
               )}
             </AnimatePresence>
           </button>
+          </div>
         </div>
 
         <div className="mx-auto max-w-6xl px-4 pb-3">
@@ -482,6 +478,17 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
       </header>
 
       <main className="mx-auto max-w-6xl">
+        {mesaId && (
+          <>
+            <AvisoLlamada llamada={llamada} />
+            <ResumenMesa
+              seguimiento={seguimiento}
+              cierre={cierre}
+              onAbrir={() => setHojaMesa(true)}
+              onCerrarCierre={() => setCierre(null)}
+            />
+          </>
+        )}
         {!mesaId && (
           <p className="mx-4 mt-4 rounded-2xl bg-orange-50 px-4 py-3 text-[14px] font-medium text-orange-900">
             {aviso ?? 'Esta es una vista previa. Para enviar pedidos, abre el menú desde el QR de una mesa.'}
@@ -630,9 +637,18 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
         titulo="Tu pedido"
         pie={
           envio.estado === 'enviado' ? (
-            <button type="button" onClick={cerrarCarrito} className="h-14 w-full rounded-full bg-espresso text-[15px] font-bold text-white">
-              Pedir algo más
-            </button>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { cerrarCarrito(); setHojaMesa(true); }}
+                className="h-14 flex-1 rounded-full border border-gray-300 text-[15px] font-bold text-espresso"
+              >
+                Seguir mi pedido
+              </button>
+              <button type="button" onClick={cerrarCarrito} className="h-14 flex-1 rounded-full bg-espresso text-[15px] font-bold text-white">
+                Pedir algo más
+              </button>
+            </div>
           ) : carrito.length > 0 ? (
             <div>
               <div className="mb-3 flex items-baseline justify-between">
@@ -745,6 +761,18 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
           </div>
         )}
       </HojaInferior>
+
+      {mesaId && (
+        <HojaMesa
+          abierta={hojaMesa}
+          onCerrar={() => setHojaMesa(false)}
+          codigo={mesaId}
+          llave={llave}
+          numeroMesa={numeroMesa}
+          seguimiento={seguimiento}
+          onLlave={cambiarLlave}
+        />
+      )}
     </div>
   );
 }

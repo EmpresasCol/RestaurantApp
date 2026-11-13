@@ -1,6 +1,6 @@
 {
   "short_name": "Qpro",
-  "name": "Create Qpro Sample",
+  "name": "Qpro",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +20,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
+  "theme_color": "#2A1D15",
   "background_color": "#ffffff"
 }
