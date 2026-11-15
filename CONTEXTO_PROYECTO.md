@@ -1,4 +1,4 @@
-# Qpro: contexto del proyecto (13/11/2026)
+# Qpro: contexto del proyecto (14/11/2026)
 
 Resumen para retomar el trabajo sin leer todo el repositorio. Para detalles de un módulo
 concreto, consulta primero el grafo (`graphify-out/GRAPH_REPORT.md` o `/graphify query "..."`).
@@ -119,6 +119,13 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - Esperado en el cajón = base + cobros de mesa en efectivo (con su propina) + efectivo que entregaron los domiciliarios − propinas pagadas al equipo − gastos o retiros. Tarjeta y transferencias se comparan con el datáfono y el banco. Lo que falta resolver (mesas abiertas, domicilios en curso, efectivo en domiciliarios) sale arriba.
 - Error corregido: el `[Authorize(Roles = "Administrador")]` de la clase dejaba al cajero sin cierre (403) aunque el método dijera "Administrador,Caja": los atributos se suman con Y.
 
+### Facturación electrónica (14/11/2026, apagada por defecto)
+- Tablas `ConfiguracionFiscal` (una fila), `NumeracionesDian` y `DocumentosElectronicos` (cola de salida). Migración `2026-11-14_facturacion_electronica.sql`, **sin aplicar en TiDB**.
+- `Facturacion.EmitirAsync`: con la facturación encendida toma el número del rango vigente con candado (`FOR UPDATE`) y guarda el documento `Pendiente` en la transacción del cobro. `EnvioDocumentos` (servicio en segundo plano) lo envía por `IProveedorFacturacion` con espera creciente y clave de idempotencia. Sin proveedor contratado se registra `ProveedorSinConfigurar` y la API no deja encender la facturación.
+- Consumidor final → POS (o factura electrónica, según `DocumentoConsumidorFinal`); cliente identificado → factura electrónica. Anular (`POST api/facturas/{id}/anular`, motivo obligatorio, solo con la caja del día abierta) emite nota de ajuste o nota crédito; con `nuevoCliente` vuelve a facturar sin perder la venta.
+- El cierre de caja se bloquea con rechazos por resolver (`DocumentosDian.PorResolver`): no cuenta lo rechazado de una factura anulada cuya venta nunca validó la DIAN.
+- Web: `components/caja/DatosFiscales.js`, estado DIAN y anulación en `FacturasDia.js`, reglas de texto en `utils/facturacion.js`, tirilla en `utils/recibo.js`, impuesto en `utils/impuestos.js`.
+
 ### Diseño
 - Sistema "La carta a un toque": espresso `#2A1D15` para acciones, caramelo `#C8955E` para marca y conteos, piedra cálida para lo demás. Manrope con `.tabular` en cifras; solo sombras `card` y `lift`.
 - Tailwind se carga por CDN con un remapeo de paleta en `public/index.html`: `orange` es caramelo, `gray` es piedra y `purple` es petróleo.
@@ -167,7 +174,10 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - [x] Render despliega desde `RestaurantApp/AppMovil`.
 - [x] `.env.production` apunta a la API de Render (antes ngrok).
 - [ ] Las claves de la semilla SQL siguen en `123`.
-- [ ] Confirmar con el asesor si aplica impoconsumo o IVA.
+- [ ] Confirmar con el asesor si aplica impoconsumo o IVA (ya es configurable en Datos fiscales).
+- [ ] Contratar proveedor tecnológico DIAN y escribir su adaptador (`IProveedorFacturacion`). Sin eso la facturación electrónica no se enciende.
+- [ ] Correr `migraciones/2026-11-14_facturacion_electronica.sql` en TiDB **antes** de subir la rama.
+- [ ] Contador: tope de propina, envío del domicilio en la base del impuesto y documento del consumidor final.
 
 ### Técnicos
 - [x] **Concurrencia de stock:** la existencia se valida con candado dentro de la transacción; probado contra MySQL 8 (3 carreras por la última porción: pasa una, el stock no queda negativo).
