@@ -309,6 +309,12 @@ namespace RestaurantApi.Controllers
                     return Conflict(new { message = $"Un pedido {estadoAnterior} no se puede modificar" });
                 if (pedido.Detalles.Any(d => d.FacturaId != null))
                     return Conflict(new { message = "Ya se cobró parte de este pedido; los platos nuevos van en otro pedido" });
+                // Mismas reglas que PUT {id}/actualizar: la cocina no cambia platos y, una vez
+                // empezó, solo el administrador corrige (si no, se bajaba la cuenta de lo ya servido).
+                if (User?.IsInRole(nameof(RolUsuario.Cocina)) == true)
+                    return StatusCode(StatusCodes.Status403Forbidden, new { message = "La cocina no cambia los platos de un pedido" });
+                if (EstadosPedido.CocinaEmpezo(pedido) && User?.IsInRole(nameof(RolUsuario.Administrador)) != true)
+                    return Conflict(new { message = "La cocina ya empezó este pedido. Agrega los platos nuevos como otro pedido." });
                 pedido.FechaEdicion = DateTime.UtcNow;
 
                 var activos = detalles.Where(d => !d.Eliminar).Select(d => (d.PlatilloId, d.Cantidad)).ToList();
@@ -371,6 +377,12 @@ namespace RestaurantApi.Controllers
             var pedido = await _context.Pedidos.Include(p => p.Mesa).FirstOrDefaultAsync(p => p.Id == id);
             if (pedido == null)
                 return NotFound();
+
+            // Borrarlo se llevaría sus platos y con ellos el contenido de una factura ya emitida.
+            if (pedido.Estado == EstadoPedido.Pagado
+                || await _context.PedidoDetalles.AnyAsync(d => d.PedidoId == id && d.FacturaId != null)
+                || await _context.Pagos.AnyAsync(p => p.PedidoId == id))
+                return Conflict(new { message = "Este pedido ya tiene cobros o factura: no se elimina. Anula la factura si hubo un error." });
 
             // Devolver al stock lo que consumió antes de borrarlo.
             await SincronizarInventarioAsync(id, cancelar: true);

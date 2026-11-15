@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using RestaurantApi.Dtos;
 using RestaurantApi.Models;
 using RestaurantApi.Services;
@@ -27,6 +28,12 @@ namespace RestaurantApi.Controllers
         /// <summary>Tiempo mínimo entre dos llamadas de la misma mesa.</summary>
         public static readonly TimeSpan EsperaEntreLlamadas = TimeSpan.FromSeconds(45);
         public const int MaximoSuscripciones = 20;
+        /// <summary>Códigos errados que admite una visita en la ventana antes de dejar de escuchar.</summary>
+        public const int MaximoFallosPin = 15;
+        private static readonly TimeSpan VentanaFallosPin = TimeSpan.FromMinutes(10);
+        // shortcut: en memoria del proceso (una sola instancia de la API); con varias instancias, pasar a la base.
+        private static readonly MemoryCache FallosPin = new(new MemoryCacheOptions());
+        private sealed class Fallos { public int Cuenta; }
 
         private const string QrInvalido = "Este código QR ya no es válido. Pide al mesero el código de tu mesa.";
 
@@ -59,9 +66,21 @@ namespace RestaurantApi.Controllers
             if (ocupacion == null)
                 return NotFound(new { message = "Tu mesa todavía no tiene pedidos. Haz tu pedido desde la carta o llama al mesero." });
 
+            // Tope por visita, no por petición: el cupo por mesa se parte con la cabecera X-Mesa, que
+            // la pone el cliente, así que quien adivina códigos no puede depender solo de ese cupo.
+            var fallos = FallosPin.GetOrCreate(ocupacion.Token, e =>
+            {
+                e.AbsoluteExpirationRelativeToNow = VentanaFallosPin; // cuenta desde el primer intento, no se renueva
+                return new Fallos();
+            })!;
+            if (fallos.Cuenta >= MaximoFallosPin)
+                return StatusCode(StatusCodes.Status429TooManyRequests, new { message = "Demasiados intentos con el código de la mesa. Espera unos minutos o pide ayuda al mesero." });
+
             var pin = new string((dto.Pin ?? "").Where(char.IsDigit).ToArray());
             if (pin.Length != 6 || !CryptographicOperations.FixedTimeEquals(System.Text.Encoding.ASCII.GetBytes(pin), System.Text.Encoding.ASCII.GetBytes(ocupacion.Pin)))
             {
+                Interlocked.Increment(ref fallos.Cuenta);
+
                 // Tras varios intentos fallidos el código cambia: adivinarlo probando no avanza.
                 if (++ocupacion.IntentosPin >= Ocupaciones.IntentosPinAntesDeCambiarlo)
                 {

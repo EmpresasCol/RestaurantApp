@@ -30,6 +30,13 @@ namespace RestaurantApi.Services
         }
 
         /// <summary>
+        /// Rutas anónimas del comensal. Además del cupo por mesa llevan uno por IP: la clave por
+        /// mesa sale de una cabecera que pone el cliente y, cambiándola, se saltaba el límite.
+        /// </summary>
+        public static bool EsDelComensal(PathString ruta)
+            => ruta.StartsWithSegments("/api/cliente-mesa") || ruta.StartsWithSegments("/api/hubs/mesa") || ruta.StartsWithSegments("/api/mesas/qr");
+
+        /// <summary>
         /// Comensal del QR: el cupo es por mesa (cabecera X-Mesa, ?mesa= del hub o el código de la
         /// ruta), así una mesa no agota el de las demás aunque todas salgan por la IP del local.
         /// </summary>

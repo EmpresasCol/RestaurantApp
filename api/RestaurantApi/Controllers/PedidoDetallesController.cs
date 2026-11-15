@@ -36,6 +36,22 @@ namespace RestaurantApi.Controllers
             return await _inventario.VerificarStockPedidoAsync(pedidoId, finales);
         }
 
+        /// <summary>
+        /// Una factura emitida no se reescribe: ni sus platos ni los de un pedido ya cerrado se
+        /// tocan por aquí. Devuelve el rechazo o null.
+        /// </summary>
+        private async Task<IActionResult?> RechazoSiCerradoAsync(int pedidoId, int? detalleId)
+        {
+            var estado = await _context.Pedidos.Where(p => p.Id == pedidoId).Select(p => (EstadoPedido?)p.Estado).FirstOrDefaultAsync();
+            if (estado == null)
+                return NotFound(new { message = $"Pedido {pedidoId} no encontrado" });
+            if (!EstadosPedido.EsEditable(estado.Value))
+                return Conflict(new { message = $"Un pedido {estado} no se puede modificar" });
+            if (detalleId != null && await _context.PedidoDetalles.AnyAsync(d => d.Id == detalleId && (d.FacturaId != null || d.PedidoId != pedidoId)))
+                return Conflict(new { message = "Ese plato ya está en una factura o es de otro pedido: no se modifica" });
+            return null;
+        }
+
         [HttpGet]
         public async Task<ActionResult<IEnumerable<PedidoDetalle>>> GetPedidoDetalles()
         {
@@ -64,10 +80,15 @@ namespace RestaurantApi.Controllers
         {
             if (detalle.Cantidad <= 0)
                 return BadRequest("La cantidad debe ser mayor que cero");
+            var rechazo = await RechazoSiCerradoAsync(detalle.PedidoId, null);
+            if (rechazo != null)
+                return new ActionResult<PedidoDetalle>((ActionResult)rechazo);
             var sinStock = await VerificarStockAsync(detalle.PedidoId, detalle);
             if (sinStock != null)
                 return BadRequest(sinStock);
 
+            detalle.Id = 0;
+            detalle.FacturaId = null; // una línea nueva nunca nace cobrada
             detalle.PrecioUnitario = null; // el precio lo fija el servidor con la carta, no el cliente
             _context.PedidoDetalles.Add(detalle);
             await _context.SaveChangesAsync();
@@ -82,10 +103,14 @@ namespace RestaurantApi.Controllers
                 return BadRequest();
             if (detalle.Cantidad <= 0)
                 return BadRequest("La cantidad debe ser mayor que cero");
+            var rechazo = await RechazoSiCerradoAsync(detalle.PedidoId, id);
+            if (rechazo != null)
+                return rechazo;
             var sinStock = await VerificarStockAsync(detalle.PedidoId, detalle);
             if (sinStock != null)
                 return BadRequest(sinStock);
 
+            detalle.FacturaId = null; // llegó hasta aquí: no estaba facturado y no se marca desde el cuerpo
             // El precio con que se pidió no se edita desde aquí.
             detalle.PrecioUnitario = await _context.PedidoDetalles.AsNoTracking()
                 .Where(d => d.Id == id).Select(d => d.PrecioUnitario).FirstOrDefaultAsync();
@@ -102,6 +127,9 @@ namespace RestaurantApi.Controllers
             var detalle = await _context.PedidoDetalles.FindAsync(id);
             if (detalle == null)
                 return NotFound();
+            var rechazo = await RechazoSiCerradoAsync(detalle.PedidoId, id);
+            if (rechazo != null)
+                return rechazo;
 
             _context.PedidoDetalles.Remove(detalle);
             await _context.SaveChangesAsync();
