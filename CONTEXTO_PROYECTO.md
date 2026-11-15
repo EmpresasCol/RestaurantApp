@@ -24,8 +24,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 - **Base de producción:** TiDB Cloud, cluster `Qpro`, base `restaurantebd` (TiDB v8.5.3).
   Las tres migraciones de `migraciones/` (`2026-10-31_presentaciones_compra`, `2026-11-01_activos_y_codigo_qr`, `2026-11-02_caja_cuentas`) **ya están aplicadas** en TiDB y en el MySQL local.
   `2026-11-03_solicitudes_cuenta` también está aplicada en TiDB y en el MySQL local (03/11/2026).
-  **`2026-11-04_cuentas_compartidas_domicilios` y `2026-11-05_recepciones_fotos` están aplicadas solo en el MySQL local: falta correrlas en TiDB antes de desplegar la API.**
-  **`2026-11-13_ocupaciones_llamadas_push` no está aplicada ni en TiDB ni en el MySQL local** (se probó en un MySQL 8 desechable: idempotente y deja el mismo esquema que `restaurantebd.sql`). La API de esta rama la necesita.
+  `2026-11-04`, `2026-11-05` y `2026-11-13_ocupaciones_llamadas_push` **ya están aplicadas en TiDB** (13/11/2026, verificado con consulta a `information_schema`). En el MySQL local no se sabe: comprobar antes de usarlo.
   Regla: toda migración nueva se corre en TiDB **antes** de desplegar la API que la usa (si no, la API falla al leer la columna).
 - **Local:** MySQL 9.6 en `localhost:3306` (cadena en `api/RestaurantApi/appsettings.Development.json`).
   Una configuración local del editor (fuera de git) arranca la API en `:5000` y la web en `:3000`.
@@ -164,16 +163,17 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 ## 6. Pendientes
 
 ### Configuración y operación
-- [ ] `Jwt__Key` fija en Render (32 caracteres o más) y revisar que `EnableSwagger` esté en `false` en producción.
-- [ ] Revisar desde qué rama despliega Render; si es `main`, falta el merge de `RestaurantApp/AppMovil`.
+- [x] `Jwt__Key` fija en Render y `EnableSwagger=false` (13/11/2026; `/swagger` responde 401).
+- [x] Render despliega desde `RestaurantApp/AppMovil`.
 - [x] `.env.production` apunta a la API de Render (antes ngrok).
 - [ ] Las claves de la semilla SQL siguen en `123`.
 - [ ] Confirmar con el asesor si aplica impoconsumo o IVA.
 
 ### Técnicos
 - [x] **Concurrencia de stock:** la existencia se valida con candado dentro de la transacción; probado contra MySQL 8 (3 carreras por la última porción: pasa una, el stock no queda negativo).
-- [ ] Aplicar `migraciones/2026-11-13_ocupaciones_llamadas_push.sql` en TiDB **antes** de desplegar esta API.
-- [ ] Render: claves VAPID (`Push__ClavePublica`, `Push__ClavePrivada`) para los avisos del comensal; sin ellas el seguimiento funciona igual, sin avisos con la página cerrada.
+- [x] Migraciones `2026-11-04`, `2026-11-05` y `2026-11-13` aplicadas en TiDB (13/11/2026).
+- [x] Render: claves VAPID (`Push__ClavePublica`, `Push__ClavePrivada`) configuradas; Web Push activo en producción.
+- [ ] PR de `RestaurantApp/AppMovil` a `main` (Render despliega desde la rama).
 - [ ] **Unidades:** la receta no convierte unidades; se fuerza la del insumo.
 - [x] El comensal sigue su pedido en tiempo real (hub `/api/hubs/mesa`). La carta (disponibilidad) se sigue refrescando al abrirla y al enviar.
 - [ ] Imágenes de platos en Base64 dentro de la base de datos; conviene moverlas a almacenamiento de archivos.
@@ -226,4 +226,4 @@ cd app/restaurant_app && flutter test && flutter analyze
 - Hay un `inspect.py` suelto en `C:\Users\Abraham\AppData\Local\Temp\` que reemplaza al módulo estándar. Ejecuta los scripts de Python con `-I` y nunca desde esa carpeta.
 - La consola usa cp1252: al pasar texto con `→` o tildes por stdin, codificarlo en UTF-8 (`input=...encode('utf-8')`).
 - Dejar fuera de git a propósito: la configuración local del editor, `graphify-out/`, `.impeccable/` y `app/restaurant_app/analysis_options.yaml`. `.impeccable/` y `graphify-out/` aparecen agregados al índice sin haberse commiteado; revisar antes de cada commit y hacer commit solo de rutas explícitas.
-- El grafo (`graphify-out/`) se regeneró completo el 13/11/2026 (commit `cd94fef`): 4.103 nodos, 9.779 aristas y 213 comunidades (código, documentos y las 10 imágenes de `docs/readme/`). Resumen del estado en `HANDOFF.md`. `.graphifyignore` excluye imágenes, sonidos (`*.wav`) e `.impeccable/`. Se refresca con la actualización incremental de graphify. Si un documento se vuelve a extraer y sus nodos cambian de ID, el guardián de `to_json` se niega a escribir; se fuerza solo cuando los nodos perdidos son de esos mismos documentos.
+- El grafo (`graphify-out/`) se actualizó en incremental el 13/11/2026 (hasta el commit `2be8c88` y la documentación de despliegue): 4.618 nodos, 10.946 aristas y 235 comunidades (código, documentos y las 10 imágenes de `docs/readme/`). Resumen del estado en `HANDOFF.md`. `.graphifyignore` excluye imágenes, sonidos (`*.wav`) e `.impeccable/`. Se refresca con la actualización incremental de graphify. Si un documento se vuelve a extraer y sus nodos cambian de ID, el guardián de `to_json` se niega a escribir; se fuerza solo cuando los nodos perdidos son de esos mismos documentos.

@@ -1,18 +1,36 @@
-# Handoff Qpro (13/11/2026)
+# Handoff Qpro (14/11/2026)
 
 Para retomar el trabajo. Detalle de arquitectura y decisiones en `CONTEXTO_PROYECTO.md`; sistema
 visual en `DESIGN.md`. Para ubicar código conviene consultar primero el grafo
-(`graphify-out/GRAPH_REPORT.md`), que es un artefacto local fuera de git y puede estar atrasado.
+(`graphify-out/GRAPH_REPORT.md`, actualizado el 13/11/2026 con todo lo de abajo). Es un artefacto
+local fuera de git: en otro equipo hay que regenerarlo.
 
 ## Estado en una línea
 
 Llamar al mesero, seguimiento del pedido para el comensal (con Web Push), visitas de mesa con
-cierre consistente y tablero de mesas para caja y administración están hechos y probados en local
-contra MySQL 8. **No están desplegados**: falta la migración en TiDB y la configuración de Render.
+cierre consistente y tablero de mesas para caja y administración están hechos, probados contra
+MySQL 8 y **desplegados en producción** (13/11/2026). Falta probar el push en celulares reales.
+
+## Facturación electrónica (14/11/2026): hecha en local, **sin subir ni desplegar**
+
+Plan completo para vender al primer restaurante: `docs/GUIA_PARA_VENDER_QPRO.md`.
+
+- **Qué hay:** datos fiscales y numeraciones DIAN (pestaña Datos fiscales de Caja, solo administrador), impuesto configurable (INC, IVA o ninguno), cobro que toma el número autorizado y deja el documento en cola en la misma transacción, envío en segundo plano con reintentos idempotentes (`Services/DocumentosDian.cs`), factura a nombre del cliente con dígito de verificación, anulación con motivo (nota de ajuste o nota crédito; reversa la venta o solo corrige el cliente), cierre de caja bloqueado con rechazos por resolver y tirilla con vendedor, resolución, CUDE/CUFE y QR.
+- **Va apagada.** Se enciende en Datos fiscales y la API se niega a encenderla mientras no haya proveedor tecnológico conectado (`ProveedorSinConfigurar`). Apagada, todo sigue con el consecutivo interno `FV-`.
+- **Lo que falta para que sea válida ante la DIAN:** contratar un proveedor tecnológico (no la competencia directa; uno especializado y habilitado por la DIAN que emita **documento equivalente POS electrónico** por API) y escribir su adaptador: una clase que implemente `IProveedorFacturacion.EnviarAsync` y se registre en `Program.cs` (línea del `ProveedorSinConfigurar`), con las credenciales en variables de entorno. Hoy solo existe `ProveedorSimulado` (`Facturacion__Proveedor=Simulado`, nunca en producción).
+- **Regla de rechazos:** un documento rechazado se corrige y se reenvía, o se anula. Anular uno rechazado no emite nota (para la DIAN no existió) y deja de bloquear el cierre; la nota rechazada de una venta validada sí bloquea y se reenvía desde Facturas (`DocumentosDian.PorResolver`).
+- **Verificado el 14/11:** API 309/309 y web 178/178; `npm run build` compiló en la sesión anterior. Contra MySQL 8 desechable: 12 cobros simultáneos con consecutivos sin huecos, doble cobro (uno recibe 409), rango agotado sin pago a medias, migración idempotente, anulación de validada y de rechazada, cierre bloqueado y liberado, y dos anulaciones simultáneas con notas distintas. En el navegador: Datos fiscales, Facturas con estado DIAN y anulación con refacturación (validación del NIT incluida).
+- **Sin verificar:** impresión real de la tirilla en impresora térmica; `flutter test` y `flutter analyze` (este equipo no tiene Flutter; la app no se tocó y no usa `PUT api/pedidos/{id}`, la única ruta cuyas reglas cambiaron).
+- **Decisiones que esperan al contador o asesor:** la propina no tiene tope del 10 % en la API (se entendió que el tope de la Ley 1935 aplica a la sugerida); el envío del domicilio entra en la base del impuesto; POS electrónico o factura electrónica para el consumidor final (`DocumentoConsumidorFinal`).
+- **Para desplegar (en este orden):** 1) correr `migraciones/2026-11-14_facturacion_electronica.sql` en TiDB; 2) subir la rama (Render despliega solo); 3) dejar la facturación apagada hasta tener proveedor y numeraciones reales.
+- **Auditoría de seguridad de esta sesión (corregida, con pruebas):** tope de intentos del código de mesa y techo por IP en las rutas del comensal; `POST api/pagos` responde 409 si el pedido ya tiene platos facturados; no se borra un pedido cobrado ni se edita un plato facturado; `PUT api/pedidos/{id}` aplica las reglas por rol.
+- **Entorno de verificación:** contenedor `qpro-verif` (MySQL 8, puerto 3399, base `restaurantebd`, desechable). La API local necesita `DOTNET_ROLL_FORWARD=LatestMajor` (el equipo solo tiene el runtime de ASP.NET 10) y `ConnectionStrings__DefaultConnection`; `.claude/launch.json` levanta la web en el 3000.
 
 ## Git
 
-- Rama: `RestaurantApp/AppMovil`, **adelante de `origin`** (sin subir). `origin/main` no tiene este trabajo.
+- Rama: `RestaurantApp/AppMovil`. **Adelante de `origin` con los commits del 14/11 (facturación electrónica), sin subir**: Render despliega desde esta rama, así que no se sube antes de correr la migración en TiDB. Lo desplegado llega hasta `2be8c88`.
+- **`main` no tiene este trabajo**: hace falta un PR de `RestaurantApp/AppMovil` a `main` cuando el equipo lo apruebe.
+- En el equipo de trabajo, `migraciones/2026-11-13_ocupaciones_llamadas_push.sql` apareció **vacío** sin commit (algo lo sobrescribió el 13/11 a las 16:57). En git está completo. Restaurarlo con `git checkout -- migraciones/2026-11-13_ocupaciones_llamadas_push.sql` y no commitear la versión vacía.
 - Commits: Conventional Commits, cuerpo en español, sin coautor.
 - `graphify-out/` y la configuración local del editor se dejan fuera de git a propósito.
 
@@ -65,17 +83,24 @@ contra MySQL 8. **No están desplegados**: falta la migración en TiDB y la conf
 - **Migración `2026-11-13`:** aplicada dos veces seguidas sin error y, desde la semilla anterior (`cd94fef`), deja el mismo esquema que `restaurantebd.sql`.
 - **Navegador (web local contra la API local):** menú QR en 375 px (llamar, recargar y recuperar la llamada, pedir, "Tu pedido"); tablero de mesas como cajero (estados, panel, "Marcar atendida" y el comensal viendo "ya te atendieron" sin recargar). El navegador de pruebas tenía el permiso de notificaciones bloqueado: se vio el mensaje de avisos bloqueados con el seguimiento intacto.
 
+## Producción (13/11/2026)
+
+- **TiDB:** el usuario aplicó las migraciones en el SQL Editor; la consulta de verificación da 1 para `2026-11-04`, `2026-11-05` y `2026-11-13`. Ojo: el SQL Editor corre solo la sentencia del cursor si no se selecciona todo (Ctrl+A y Run).
+- **Render (API):** `Jwt__Key` fija, `EnableSwagger=false` y claves VAPID (`Push__ClavePublica`, `Push__ClavePrivada`) configuradas.
+- **Comprobado desde fuera:** `GET /api/health` 200; `GET /api/cliente-mesa/push` devuelve la clave pública (Web Push activo); `/swagger` 401; `GET /api/llamadas` 401 sin sesión; el hub `/api/hubs/mesa` negocia; la web sirve `sw-qpro.js` y su bundle trae "Llamar al mesero" y el tablero.
+- No se probó un recorrido completo en producción (pedido, llamada y cobro reales).
+
 ## Sin verificar / bloqueos
 
 1. **Push real en dispositivos:** no hay celular conectado. No se probó FCM en Android con la app cerrada ni Web Push en Android Chrome o iPhone. Pasos en `tests/PLAN_PRUEBAS_MOVIL.md` (MOV-19 a MOV-22 y "Celular real"). Las pruebas automáticas usan servidores simulados: no cuentan como entrega real.
 2. **iOS:** Web Push solo funciona con la página agregada a la pantalla de inicio (iOS 16.4 o posterior) y el permiso se pide tras un toque; la página lo explica. La app Flutter en iOS sigue sin `GoogleService-Info.plist`.
-3. **Render y Cloudflare:** que `CF-Connecting-IP` llegue siempre en Render sale de la comunidad de Render, no de su documentación oficial. Comprobarlo en el despliegue (si no llega, el cupo vuelve a ser por IP del proxy, como antes). Se puede fijar otra cabecera con `Proxy__CabeceraIp`.
-4. **TiDB:** no se tuvo acceso. No se sabe si están aplicadas `2026-11-04`, `2026-11-05` ni `2026-11-13`.
+3. **Render y Cloudflare:** que `CF-Connecting-IP` llegue siempre en Render sale de la comunidad de Render, no de su documentación oficial. Sin comprobar en producción (si no llega, el cupo vuelve a ser por IP del proxy, como antes). Se puede fijar otra cabecera con `Proxy__CabeceraIp`.
+4. **Flutter 3.47:** las pruebas de la app se corrieron con 3.44 en Docker. Repetir `flutter test` y `flutter analyze` con 3.47 y compilar el APK nuevo para los meseros.
 5. **Historial de git:** dos commits viejos ya subidos (`a123ddc`, `29034bb`) llevan una línea de coautor de un asistente. Quitarla exige reescribir `main` y forzar el push: decisión del equipo.
 
-## Despliegue (en este orden)
+## Despliegue (ya hecho el 13/11; referencia para el próximo)
 
-1. TiDB Cloud (SQL Editor), base `restaurantebd`: comprobar con `SHOW TABLES LIKE 'Ocupaciones'` y `SHOW COLUMNS FROM Pedidos LIKE 'OcupacionId'`. Si faltan, correr en orden las migraciones pendientes de `migraciones/` (las tres son idempotentes). Nunca desplegar la API antes.
+1. TiDB Cloud (SQL Editor), base `restaurantebd`: toda migración nueva se corre **antes** de desplegar la API que la usa. Seleccionar todo el script antes de Run.
 2. Render, servicio de la API, variables:
    - `Jwt__Key` fija (32 caracteres o más) y `EnableSwagger=false`.
    - `Push__ClavePublica` y `Push__ClavePrivada`: par VAPID P-256 en base64url. Se genera una sola vez, por ejemplo con `npx web-push generate-vapid-keys`, y se guarda solo en Render. Sin ellas todo funciona menos los avisos con la página cerrada.
@@ -84,6 +109,14 @@ contra MySQL 8. **No están desplegados**: falta la migración en TiDB y la conf
 3. Web: no necesita variables nuevas. Debe servirse por HTTPS (el service worker y Web Push lo exigen).
 4. App: compilar con Flutter 3.47 (`flutter build apk --release --split-per-abi`) e instalar en los celulares de los meseros; al entrar se registra el token.
 5. Volver atrás: la API anterior ignora las tablas nuevas; la migración no borra datos. Desplegar el commit anterior basta.
+
+## Grafo (actualizado 13/11/2026)
+
+- 4.618 nodos, 10.946 aristas, 235 comunidades (antes 4.103 / 9.779 / 213). Entran el comensal (`ClienteMesaController`, `clienteMesa.js`, `MiMesa.js`), las llamadas, `Ocupaciones`, `PushWeb`, `CupoPeticiones`, el tablero (`TableroMesas.js`) y la app (`llamada.dart`, `llamada_tarjeta.dart`).
+- Nodos centrales: `RestauranteContext` (178 aristas), `RestaurantApi.Models`, `RestaurantApi.Dtos`, `Boton()` de la web, `RestaurantApi.Services`.
+- Salud: sin aristas colgantes ni extremos faltantes; 2 auto-bucles (referencias del AST, como antes).
+- Límites conocidos: los `.sql` no aportan nodos (falta el analizador `tree_sitter_sql`; `pip install "graphifyy[sql]"`), `Program.cs` no da símbolos, y la migración `2026-11-13` quedó fuera de esta actualización porque el archivo local estaba vacío (conserva sus nodos anteriores, si los tenía).
+- Para refrescarlo: actualización incremental de graphify desde la raíz del repo. Si un documento se vuelve a extraer y sus nodos cambian de ID, el guardián se niega a escribir; se fuerza solo cuando los nodos perdidos son de esos mismos documentos (así se hizo esta vez: 31 nodos, todos de archivos re-extraídos).
 
 ## Cómo verificar
 
