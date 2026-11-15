@@ -178,6 +178,9 @@ export function useSeguimiento(codigo, llave) {
   }, [codigo, llave]);
 
   useEffect(() => {
+    // Llave recién llegada (acaba de pedir o se leyó al recargar): mientras responde la API se
+    // muestra "cargando", no el formulario que pide el código del mesero.
+    if (codigo && llave) setEstado((a) => (a.estado === 'sin-llave' ? { estado: 'cargando', datos: null, error: null } : a));
     recargar();
     if (!codigo || !llave) return undefined;
 

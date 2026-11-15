@@ -167,6 +167,16 @@ describe('Seguridad del QR y acceso', () => {
     expect(cuerpo).not.toHaveProperty('mesaId');
   });
 
+  test('el pedido del comensal va sin la sesión del personal guardada en el navegador', async () => {
+    localStorage.setItem('token', 'jwt-del-personal');
+    global.fetch.mockReturnValue(ok({ id: 1, seguimiento: 'llave' }, 201));
+
+    await expect(api.createPedidoQR('a1b2c3d4e5f6a1b2c3d4e5f6', [{ id: 1, cantidad: 1 }])).resolves.toHaveProperty('seguimiento', 'llave');
+
+    expect(ultimaPeticion().opciones.headers).not.toHaveProperty('Authorization');
+    localStorage.removeItem('token');
+  });
+
   test('un código de mesa que no existe devuelve null', async () => {
     global.fetch.mockReturnValue(fallo(404, { message: 'no válido' }));
     await expect(api.getMesaPorCodigo('zzzzzzzz')).resolves.toBeNull();

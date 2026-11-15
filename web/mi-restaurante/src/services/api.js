@@ -209,8 +209,8 @@ const detallesPedido = (items) => items.map((item) => ({
   nota: item.nota || item.notas || ''
 }));
 
-const enviarPedido = async (cuerpo) => {
-  const response = await fetchWithHeaders(`${API_URL}/pedidos`, {
+const enviarPedido = async (cuerpo, pedir = fetchWithHeaders) => {
+  const response = await pedir(`${API_URL}/pedidos`, {
     method: 'POST',
     body: JSON.stringify(cuerpo)
   });
@@ -225,7 +225,12 @@ const enviarPedido = async (cuerpo) => {
 export const createPedido = (mesaId, items) => enviarPedido({ mesaId, detalles: detallesPedido(items) });
 
 /** Pedido del comensal: la mesa va por el código secreto de su QR; la API ignora cualquier Id. */
-export const createPedidoQR = (codigoMesa, items) => enviarPedido({ codigoMesa, detalles: detallesPedido(items) });
+// Va sin el JWT aunque haya una sesión de personal en este navegador: con sesión la API lo trata
+// como pedido del personal (busca la mesa por Id) y no entrega la llave de seguimiento.
+export const createPedidoQR = (codigoMesa, items) => enviarPedido(
+  { codigoMesa, detalles: detallesPedido(items) },
+  (url, opciones) => fetch(url, { ...opciones, headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '69420' } })
+);
 
 /**
  * Actualiza el estado de un pedido

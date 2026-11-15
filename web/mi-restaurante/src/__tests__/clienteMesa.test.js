@@ -108,6 +108,19 @@ describe('useSeguimiento', () => {
     expect(mockConexion.invocaciones.length).toBe(2);
   });
 
+  test('al llegar la llave muestra cargando, no el formulario del código, hasta que responde la API', async () => {
+    let responder;
+    fetch.mockReturnValue(new Promise((r) => { responder = r; }));
+    const { rerender } = render(<Seguir codigo="abc" llave={null} />);
+    expect(screen.getByTestId('estado')).toHaveTextContent('sin-llave');
+
+    rerender(<Seguir codigo="abc" llave="llave-1" />);
+    expect(screen.getByTestId('estado')).toHaveTextContent('cargando');
+
+    await act(async () => { responder(await respuesta(200, datosVisita())); });
+    await waitFor(() => expect(screen.getByTestId('estado')).toHaveTextContent('activo · 2'));
+  });
+
   test('sin red conserva lo último visto y avisa', async () => {
     fetch.mockReturnValueOnce(respuesta(200, datosVisita()));
     render(<Seguir codigo="abc" llave="llave-1" />);
