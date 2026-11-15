@@ -19,6 +19,38 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000
 
 Sin `API_BASE_URL` usa la API publicada en Render.
 
+### iPhone físico (iOS 15 o posterior)
+
+1. Conecta el iPhone al Mac por USB, desbloquéalo y acepta confiar en el Mac.
+   Activa **Ajustes → Privacidad y seguridad → Modo desarrollador** en el iPhone.
+2. En **Xcode → Settings → Accounts**, agrega tu cuenta de Apple.
+   Si Xcode indica que iOS no está instalado, descarga la versión que solicita en
+   **Settings → Components**. Es un componente del Mac, no una actualización del
+   sistema del iPhone. También puedes iniciar la descarga desde Terminal con
+   `xcodebuild -downloadPlatform iOS`.
+3. Abre `ios/Runner.xcworkspace`. Selecciona el proyecto **Runner**, el target
+   **Runner** y **Signing & Capabilities**. Activa **Automatically manage signing**
+   y selecciona tu **Team** (puedes usar tu Personal Team para pruebas).
+   Si Apple indica que `com.example.restaurantApp` ya está registrado, cambia el
+   **Bundle Identifier** por uno único de tu organización o cuenta.
+4. Desde esta carpeta, ejecuta:
+
+   ```bash
+   export PATH="/Users/danielchavezb/development/flutter/bin:$PATH"
+   flutter devices
+   flutter run -d <ID_DEL_IPHONE>
+   ```
+
+   Reemplaza `<ID_DEL_IPHONE>` por el identificador que muestra `flutter devices`.
+   Este proyecto usa Swift Package Manager para las dependencias nativas de iOS;
+   la primera compilación puede tardar mientras Xcode las descarga.
+5. Si iOS pide confiar en el desarrollador, hazlo en **Ajustes → General → VPN y
+   gestión de dispositivos** y vuelve a ejecutar el comando.
+
+La configuración predeterminada conecta con la API publicada. `10.0.2.2` es la
+dirección del emulador Android; para usar un backend local desde el iPhone,
+configura la dirección de red del Mac y conecta ambos equipos a la misma red.
+
 ## Pruebas
 
 ```bash
