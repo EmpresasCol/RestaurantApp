@@ -52,7 +52,7 @@ Contexto de producto en `PRODUCT.md`; sistema visual en `DESIGN.md` (los dos son
 | `9e76b4b` | Rediseño web: menú QR, login, cocina y caja |
 | `a123ddc` | Plan de auditoría técnica (seguridad, inventario, caja, estados) |
 
-Pruebas al cierre (13/11/2026): **API 270/270**, **web 157/157**, **app 58/58** (`flutter analyze` sin avisos; Flutter 3.44 en Docker, ver `HANDOFF.md`).
+Pruebas al cierre (14/11/2026): **API 309/309**, **web 178/178**, **app 58/58** (`flutter analyze` sin errores; Flutter 3.50 instalado en `C:\src\flutter`, ver `HANDOFF.md`).
 Trabajo del 04/11/2026 (sin commit todavía): cuentas compartidas, pagos avisados con varias fotos, domicilios con
 factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el arreglo del cierre de sesión de la app.
 
@@ -120,7 +120,7 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - Error corregido: el `[Authorize(Roles = "Administrador")]` de la clase dejaba al cajero sin cierre (403) aunque el método dijera "Administrador,Caja": los atributos se suman con Y.
 
 ### Facturación electrónica (14/11/2026, apagada por defecto)
-- Tablas `ConfiguracionFiscal` (una fila), `NumeracionesDian` y `DocumentosElectronicos` (cola de salida). Migración `2026-11-14_facturacion_electronica.sql`, **sin aplicar en TiDB**.
+- Tablas `ConfiguracionFiscal` (una fila), `NumeracionesDian` y `DocumentosElectronicos` (cola de salida). Migración `2026-11-14_facturacion_electronica.sql`, aplicada en TiDB el 14/11/2026.
 - `Facturacion.EmitirAsync`: con la facturación encendida toma el número del rango vigente con candado (`FOR UPDATE`) y guarda el documento `Pendiente` en la transacción del cobro. `EnvioDocumentos` (servicio en segundo plano) lo envía por `IProveedorFacturacion` con espera creciente y clave de idempotencia. Sin proveedor contratado se registra `ProveedorSinConfigurar` y la API no deja encender la facturación.
 - Consumidor final → POS (o factura electrónica, según `DocumentoConsumidorFinal`); cliente identificado → factura electrónica. Anular (`POST api/facturas/{id}/anular`, motivo obligatorio, solo con la caja del día abierta) emite nota de ajuste o nota crédito; con `nuevoCliente` vuelve a facturar sin perder la venta.
 - El cierre de caja se bloquea con rechazos por resolver (`DocumentosDian.PorResolver`): no cuenta lo rechazado de una factura anulada cuya venta nunca validó la DIAN.
@@ -176,7 +176,7 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - [ ] Las claves de la semilla SQL siguen en `123`.
 - [ ] Confirmar con el asesor si aplica impoconsumo o IVA (ya es configurable en Datos fiscales).
 - [ ] Contratar proveedor tecnológico DIAN y escribir su adaptador (`IProveedorFacturacion`). Sin eso la facturación electrónica no se enciende.
-- [ ] Correr `migraciones/2026-11-14_facturacion_electronica.sql` en TiDB **antes** de subir la rama.
+- [x] `migraciones/2026-11-14_facturacion_electronica.sql` aplicada en TiDB y rama desplegada (14/11/2026). La facturación electrónica sigue apagada.
 - [ ] Contador: tope de propina, envío del domicilio en la base del impuesto y documento del consumidor final.
 
 ### Técnicos
@@ -236,4 +236,4 @@ cd app/restaurant_app && flutter test && flutter analyze
 - Hay un `inspect.py` suelto en `C:\Users\Abraham\AppData\Local\Temp\` que reemplaza al módulo estándar. Ejecuta los scripts de Python con `-I` y nunca desde esa carpeta.
 - La consola usa cp1252: al pasar texto con `→` o tildes por stdin, codificarlo en UTF-8 (`input=...encode('utf-8')`).
 - Dejar fuera de git a propósito: la configuración local del editor, `graphify-out/`, `.impeccable/` y `app/restaurant_app/analysis_options.yaml`. `.impeccable/` y `graphify-out/` aparecen agregados al índice sin haberse commiteado; revisar antes de cada commit y hacer commit solo de rutas explícitas.
-- El grafo (`graphify-out/`) se actualizó en incremental el 13/11/2026 (hasta el commit `2be8c88` y la documentación de despliegue): 4.618 nodos, 10.946 aristas y 235 comunidades (código, documentos y las 10 imágenes de `docs/readme/`). Resumen del estado en `HANDOFF.md`. `.graphifyignore` excluye imágenes, sonidos (`*.wav`) e `.impeccable/`. Se refresca con la actualización incremental de graphify. Si un documento se vuelve a extraer y sus nodos cambian de ID, el guardián de `to_json` se niega a escribir; se fuerza solo cuando los nodos perdidos son de esos mismos documentos.
+- El grafo (`graphify-out/`) se actualizó el 14/11/2026 solo en código (`python -m graphify update .`): 4.836 nodos, 12.118 aristas y 249 comunidades. Los documentos cambiados ese día no se volvieron a extraer (falta `/graphify --update`). Resumen en `graphify-out/GRAPH_REPORT.md`; es un artefacto local fuera de git.

@@ -20,15 +20,15 @@ Plan completo para vender al primer restaurante: `docs/GUIA_PARA_VENDER_QPRO.md`
 - **Lo que falta para que sea válida ante la DIAN:** contratar un proveedor tecnológico (no la competencia directa; uno especializado y habilitado por la DIAN que emita **documento equivalente POS electrónico** por API) y escribir su adaptador: una clase que implemente `IProveedorFacturacion.EnviarAsync` y se registre en `Program.cs` (línea del `ProveedorSinConfigurar`), con las credenciales en variables de entorno. Hoy solo existe `ProveedorSimulado` (`Facturacion__Proveedor=Simulado`, nunca en producción).
 - **Regla de rechazos:** un documento rechazado se corrige y se reenvía, o se anula. Anular uno rechazado no emite nota (para la DIAN no existió) y deja de bloquear el cierre; la nota rechazada de una venta validada sí bloquea y se reenvía desde Facturas (`DocumentosDian.PorResolver`).
 - **Verificado el 14/11:** API 309/309 y web 178/178; `npm run build` compiló en la sesión anterior. Contra MySQL 8 desechable: 12 cobros simultáneos con consecutivos sin huecos, doble cobro (uno recibe 409), rango agotado sin pago a medias, migración idempotente, anulación de validada y de rechazada, cierre bloqueado y liberado, y dos anulaciones simultáneas con notas distintas. En el navegador: Datos fiscales, Facturas con estado DIAN y anulación con refacturación (validación del NIT incluida).
-- **Sin verificar:** impresión real de la tirilla en impresora térmica; `flutter test` y `flutter analyze` (este equipo no tiene Flutter; la app no se tocó y no usa `PUT api/pedidos/{id}`, la única ruta cuyas reglas cambiaron).
+- **Sin verificar:** impresión real de la tirilla en impresora térmica; la app en celulares reales. `flutter test` (58/58) y `flutter analyze` (sin errores ni advertencias; 16 avisos informativos por `package:flutter/material.dart`, que Flutter 3.50 marca como obsoleto) sí se corrieron el 14/11 con Flutter 3.50 estable, instalado en `C:\src\flutter` y agregado al PATH del usuario.
 - **Decisiones que esperan al contador o asesor:** la propina no tiene tope del 10 % en la API (se entendió que el tope de la Ley 1935 aplica a la sugerida); el envío del domicilio entra en la base del impuesto; POS electrónico o factura electrónica para el consumidor final (`DocumentoConsumidorFinal`).
-- **Para desplegar (en este orden):** 1) correr `migraciones/2026-11-14_facturacion_electronica.sql` en TiDB; 2) subir la rama (Render despliega solo); 3) dejar la facturación apagada hasta tener proveedor y numeraciones reales.
+- **Desplegado el 14/11:** el usuario corrió `migraciones/2026-11-14_facturacion_electronica.sql` en TiDB y la rama se subió (`7c323aa..c003cb9`). Comprobado desde fuera: `GET /api/health` 200 y `GET /api/fiscal` 401 sin sesión (la ruta nueva existe). La facturación electrónica sigue **apagada** en producción hasta tener proveedor y numeraciones reales. No se probó un cobro real en producción después del despliegue.
 - **Auditoría de seguridad de esta sesión (corregida, con pruebas):** tope de intentos del código de mesa y techo por IP en las rutas del comensal; `POST api/pagos` responde 409 si el pedido ya tiene platos facturados; no se borra un pedido cobrado ni se edita un plato facturado; `PUT api/pedidos/{id}` aplica las reglas por rol.
 - **Entorno de verificación:** contenedor `qpro-verif` (MySQL 8, puerto 3399, base `restaurantebd`, desechable). La API local necesita `DOTNET_ROLL_FORWARD=LatestMajor` (el equipo solo tiene el runtime de ASP.NET 10) y `ConnectionStrings__DefaultConnection`; `.claude/launch.json` levanta la web en el 3000.
 
 ## Git
 
-- Rama: `RestaurantApp/AppMovil`. **Adelante de `origin` con los commits del 14/11 (facturación electrónica), sin subir**: Render despliega desde esta rama, así que no se sube antes de correr la migración en TiDB. Lo desplegado llega hasta `2be8c88`.
+- Rama: `RestaurantApp/AppMovil`, subida a `origin` con la facturación electrónica (14/11/2026). Render despliega desde esta rama.
 - **`main` no tiene este trabajo**: hace falta un PR de `RestaurantApp/AppMovil` a `main` cuando el equipo lo apruebe.
 - En el equipo de trabajo, `migraciones/2026-11-13_ocupaciones_llamadas_push.sql` apareció **vacío** sin commit (algo lo sobrescribió el 13/11 a las 16:57). En git está completo. Restaurarlo con `git checkout -- migraciones/2026-11-13_ocupaciones_llamadas_push.sql` y no commitear la versión vacía.
 - Commits: Conventional Commits, cuerpo en español, sin coautor.
@@ -95,7 +95,7 @@ Plan completo para vender al primer restaurante: `docs/GUIA_PARA_VENDER_QPRO.md`
 1. **Push real en dispositivos:** no hay celular conectado. No se probó FCM en Android con la app cerrada ni Web Push en Android Chrome o iPhone. Pasos en `tests/PLAN_PRUEBAS_MOVIL.md` (MOV-19 a MOV-22 y "Celular real"). Las pruebas automáticas usan servidores simulados: no cuentan como entrega real.
 2. **iOS:** Web Push solo funciona con la página agregada a la pantalla de inicio (iOS 16.4 o posterior) y el permiso se pide tras un toque; la página lo explica. La app Flutter en iOS sigue sin `GoogleService-Info.plist`.
 3. **Render y Cloudflare:** que `CF-Connecting-IP` llegue siempre en Render sale de la comunidad de Render, no de su documentación oficial. Sin comprobar en producción (si no llega, el cupo vuelve a ser por IP del proxy, como antes). Se puede fijar otra cabecera con `Proxy__CabeceraIp`.
-4. **Flutter 3.47:** las pruebas de la app se corrieron con 3.44 en Docker. Repetir `flutter test` y `flutter analyze` con 3.47 y compilar el APK nuevo para los meseros.
+4. **APK nuevo:** las pruebas de la app ya pasan con Flutter 3.50 (14/11), pero no se compiló ni se instaló el APK en celulares reales.
 5. **Historial de git:** dos commits viejos ya subidos (`a123ddc`, `29034bb`) llevan una línea de coautor de un asistente. Quitarla exige reescribir `main` y forzar el push: decisión del equipo.
 
 ## Despliegue (ya hecho el 13/11; referencia para el próximo)
@@ -110,9 +110,9 @@ Plan completo para vender al primer restaurante: `docs/GUIA_PARA_VENDER_QPRO.md`
 4. App: compilar con Flutter 3.47 (`flutter build apk --release --split-per-abi`) e instalar en los celulares de los meseros; al entrar se registra el token.
 5. Volver atrás: la API anterior ignora las tablas nuevas; la migración no borra datos. Desplegar el commit anterior basta.
 
-## Grafo (actualizado 13/11/2026)
+## Grafo (código actualizado 14/11/2026)
 
-- 4.618 nodos, 10.946 aristas, 235 comunidades (antes 4.103 / 9.779 / 213). Entran el comensal (`ClienteMesaController`, `clienteMesa.js`, `MiMesa.js`), las llamadas, `Ocupaciones`, `PushWeb`, `CupoPeticiones`, el tablero (`TableroMesas.js`) y la app (`llamada.dart`, `llamada_tarjeta.dart`).
+- 4.836 nodos, 12.118 aristas, 249 comunidades (antes 4.618 / 10.946 / 235). El 14/11 se actualizó **solo el código** (`python -m graphify update .`, sin modelo): entran la facturación electrónica (`DocumentosDian`, `FiscalController`, `DatosFiscales.js`, `utils/facturacion.js`). Los documentos nuevos o cambiados (`HANDOFF.md`, `CONTEXTO_PROYECTO.md`, `docs/GUIA_PARA_VENDER_QPRO.md`, `docs/GUIA_PILOTO_PASO_A_PASO.md`) **no** se volvieron a extraer: falta `/graphify --update`. 48 comunidades quedaron con el nombre de su nodo central; `graphify label` las renombra.
 - Nodos centrales: `RestauranteContext` (178 aristas), `RestaurantApi.Models`, `RestaurantApi.Dtos`, `Boton()` de la web, `RestaurantApi.Services`.
 - Salud: sin aristas colgantes ni extremos faltantes; 2 auto-bucles (referencias del AST, como antes).
 - Límites conocidos: los `.sql` no aportan nodos (falta el analizador `tree_sitter_sql`; `pip install "graphifyy[sql]"`), `Program.cs` no da símbolos, y la migración `2026-11-13` quedó fuera de esta actualización porque el archivo local estaba vacío (conserva sus nodos anteriores, si los tenía).
