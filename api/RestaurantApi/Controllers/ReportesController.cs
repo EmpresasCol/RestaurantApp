@@ -80,8 +80,8 @@ namespace RestaurantApi.Controllers
 
             // Un documento que la DIAN rechazó se corrige o se anula el mismo día, no después de cerrar.
             var desde = HoraLocal.AUtc(dia);
-            var rechazados = await _context.DocumentosElectronicos.CountAsync(d =>
-                d.Estado == DocumentoElectronico.Rechazado && d.FechaGeneracion >= desde && d.FechaGeneracion < desde.AddDays(1));
+            var rechazados = await DocumentosDian.PorResolver(_context).CountAsync(d =>
+                d.FechaGeneracion >= desde && d.FechaGeneracion < desde.AddDays(1));
             if (rechazados > 0)
                 return Conflict(new { message = $"Hay {rechazados} documento(s) rechazado(s) por la DIAN ese día. Revísalos en Facturas del día (reintentar o anular) antes de cerrar la caja." });
 

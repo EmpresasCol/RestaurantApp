@@ -30,6 +30,16 @@ export const nombreTipoDocumento = (tipo) => TITULOS[tipo] ?? tipo;
 export const nombreCodigo = (tipo) => (tipo === 'FEV' ? 'CUFE' : 'CUDE');
 
 /**
+ * La DIAN rechazó algo que hay que reenviar antes de cerrar la caja: la venta de una factura
+ * vigente o la nota de una anulada cuya venta sí validó. (Misma regla que la API.)
+ */
+export const rechazoPorResolver = (f) => {
+  const doc = documentoVenta(f);
+  if (!doc) return false;
+  return f.anulada ? doc.estado === 'Validado' && notaDe(f)?.estado === 'Rechazado' : doc.estado === 'Rechazado';
+};
+
+/**
  * Estado que ve el cajero: { texto, tono, detalle }. Una factura sin documento electrónico
  * devuelve null (consecutivo interno, anterior a la facturación electrónica).
  */
@@ -38,7 +48,9 @@ export const estadoDian = (f) => {
   if (!doc) return f?.anulada ? { texto: 'Anulada', tono: 'peligro', detalle: f.motivoAnulacion } : null;
   if (f.anulada) {
     const nota = notaDe(f);
-    const pendiente = nota && nota.estado !== 'Validado';
+    if (rechazoPorResolver(f)) return { texto: 'Anulada · nota rechazada', tono: 'peligro', detalle: `${f.motivoAnulacion} · DIAN: ${nota.mensaje ?? 'sin motivo'}` };
+    // Si la DIAN nunca validó la venta, la nota no hace falta: no queda nada en proceso.
+    const pendiente = nota?.estado === 'Pendiente';
     return { texto: pendiente ? 'Anulada · nota en proceso' : 'Anulada', tono: 'peligro', detalle: f.motivoAnulacion };
   }
   if (doc.estado === 'Validado') return { texto: 'Validada por la DIAN', tono: 'ok', detalle: null };

@@ -269,6 +269,59 @@ public class FacturacionElectronicaTests
         Assert.IsNotType<ConflictObjectResult>((await Reportes(ctx).Cerrar(new CerrarCajaDto { Fecha = hoy, EfectivoContado = Precio })).Result);
     }
 
+    [Fact]
+    public async Task Anular_un_documento_rechazado_no_emite_nota_y_libera_el_cierre()
+    {
+        using var ctx = Electronica();
+        Servido(ctx, 1);
+        var cobro = await CobrarAsync(ctx, 1);
+        var proveedor = new ProveedorDePrueba { Responder = _ => new ResultadoEnvio(EstadoEnvio.Rechazado, Mensaje: "Regla FAK21") };
+        await DocumentosDian.ProcesarAsync(ctx, proveedor, DateTime.UtcNow);
+
+        Assert.IsType<OkObjectResult>(await Facturas(ctx).Anular(cobro.Factura.Id, new AnularFacturaDto { Motivo = "La DIAN la rechazó y no se puede corregir" }));
+
+        // Para la DIAN ese documento no existió: ni nota, ni reenvío, ni bloqueo del cierre.
+        Assert.Equal(DocumentoElectronico.Pos, ctx.DocumentosElectronicos.AsNoTracking().Single().Tipo);
+        Assert.IsType<ConflictObjectResult>(await Facturas(ctx).Reintentar(cobro.Factura.Id));
+        Assert.IsNotType<ConflictObjectResult>((await Reportes(ctx).Cerrar(new CerrarCajaDto { Fecha = HoraLocal.AhoraColombia().Date, EfectivoContado = 0 })).Result);
+    }
+
+    [Fact]
+    public async Task Una_nota_rechazada_de_una_venta_validada_bloquea_el_cierre_y_se_reenvia()
+    {
+        using var ctx = Electronica();
+        Servido(ctx, 1);
+        var cobro = await CobrarAsync(ctx, 1);
+        var proveedor = new ProveedorDePrueba();
+        await DocumentosDian.ProcesarAsync(ctx, proveedor, DateTime.UtcNow);
+        await Facturas(ctx).Anular(cobro.Factura.Id, new AnularFacturaDto { Motivo = "Se cobró a la mesa equivocada" });
+        proveedor.Responder = _ => new ResultadoEnvio(EstadoEnvio.Rechazado, Mensaje: "Regla NAA01");
+        await DocumentosDian.ProcesarAsync(ctx, proveedor, DateTime.UtcNow);
+
+        var hoy = HoraLocal.AhoraColombia().Date;
+        Assert.IsType<ConflictObjectResult>((await Reportes(ctx).Cerrar(new CerrarCajaDto { Fecha = hoy, EfectivoContado = 0 })).Result);
+
+        Assert.IsType<NoContentResult>(await Facturas(ctx).Reintentar(cobro.Factura.Id));
+        proveedor.Responder = d => new ResultadoEnvio(EstadoEnvio.Validado, "cude-nota");
+        await DocumentosDian.ProcesarAsync(ctx, proveedor, DateTime.UtcNow);
+        Assert.Equal(DocumentoElectronico.Validado, Doc(ctx, DocumentoElectronico.NotaAjuste).Estado);
+        Assert.IsNotType<ConflictObjectResult>((await Reportes(ctx).Cerrar(new CerrarCajaDto { Fecha = hoy, EfectivoContado = 0 })).Result);
+    }
+
+    [Fact]
+    public async Task Sin_proveedor_conectado_no_se_activa_la_facturacion_electronica()
+    {
+        using var ctx = Electronica();
+        var cfg = ctx.ConfiguracionFiscal.Single();
+        cfg.FacturacionElectronica = false;
+        ctx.SaveChanges();
+        var dto = ctx.ConfiguracionFiscal.AsNoTracking().Single();
+        dto.FacturacionElectronica = true;
+
+        Assert.IsType<BadRequestObjectResult>(await TestDb.ComoAdmin(new FiscalController(ctx, new ProveedorSinConfigurar())).Put(dto));
+        Assert.IsType<NoContentResult>(await TestDb.ComoAdmin(new FiscalController(ctx, new ProveedorDePrueba())).Put(dto));
+    }
+
     // ── Anulación ─────────────────────────────────────────────────────────
 
     [Fact]

@@ -1,5 +1,5 @@
 // Facturación electrónica en la web: estado ante la DIAN, datos del cliente, impuesto y tirilla.
-import { digitoVerificacion, documentoVenta, errorCliente, estadoDian, numeracionDe, tituloDocumento } from '../utils/facturacion';
+import { digitoVerificacion, documentoVenta, errorCliente, estadoDian, numeracionDe, rechazoPorResolver, tituloDocumento } from '../utils/facturacion';
 import { etiquetaImpuesto, impuestoFactura, impuestoIncluido } from '../utils/impuestos';
 import { htmlFactura } from '../utils/recibo';
 import { csvFacturas } from '../components/caja/FacturasDia';
@@ -41,6 +41,14 @@ describe('estado ante la DIAN', () => {
     const nota = (estado) => ({ ...doc({ estado }), id: 2, tipo: 'NotaAjuste', numero: 'NA1' });
     expect(estadoDian(factura({ ...anulada, documentos: [doc({ estado: 'Validado' }), nota('Pendiente')] })).texto).toBe('Anulada · nota en proceso');
     expect(estadoDian(factura({ ...anulada, documentos: [doc({ estado: 'Validado' }), nota('Validado')] }))).toMatchObject({ texto: 'Anulada', detalle: 'Mesa equivocada' });
+    // Nota rechazada de una venta validada: hay que reenviarla. Si la venta nunca validó, no queda nada.
+    const notaRechazada = factura({ ...anulada, documentos: [doc({ estado: 'Validado' }), nota('Rechazado')] });
+    expect(estadoDian(notaRechazada).texto).toBe('Anulada · nota rechazada');
+    expect(rechazoPorResolver(notaRechazada)).toBe(true);
+    const nuncaValidada = factura({ ...anulada, documentos: [doc({ estado: 'Rechazado' }), nota('Rechazado')] });
+    expect(estadoDian(nuncaValidada).texto).toBe('Anulada');
+    expect(rechazoPorResolver(nuncaValidada)).toBe(false);
+    expect(rechazoPorResolver(factura({ documentos: [doc({ estado: 'Rechazado' })] }))).toBe(true);
     expect(documentoVenta(factura({ documentos: [nota('Validado'), doc()] })).tipo).toBe('POS');
   });
 });

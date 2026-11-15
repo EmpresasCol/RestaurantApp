@@ -70,6 +70,15 @@ namespace RestaurantApi.Services
         private static bool EsVenta(string tipo) => tipo is DocumentoElectronico.Pos or DocumentoElectronico.Fev;
 
         /// <summary>
+        /// Rechazados que alguien debe resolver antes de cerrar la caja. Una factura anulada cuyo
+        /// documento de venta nunca validó la DIAN no deja nada pendiente: para la DIAN no existió.
+        /// </summary>
+        public static IQueryable<DocumentoElectronico> PorResolver(RestauranteContext ctx)
+            => ctx.DocumentosElectronicos.Where(d => d.Estado == DocumentoElectronico.Rechazado
+                && !(d.Factura!.Anulada && !ctx.DocumentosElectronicos.Any(o => o.FacturaId == d.FacturaId
+                    && (o.Tipo == DocumentoElectronico.Pos || o.Tipo == DocumentoElectronico.Fev) && o.Estado == DocumentoElectronico.Validado)));
+
+        /// <summary>
         /// Anula una factura sin borrar nada: queda marcada con motivo y usuario y, si ya tenía
         /// documento electrónico, se encola su nota (de ajuste para el POS, crédito para la factura).
         /// Con <paramref name="nuevoCliente"/> la venta sigue en pie y pasa a una factura nueva a
@@ -103,8 +112,12 @@ namespace RestaurantApi.Services
             var original = await ctx.DocumentosElectronicos
                 .Where(d => d.FacturaId == f.Id && (d.Tipo == DocumentoElectronico.Pos || d.Tipo == DocumentoElectronico.Fev))
                 .OrderBy(d => d.Id).FirstOrDefaultAsync();
-            if (original != null)
+            // Un documento que la DIAN rechazó no existe para ella: no hay nada que anular con una nota.
+            if (original != null && original.Estado != DocumentoElectronico.Rechazado)
             {
+                // Candado de los consecutivos de notas: dos anulaciones a la vez no toman el mismo.
+                if (relacional)
+                    await ctx.Database.ExecuteSqlRawAsync("SELECT Id FROM ConfiguracionFiscal FOR UPDATE");
                 var tipo = original.Tipo == DocumentoElectronico.Fev ? DocumentoElectronico.NotaCredito : DocumentoElectronico.NotaAjuste;
                 var prefijo = tipo == DocumentoElectronico.NotaCredito ? "NC" : "NA";
                 var numero = (await ctx.DocumentosElectronicos.Where(d => d.Tipo == tipo).MaxAsync(d => (long?)d.Numero) ?? 0) + 1;
@@ -145,8 +158,8 @@ namespace RestaurantApi.Services
         /// <summary>Vuelve a poner en cola los documentos rechazados de la factura (ya corregida la causa).</summary>
         public static async Task<int> ReencolarAsync(RestauranteContext ctx, int facturaId)
         {
-            var rechazados = await ctx.DocumentosElectronicos
-                .Where(d => d.FacturaId == facturaId && d.Estado == DocumentoElectronico.Rechazado).ToListAsync();
+            // De una factura anulada solo se reenvía la nota: su venta rechazada no debe llegar a validarse.
+            var rechazados = await PorResolver(ctx).Where(d => d.FacturaId == facturaId).ToListAsync();
             foreach (var d in rechazados)
                 (d.Estado, d.ProximoIntento, d.Mensaje) = (DocumentoElectronico.Pendiente, DateTime.UtcNow, null);
             await ctx.SaveChangesAsync();
@@ -201,10 +214,15 @@ namespace RestaurantApi.Services
                     // Una nota va después de su documento: la DIAN debe conocer primero el original.
                     var estadoOriginal = await db.DocumentosElectronicos.AsNoTracking()
                         .Where(d => d.Id == doc.DocumentoReferenciaId).Select(d => d.Estado).FirstOrDefaultAsync(ct);
-                    if (estadoOriginal == DocumentoElectronico.Pendiente) continue;
+                    if (estadoOriginal == DocumentoElectronico.Pendiente)
+                    {
+                        doc.ProximoIntento = ahora.AddSeconds(30); // no ocupa el lote mientras espera
+                        await db.SaveChangesAsync(ct);
+                        continue;
+                    }
                     if (estadoOriginal != DocumentoElectronico.Validado)
                     {
-                        (doc.Estado, doc.Mensaje) = (DocumentoElectronico.Rechazado, "El documento original no fue validado por la DIAN: esta nota no se transmite hasta resolverlo");
+                        (doc.Estado, doc.Mensaje) = (DocumentoElectronico.Rechazado, "La DIAN rechazó el documento original: no hay nada que anular ante ella");
                         await db.SaveChangesAsync(ct);
                         resueltos++;
                         continue;

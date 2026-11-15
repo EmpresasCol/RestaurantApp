@@ -23,10 +23,12 @@ namespace RestaurantApi.Controllers
         private static readonly string[] TiposConRango = { DocumentoElectronico.Pos, DocumentoElectronico.Fev };
 
         private readonly RestauranteContext _context;
+        private readonly bool _proveedorConectado;
 
-        public FiscalController(RestauranteContext context)
+        public FiscalController(RestauranteContext context, IProveedorFacturacion? proveedor = null)
         {
             _context = context;
+            _proveedorConectado = proveedor is not ProveedorSinConfigurar;
         }
 
         public class NumeracionDto
@@ -85,11 +87,12 @@ namespace RestaurantApi.Controllers
             return Ok(new
             {
                 config,
+                proveedorConectado = _proveedorConectado,
                 numeraciones = numeraciones.Select(n => ADto(n, hoy)),
                 documentos = new
                 {
                     pendientes = cola.FirstOrDefault(c => c.Estado == DocumentoElectronico.Pendiente)?.Cuenta ?? 0,
-                    rechazados = cola.FirstOrDefault(c => c.Estado == DocumentoElectronico.Rechazado)?.Cuenta ?? 0,
+                    rechazados = await DocumentosDian.PorResolver(_context).CountAsync(),
                     enContingencia
                 }
             });
@@ -120,6 +123,9 @@ namespace RestaurantApi.Controllers
 
             if (dto.FacturacionElectronica)
             {
+                // Sin proveedor los documentos tomarían números de la DIAN y nunca se transmitirían.
+                if (!_proveedorConectado && (await Facturacion.ConfiguracionAsync(_context))?.FacturacionElectronica != true)
+                    return BadRequest(new { message = "Todavía no hay un proveedor tecnológico de facturación conectado a Qpro. Pide a soporte que lo conecte antes de activarla." });
                 if (string.IsNullOrWhiteSpace(dto.RazonSocial) || dto.Nit.Length == 0 || string.IsNullOrWhiteSpace(dto.Direccion) || string.IsNullOrWhiteSpace(dto.Municipio))
                     return BadRequest(new { message = "Para facturar electrónicamente completa razón social, NIT, dirección y municipio" });
                 var hoy = HoraLocal.AhoraColombia();

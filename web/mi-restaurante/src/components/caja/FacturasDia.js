@@ -6,7 +6,7 @@ import { Boton, BotonConfirmar, Campo, Cargando, Chip, Lista, Selector, Vacio } 
 import { coincide } from '../../utils/administracion';
 import { hora, pesos } from '../../utils/caja';
 import { impuestoFactura } from '../../utils/impuestos';
-import { documentoVenta, errorCliente, estadoDian, nombreCodigo, TIPOS_ID } from '../../utils/facturacion';
+import { documentoVenta, errorCliente, estadoDian, nombreCodigo, rechazoPorResolver, TIPOS_ID } from '../../utils/facturacion';
 import { htmlFactura, imprimirHtml } from '../../utils/recibo';
 
 const nombreMetodo = (m) => (m === 'QR' ? 'Transferencia o QR' : m);
@@ -95,7 +95,7 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar, fiscal =
     || coincide(f.numeroFactura, q) || coincide(f.nombreCliente, q) || coincide(f.nitCliente, q) || String(f.mesaNumero ?? '') === q.trim());
   // Lo anulado sin reemplazo es una venta reversada: se ve en la lista pero no suma.
   const total = visibles.filter((f) => !f.anulada).reduce((t, f) => t + f.total, 0);
-  const porResolver = (facturas ?? []).filter((f) => documentoVenta(f)?.estado === 'Rechazado' && !f.anulada).length;
+  const porResolver = (facturas ?? []).filter(rechazoPorResolver).length;
 
   const reintentar = async (f) => {
     try {
@@ -204,7 +204,7 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar, fiscal =
                             <ExternalLink size={15} aria-hidden="true" />PDF de la DIAN
                           </a>
                         )}
-                        {doc?.estado === 'Rechazado' && !f.anulada && (
+                        {rechazoPorResolver(f) && (
                           <Boton variante="secundario" tamano="sm" onClick={() => reintentar(f)}><RefreshCw size={15} aria-hidden="true" />Enviar de nuevo</Boton>
                         )}
                         {!f.anulada && anulando !== f.id && (
