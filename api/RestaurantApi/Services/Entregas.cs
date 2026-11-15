@@ -59,8 +59,9 @@ namespace RestaurantApi.Services
             d.FechaEntrega = ahora;
             d.InicioPreparacion ??= d.FechaPedido;
             if (cobradoEnCaja || d.DomiciliarioId == null) d.FechaLiquidacion = ahora;
-            await ctx.SaveChangesAsync();
 
+            // La entrega y su factura se guardan juntas: sin numeración vigente no queda un
+            // domicilio entregado sin documento.
             var cliente = await ctx.Clientes.Where(c => c.Id == d.ClienteId).Select(c => c.Nombre).FirstOrDefaultAsync();
             await Facturacion.EmitirDomicilioAsync(ctx, d, cliente ?? Facturacion.NombreConsumidorFinal);
             return null;

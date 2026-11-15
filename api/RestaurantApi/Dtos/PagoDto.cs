@@ -35,6 +35,9 @@ namespace RestaurantApi.Dtos
         public decimal? Recibido { get; set; }
         public string? NitCliente { get; set; }
         public string? NombreCliente { get; set; }
+        /// <summary>Factura a nombre del cliente: CC, NIT, CE, TI o PA (por defecto CC) y su correo.</summary>
+        public string? TipoIdCliente { get; set; }
+        public string? CorreoCliente { get; set; }
     }
 
     /// <summary>Un plato de la cuenta y cuántas unidades paga esta persona (1 de 2 cervezas, por ejemplo).</summary>

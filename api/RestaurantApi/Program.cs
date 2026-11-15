@@ -73,6 +73,12 @@ var cabeceraIp = CupoPeticiones.CabeceraIp(builder.Configuration);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Techo por IP para todo lo del comensal (holgado: un local entero sale por una sola IP).
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        CupoPeticiones.EsDelComensal(ctx.Request.Path)
+            ? RateLimitPartition.GetFixedWindowLimiter(CupoPeticiones.Ip(ctx, cabeceraIp),
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 1500, Window = TimeSpan.FromMinutes(1) })
+            : RateLimitPartition.GetNoLimiter("resto"));
     options.AddPolicy("login", ctx => RateLimitPartition.GetFixedWindowLimiter(
         CupoPeticiones.Ip(ctx, cabeceraIp),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
@@ -125,6 +131,15 @@ builder.Services.AddSingleton(pushOptions);
 builder.Services.AddHttpClient<PushWeb>(c => c.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddScoped<AvisosCliente>();
 
+// Facturación electrónica: la cola de documentos la vacía un servicio en segundo plano. El
+// proveedor simulado (Facturacion:Proveedor=Simulado) solo existe fuera de producción: sus códigos
+// no valen ante la DIAN. Sin proveedor los documentos esperan en la cola.
+var proveedorSimulado = !builder.Environment.IsProduction()
+    && string.Equals(builder.Configuration["Facturacion:Proveedor"], "Simulado", StringComparison.OrdinalIgnoreCase);
+if (proveedorSimulado) builder.Services.AddSingleton<IProveedorFacturacion, ProveedorSimulado>();
+else builder.Services.AddSingleton<IProveedorFacturacion, ProveedorSinConfigurar>();
+builder.Services.AddHostedService<EnvioDocumentos>();
+
 // ── CORS: solo los frontends conocidos (Cors:Origenes separados por coma) ──
 var origenes = (builder.Configuration["Cors:Origenes"]
                 ?? "http://localhost:3000,http://localhost:3001,https://empresascol.github.io,https://qpro-web.onrender.com")
@@ -159,12 +174,14 @@ if (jwtSinConfigurar)
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
     var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
-    var conflicto = error is DbUpdateConcurrencyException;
+    // Una regla de facturación (sin numeración vigente) detiene el cobro con su motivo; la
+    // transacción del cobro no se confirma, así que no queda nada a medias.
+    var conflicto = error is DbUpdateConcurrencyException or FacturacionException;
     context.Response.StatusCode = conflicto ? StatusCodes.Status409Conflict : StatusCodes.Status500InternalServerError;
     await context.Response.WriteAsJsonAsync(new
     {
-        message = conflicto
-            ? "El registro fue modificado por otro usuario. Recarga e intenta de nuevo."
+        message = error is FacturacionException ? error.Message
+            : conflicto ? "El registro fue modificado por otro usuario. Recarga e intenta de nuevo."
             : "Error interno del servidor.",
         traceId = context.TraceIdentifier
     });

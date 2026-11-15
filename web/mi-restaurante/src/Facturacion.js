@@ -2,7 +2,7 @@
 // las facturas del día y cerrar la caja. Se actualiza en tiempo real (SignalR) con respaldo cada 60 s.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Calculator, FileText, LayoutGrid, Receipt } from 'lucide-react';
+import { Calculator, FileText, Landmark, LayoutGrid, Receipt } from 'lucide-react';
 import * as api from './services/api';
 import { useCambios } from './services/realtime';
 import { actualizarEstadoDomicilio, getDomiciliosActivos, getLiquidaciones, liquidarDomiciliario } from './services/domiciliosApi';
@@ -12,6 +12,7 @@ import CobroPanel from './components/caja/CobroPanel';
 import FacturasDia from './components/caja/FacturasDia';
 import CierreCaja from './components/caja/CierreCaja';
 import TableroMesas from './components/caja/TableroMesas';
+import DatosFiscales from './components/caja/DatosFiscales';
 import { agruparCuentas, hoyLocal, pesos } from './utils/caja';
 
 const TITULOS = {
@@ -19,9 +20,10 @@ const TITULOS = {
   cobrar: ['Caja', 'Cuentas abiertas por mesa, domicilios en curso y el efectivo de los domiciliarios.'],
   facturas: ['Facturas', 'Lo cobrado en el día (mesas y domicilios), con su detalle para reimprimir.'],
   cierre: ['Cierre de caja', 'Abre con la base, cuenta el cajón al final y compáralo con lo que dice el sistema.'],
+  fiscal: ['Datos fiscales', 'El restaurante como vendedor, el impuesto, las numeraciones de la DIAN y la facturación electrónica.'],
 };
 
-function Facturacion() {
+function Facturacion({ esAdmin = false }) {
   const [vista, setVista] = useState('cobrar');
   const [pedidos, setPedidos] = useState([]);
   const [domicilios, setDomicilios] = useState([]);
@@ -32,6 +34,16 @@ function Facturacion() {
   const [version, setVersion] = useState(0);
   const [aviso, mostrar] = useAviso();
   const [salon, setSalon] = useState({ mesas: [], llamadas: [], cargando: true, error: false });
+  // Datos del vendedor y numeraciones: salen en la tirilla y dicen si hay documentos por resolver.
+  const [fiscal, setFiscal] = useState(null);
+  const cargarFiscal = useCallback(async () => {
+    try {
+      const f = await api.getFiscal();
+      if (f) setFiscal(f);
+    } catch { /* sin datos fiscales la tirilla sale simple; la caja sigue cobrando */ }
+  }, []);
+  // Cambian poco: se leen al entrar y al cambiar de pestaña, no en cada aviso de tiempo real.
+  useEffect(() => { cargarFiscal(); }, [cargarFiscal, vista]);
 
   const cargar = useCallback(async () => {
     try {
@@ -111,6 +123,7 @@ function Facturacion() {
     { id: 'cobrar', label: 'Por cobrar', icon: Receipt, contador: cuentas.length + domicilios.length + liquidaciones.length },
     { id: 'facturas', label: 'Facturas', icon: FileText },
     { id: 'cierre', label: 'Cierre del día', icon: Calculator },
+    ...(esAdmin ? [{ id: 'fiscal', label: 'Datos fiscales', icon: Landmark, contador: fiscal?.documentos?.rechazados ?? 0 }] : []),
   ];
   const [titulo, detalle] = TITULOS[vista];
 
@@ -163,11 +176,12 @@ function Facturacion() {
             onCobrar={setMesaEnCobro} onCambio={recargarTodo} mostrar={mostrar}
           />
         )}
-        {vista === 'facturas' && <FacturasDia fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} />}
+        {vista === 'facturas' && <FacturasDia fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} fiscal={fiscal} onCambio={cargar} />}
+        {vista === 'fiscal' && esAdmin && <DatosFiscales fiscal={fiscal} onGuardado={cargarFiscal} mostrar={mostrar} />}
         {vista === 'cierre' && <CierreCaja fecha={fecha} onFecha={setFecha} version={version} mostrar={mostrar} onLiquidar={liquidar} />}
       </main>
 
-      <CobroPanel cuenta={cuentaEnCobro} onCerrar={() => setMesaEnCobro(null)} onCobrado={recargarTodo} mostrar={mostrar} />
+      <CobroPanel cuenta={cuentaEnCobro} fiscal={fiscal} onCerrar={() => setMesaEnCobro(null)} onCobrado={recargarTodo} mostrar={mostrar} />
       {aviso}
     </div>
   );

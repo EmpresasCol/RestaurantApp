@@ -94,6 +94,9 @@ namespace RestaurantApi
         public DbSet<Ocupacion> Ocupaciones { get; set; }
         public DbSet<LlamadaMesero> LlamadasMesero { get; set; }
         public DbSet<SuscripcionPush> SuscripcionesPush { get; set; }
+        public DbSet<ConfiguracionFiscal> ConfiguracionFiscal { get; set; }
+        public DbSet<NumeracionDian> NumeracionesDian { get; set; }
+        public DbSet<DocumentoElectronico> DocumentosElectronicos { get; set; }
 
         // Domicilios
         public DbSet<Cliente> Clientes { get; set; }
@@ -208,6 +211,28 @@ namespace RestaurantApi
             modelBuilder.Entity<Factura>()
                 .HasIndex(f => f.DomicilioId)
                 .IsUnique();
+
+            modelBuilder.Entity<ConfiguracionFiscal>(e =>
+            {
+                e.ToTable("ConfiguracionFiscal");
+                e.Property(c => c.Id).ValueGeneratedNever();
+                e.Property(c => c.TarifaImpuesto).HasColumnType("decimal(5,2)");
+            });
+            modelBuilder.Entity<NumeracionDian>().ToTable("NumeracionesDian");
+            modelBuilder.Entity<DocumentoElectronico>(e =>
+            {
+                e.ToTable("DocumentosElectronicos");
+                e.HasIndex(d => d.ClaveIdempotencia).IsUnique();
+                e.HasIndex(d => new { d.Estado, d.ProximoIntento });
+                e.HasIndex(d => d.FacturaId);
+                e.HasOne(d => d.Factura).WithMany().HasForeignKey(d => d.FacturaId).OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<Factura>(e =>
+            {
+                e.Property(f => f.TarifaImpuesto).HasColumnType("decimal(5,2)");
+                e.Property(f => f.BaseImpuesto).HasColumnType("decimal(12,2)");
+                e.Property(f => f.ValorImpuesto).HasColumnType("decimal(12,2)");
+            });
 
             // Factura.PagoId (pago principal) y Pago.FacturaId (todos los pagos de la cuenta) son dos
             // relaciones distintas; sin declararlas, EF las confunde e inventa una columna PagoId1.

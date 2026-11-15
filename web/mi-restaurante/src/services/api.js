@@ -359,6 +359,42 @@ export const getFacturas = async (fecha) => {
 };
 
 /**
+ * Anula una factura. datos: { motivo, nuevoCliente?: { tipoId, nit, nombre, correo } }.
+ * Con nuevoCliente la venta sigue y se factura de nuevo a ese nombre. Responde { anulada, reemplazo }.
+ */
+export const anularFactura = async (id, datos) => {
+  const response = await fetchWithHeaders(`${API_URL}/facturas/${id}/anular`, { method: 'POST', body: JSON.stringify(datos) });
+  if (!response.ok) throw await errorDe(response, 'No se pudo anular la factura');
+  return await response.json();
+};
+
+/** Vuelve a enviar a la DIAN los documentos rechazados de la factura. */
+export const reintentarFactura = async (id) => {
+  const response = await fetchWithHeaders(`${API_URL}/facturas/${id}/reintentar`, { method: 'POST' });
+  if (!response.ok) throw await errorDe(response, 'No se pudo reenviar el documento');
+};
+
+// ==================== DATOS FISCALES ====================
+/** { config, numeraciones: [{ ..., vigente, restantes, aviso }], documentos: { pendientes, rechazados, enContingencia } }. */
+export const getFiscal = async () => {
+  const response = await fetchWithHeaders(`${API_URL}/fiscal`);
+  if (!response.ok) throw await errorDe(response, 'No se pudieron cargar los datos fiscales');
+  return await response.json();
+};
+
+export const guardarFiscal = async (config) => {
+  const response = await fetchWithHeaders(`${API_URL}/fiscal`, { method: 'PUT', body: JSON.stringify(config) });
+  if (!response.ok) throw await errorDe(response, 'No se pudieron guardar los datos fiscales');
+};
+
+/** Registra (id 0) o corrige una numeración autorizada por la DIAN. */
+export const guardarNumeracion = async (numeracion) => {
+  const response = await fetchWithHeaders(`${API_URL}/fiscal/numeraciones`, { method: 'POST', body: JSON.stringify(numeracion) });
+  if (!response.ok) throw await errorDe(response, 'No se pudo guardar la numeración');
+  return await response.json();
+};
+
+/**
  * Cobra la cuenta de una mesa con una sola factura.
  * cobro: { pedidoIds | lineas: [{ detalleId, cantidad }], propina,
  *          pagos: [{ metodoPago, monto, recibido?, avisoId? }], nitCliente?, nombreCliente? }

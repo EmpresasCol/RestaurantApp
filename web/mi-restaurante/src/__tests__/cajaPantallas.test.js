@@ -62,7 +62,7 @@ describe('Caja', () => {
     fireEvent.click(within(panel).getByRole('button', { name: /Cobrar \$\s?61\.600/ }));
 
     await waitFor(() => expect(api.cobrarCuenta).toHaveBeenCalledWith({
-      pedidoIds: [1, 2], propina: 5600, pagos: [{ metodoPago: 'Efectivo', monto: 61600, recibido: 70000 }], nitCliente: null, nombreCliente: null,
+      pedidoIds: [1, 2], propina: 5600, pagos: [{ metodoPago: 'Efectivo', monto: 61600, recibido: 70000 }], nitCliente: null, nombreCliente: null, tipoIdCliente: null, correoCliente: null,
     }));
     expect(await within(panel).findByText('Cambio a entregar')).toBeInTheDocument();
     expect(within(panel).getByText(/FV-00000007/)).toBeInTheDocument();

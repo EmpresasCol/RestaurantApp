@@ -83,6 +83,49 @@ namespace RestaurantApi.Controllers
             return CreatedAtAction(nameof(GetFactura), new { id = factura.Id }, ADto(factura));
         }
 
+        // POST: api/Facturas/5/anular
+        /// <summary>
+        /// Anula la factura con motivo obligatorio (queda quién y cuándo). Sin nuevoCliente la venta
+        /// se reversa; con nuevoCliente se vuelve a facturar a ese nombre. Responde la factura
+        /// anulada y, si la hay, la que la reemplaza.
+        /// </summary>
+        [HttpPost("{id}/anular")]
+        public async Task<IActionResult> Anular(int id, AnularFacturaDto dto)
+        {
+            var motivo = dto.Motivo?.Trim() ?? "";
+            if (motivo.Length is < 5 or > 300)
+                return BadRequest(new { message = "Escribe el motivo de la anulación (entre 5 y 300 caracteres)" });
+            if (dto.NuevoCliente is { } c)
+            {
+                if (string.IsNullOrWhiteSpace(c.Nit))
+                    return BadRequest(new { message = "Escribe la identificación del cliente para la factura nueva" });
+                var error = Facturacion.ValidarCliente(c.Nit, c.Nombre, c.TipoId ?? "CC", c.Correo);
+                if (error != null)
+                    return BadRequest(new { message = error });
+            }
+            if (!await _context.Facturas.AnyAsync(f => f.Id == id))
+                return NotFound(new { message = "Esa factura no existe" });
+
+            var (reemplazo, rechazo) = await DocumentosDian.AnularAsync(_context, id, motivo, QproClaims.IdUsuario(User), dto.NuevoCliente);
+            if (rechazo != null)
+                return Conflict(new { message = rechazo });
+
+            var ids = reemplazo == null ? new[] { id } : new[] { id, reemplazo.Id };
+            var facturas = await _context.Facturas.AsNoTracking().Where(f => ids.Contains(f.Id)).OrderBy(f => f.Id).ToListAsync();
+            var detalle = await Facturacion.ConDetalleAsync(_context, facturas);
+            return Ok(new { anulada = detalle[0], reemplazo = detalle.Count > 1 ? detalle[1] : null });
+        }
+
+        // POST: api/Facturas/5/reintentar
+        /// <summary>Vuelve a enviar a la DIAN los documentos rechazados de la factura, ya corregida la causa.</summary>
+        [HttpPost("{id}/reintentar")]
+        public async Task<IActionResult> Reintentar(int id)
+        {
+            if (await DocumentosDian.ReencolarAsync(_context, id) == 0)
+                return Conflict(new { message = "Esta factura no tiene documentos rechazados" });
+            return NoContent();
+        }
+
         private static FacturaDto ADto(Factura f) => new()
         {
             Id = f.Id,

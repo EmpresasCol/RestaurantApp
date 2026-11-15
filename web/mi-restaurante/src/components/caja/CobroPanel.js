@@ -5,13 +5,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Lock, Minus, Plus, Printer, Trash2, Users } from 'lucide-react';
 import * as api from '../../services/api';
-import { Boton, Campo, Chip, Panel } from '../inventario/ui';
+import { Boton, Campo, Chip, Panel, Selector } from '../inventario/ui';
 import {
   billetesSugeridos, cobrable, consumoElegido, consumoPedido, estadoPedido, estadoSolicitud, hora, METODOS, montosPagos,
-  nombreMetodo, partesIguales, pesos, platosPorCobrar, propinaSugerida, resumenPagos, validarNit,
+  nombreMetodo, partesIguales, pesos, platosPorCobrar, propinaSugerida, resumenPagos,
 } from '../../utils/caja';
 import { etiquetaImpuesto, impuestoIncluido } from '../../utils/impuestos';
 import { htmlFactura, imprimirHtml } from '../../utils/recibo';
+import { documentoVenta, errorCliente, nombreTipoDocumento, TIPOS_ID } from '../../utils/facturacion';
 
 const opcion = (activa) =>
   `h-11 rounded-xl border px-3 text-[14px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${activa ? 'border-espresso bg-espresso text-white' : 'border-gray-300 bg-white text-espresso hover:border-gray-400'}`;
@@ -19,8 +20,9 @@ const opcion = (activa) =>
 let siguienteClave = 1;
 const pagoLibre = (metodo = 'Efectivo', monto = '') => ({ clave: siguienteClave++, metodo, monto, recibido: '' });
 
-function Resultado({ cobro, onListo, onSeguir }) {
+function Resultado({ cobro, fiscal, onListo, onSeguir }) {
   const { factura } = cobro;
+  const electronico = documentoVenta(factura);
   return (
     <div className="flex flex-col items-center px-6 py-10 text-center" role="status">
       <span className="grid h-20 w-20 place-items-center rounded-full bg-green-50 text-green-700">
@@ -28,8 +30,11 @@ function Resultado({ cobro, onListo, onSeguir }) {
       </span>
       <p className="mt-4 text-[24px] font-extrabold tracking-[-0.02em] text-espresso">Cobrado</p>
       <p className="tabular mt-1 text-[15px] text-gray-500">
-        Factura {factura.numeroFactura} · {pesos(factura.total)}
+        {electronico ? nombreTipoDocumento(electronico.tipo) : 'Factura'} {factura.numeroFactura} · {pesos(factura.total)}
       </p>
+      {electronico && (
+        <p className="mt-1 text-[13px] text-gray-500">Se está validando ante la DIAN. Puedes entregar la tirilla ya.</p>
+      )}
       {cobro.recibido != null && (
         <div className="mt-6 w-full rounded-2xl bg-gray-100 px-5 py-4">
           <p className="text-[14px] font-semibold text-gray-600">Cambio a entregar</p>
@@ -43,7 +48,7 @@ function Resultado({ cobro, onListo, onSeguir }) {
         </p>
       )}
       <div className="mt-6 flex w-full flex-wrap gap-2">
-        <Boton variante="secundario" tamano="lg" className="flex-1" onClick={() => imprimirHtml(htmlFactura(factura, cobro))}>
+        <Boton variante="secundario" tamano="lg" className="flex-1" onClick={() => imprimirHtml(htmlFactura(factura, cobro, fiscal))}>
           <Printer size={18} aria-hidden="true" />Imprimir factura
         </Boton>
         {cobro.cuentaSaldada === false
@@ -79,7 +84,7 @@ function PagoAvisado({ pago, foto }) {
   );
 }
 
-export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
+export default function CobroPanel({ cuenta, fiscal, onCerrar, onCobrado, mostrar }) {
   const [modo, setModo] = useState('todo');
   const [seleccion, setSeleccion] = useState([]);
   const [elegidos, setElegidos] = useState({});
@@ -90,6 +95,8 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
   const [conDatos, setConDatos] = useState(false);
   const [nit, setNit] = useState('');
   const [nombre, setNombre] = useState('');
+  const [tipoId, setTipoId] = useState('CC');
+  const [correo, setCorreo] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [fotos, setFotos] = useState({});
@@ -118,7 +125,7 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
     // Versión anterior de la app: un solo método sin monto.
     const metodoAnterior = avisos.length === 0 ? solicitud?.metodoPago : null;
     setPagos(bloqueado ? [] : [pagoLibre(METODOS.some((m) => m.id === metodoAnterior) ? metodoAnterior : 'Efectivo')]);
-    setConDatos(false); setNit(''); setNombre(''); setResultado(null);
+    setConDatos(false); setNit(''); setNombre(''); setTipoId('CC'); setCorreo(''); setResultado(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesaId, ronda]);
 
@@ -165,7 +172,7 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
           : sobra > 0 ? `Los pagos se pasan por ${pesos(sobra)}`
             : falta > 0 ? `Faltan ${pesos(falta)} por pagar`
               : montos.some((m) => m <= 0) ? 'Quita el pago que quedó en cero'
-                : conDatos && !validarNit(nit) ? 'La cédula o NIT solo lleva números'
+                : conDatos ? errorCliente({ tipoId, nit, nombre, correo })
                   : null;
 
   const alternar = (id) => setSeleccion((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -196,6 +203,8 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
         ],
         nitCliente: conDatos ? nit.trim() : null,
         nombreCliente: conDatos ? nombre.trim() : null,
+        tipoIdCliente: conDatos ? tipoId : null,
+        correoCliente: conDatos && correo.trim() ? correo.trim() : null,
       });
       setResultado(res);
       onCobrado?.();
@@ -227,7 +236,7 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
       )}
     >
       {resultado ? (
-        <Resultado cobro={resultado} onListo={cerrar} onSeguir={() => { setResultado(null); setRonda((r) => r + 1); }} />
+        <Resultado cobro={resultado} fiscal={fiscal} onListo={cerrar} onSeguir={() => { setResultado(null); setRonda((r) => r + 1); }} />
       ) : cuenta && (
         <div className="space-y-6 p-5">
           {solicitud && estadoAviso !== 'pedida' && (
@@ -428,14 +437,21 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
             <label className="flex cursor-pointer items-center gap-3">
               <input type="checkbox" className="h-5 w-5 accent-espresso" checked={conDatos} onChange={(e) => setConDatos(e.target.checked)} />
               <span>
-                <span className="block text-[15px] font-bold text-espresso">Factura con datos del cliente</span>
-                <span className="block text-[13px] text-gray-500">Si no, sale a nombre de consumidor final.</span>
+                <span className="block text-[15px] font-bold text-espresso">Factura a nombre del cliente</span>
+                <span className="block text-[13px] text-gray-500">Pregúntale si la necesita a su nombre. Si no, sale a consumidor final y no se le piden datos.</span>
               </span>
             </label>
             {conDatos && (
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <Campo label="Cédula o NIT" inputMode="numeric" value={nit} onChange={(e) => setNit(e.target.value)} placeholder="900123456-7" />
+                <Selector label="Tipo de identificación" value={tipoId} onChange={(e) => setTipoId(e.target.value)}>
+                  {TIPOS_ID.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </Selector>
+                <Campo
+                  label="Número" inputMode={tipoId === 'CE' || tipoId === 'PA' ? 'text' : 'numeric'} value={nit} onChange={(e) => setNit(e.target.value)}
+                  placeholder={tipoId === 'NIT' ? '900123456-8' : ''} ayuda={tipoId === 'NIT' ? 'Con el dígito de verificación después del guion.' : undefined}
+                />
                 <Campo label="Nombre o razón social" value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={150} />
+                <Campo label="Correo (opcional)" type="email" inputMode="email" value={correo} onChange={(e) => setCorreo(e.target.value)} maxLength={150} ayuda="Ahí le llega la factura electrónica." />
               </div>
             )}
           </section>
@@ -443,7 +459,7 @@ export default function CobroPanel({ cuenta, onCerrar, onCobrado, mostrar }) {
           <section aria-label="Total" className="rounded-2xl border border-gray-200 p-4">
             <dl className="tabular space-y-1 text-[14px]">
               <div className="flex justify-between"><dt className="text-gray-600">Consumo</dt><dd className="font-semibold text-espresso">{pesos(consumo)}</dd></div>
-              <div className="flex justify-between text-[13px] text-gray-500"><dt>{etiquetaImpuesto()}</dt><dd>{pesos(impuestoIncluido(consumo))}</dd></div>
+              <div className="flex justify-between text-[13px] text-gray-500"><dt>{etiquetaImpuesto(fiscal?.config)}</dt><dd>{pesos(impuestoIncluido(consumo, fiscal?.config))}</dd></div>
               {propina > 0 && <div className="flex justify-between"><dt className="text-gray-600">Propina</dt><dd className="font-semibold text-espresso">{pesos(propina)}</dd></div>}
               <div className="flex items-baseline justify-between border-t border-gray-200 pt-2">
                 <dt className="text-[15px] font-bold text-espresso">Total a pagar</dt>

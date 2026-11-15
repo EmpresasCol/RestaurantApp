@@ -1,6 +1,11 @@
 // Factura y cierre en tirilla de 80 mm para la impresora térmica de la caja.
-import { etiquetaImpuesto, impuestoIncluido } from './impuestos';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
+import { QRCodeSVG } from 'qrcode.react';
+import { etiquetaImpuesto, impuestoFactura, impuestoIncluido } from './impuestos';
 import { pesos } from './caja';
+import { documentoVenta, nombreCodigo, numeracionDe, tituloDocumento } from './facturacion';
 
 const escapar = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -19,30 +24,83 @@ const ESTILO = `
   td { padding: 1px 0; vertical-align: top; }
   td.n { text-align: right; white-space: nowrap; }
   .total td { font-size: 16px; font-weight: 800; padding-top: 4px; }
+  .codigo { font-size: 10px; word-break: break-all; }
+  .qr { margin: 6px 0; }
 `;
 
 const fila = (izq, der, clase = '') => `<tr class="${clase}"><td>${izq}</td><td class="n">${der}</td></tr>`;
 
-/** HTML de la factura. extra: { recibido, cambio } del cobro en efectivo (no se guarda en la API). */
-export const htmlFactura = (f, extra = {}) => {
+/** Encabezado con los datos del vendedor (Datos fiscales); sin ellos, solo la marca. */
+const vendedor = (config) => {
+  if (!config?.razonSocial) return '<h1>Qpro</h1>';
+  const nit = config.nit ? `NIT ${escapar(config.nit)}${config.digitoVerificacion ? `-${escapar(config.digitoVerificacion)}` : ''}` : '';
+  const lugar = [config.direccion, config.municipio].filter(Boolean).map(escapar).join(', ');
+  return `<h1>${escapar(config.nombreComercial || config.razonSocial)}</h1>
+  ${config.nombreComercial ? `<p class="centro">${escapar(config.razonSocial)}</p>` : ''}
+  ${nit ? `<p class="centro">${nit}</p>` : ''}
+  ${lugar ? `<p class="centro suave">${lugar}</p>` : ''}
+  ${config.telefono ? `<p class="centro suave">Tel. ${escapar(config.telefono)}</p>` : ''}
+  ${config.regimen ? `<p class="centro suave">${escapar(config.regimen)}</p>` : ''}`;
+};
+
+/** SVG del código QR como texto. Se pinta en un nodo suelto: react-dom/server pesaría 67 kB más. */
+const svgQr = (valor) => {
+  const nodo = document.createElement('div');
+  const raiz = createRoot(nodo);
+  flushSync(() => raiz.render(<QRCodeSVG value={valor} size={132} level="M" />));
+  const svg = nodo.innerHTML;
+  raiz.unmount();
+  return svg;
+};
+
+const fechaCorta = (iso) => new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+
+/** Pie fiscal: resolución de numeración, código de la DIAN con su QR o el aviso de validación. */
+const pieDian = (f, fiscal) => {
+  const doc = documentoVenta(f);
+  if (!doc) return '';
+  const n = numeracionDe(f, fiscal?.numeraciones);
+  const resolucion = n ? `<p class="suave">Numeración autorizada${n.resolucion ? ` por resolución DIAN ${escapar(n.resolucion)}` : ''}: ${escapar(n.prefijo)}${n.desde} a ${escapar(n.prefijo)}${n.hasta}${n.fechaHasta ? `, vigente hasta ${fechaCorta(n.fechaHasta)}` : ''}.</p>` : '';
+  if (doc.estado !== 'Validado') {
+    return `<hr>${resolucion}<p class="centro"><strong>Documento en proceso de validación ante la DIAN.</strong></p>
+    <p class="centro suave">Reimprímelo desde Facturas cuando quede validado.</p>`;
+  }
+  const qr = doc.qrUrl ? `<p class="centro qr">${svgQr(doc.qrUrl)}</p>` : '';
+  return `<hr>${resolucion}
+  <p class="codigo"><strong>${nombreCodigo(doc.tipo)}:</strong> ${escapar(doc.cufe)}</p>
+  ${qr}
+  ${doc.mensaje ? `<p class="centro suave">${escapar(doc.mensaje)}</p>` : ''}`;
+};
+
+/**
+ * HTML de la factura. extra: { recibido, cambio } del cobro en efectivo (no se guarda en la API).
+ * fiscal: respuesta de GET api/fiscal (datos del vendedor y numeraciones); sin ella sale la tirilla simple.
+ */
+export const htmlFactura = (f, extra = {}, fiscal = null) => {
   const items = (f.items ?? [])
     .map((i) => fila(`${i.cantidad} × ${escapar(i.nombre)}`, pesos(i.total)))
     .join('');
+  const impuesto = impuestoFactura(f);
+  const identificado = f.tipoIdCliente || (f.nitCliente && f.nitCliente !== '222222222222');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapar(f.numeroFactura)}</title><style>${ESTILO}</style></head><body>
-  <h1>Qpro</h1>
-  <p class="centro suave">Factura de venta</p>
+  ${vendedor(fiscal?.config)}
+  <hr>
+  <p class="centro suave">${escapar(tituloDocumento(f))}</p>
   <p class="centro"><strong>${escapar(f.numeroFactura)}</strong></p>
+  ${f.anulada ? `<p class="centro"><strong>ANULADA</strong>${f.motivoAnulacion ? ` · ${escapar(f.motivoAnulacion)}` : ''}</p>` : ''}
   <p class="centro suave">${fechaHora(f.fechaEmision)}${f.mesaNumero ? ` · Mesa ${f.mesaNumero}` : ''}</p>
   ${f.domicilio ? `<p class="centro suave">${escapar(f.domicilio)}</p>` : ''}
   <hr>
   <p>Cliente: ${escapar(f.nombreCliente)}</p>
-  <p>CC/NIT: ${escapar(f.nitCliente)}</p>
+  <p>${identificado ? escapar(f.tipoIdCliente || 'CC/NIT') : 'CC/NIT'}: ${escapar(f.nitCliente)}</p>
+  ${f.correoCliente ? `<p>Correo: ${escapar(f.correoCliente)}</p>` : ''}
   <hr>
   <table>${items}</table>
   <hr>
   <table>
     ${fila('Consumo', pesos(f.subtotal))}
-    ${fila(`<span class="suave">${escapar(etiquetaImpuesto())}</span>`, `<span class="suave">${pesos(impuestoIncluido(f.subtotal))}</span>`)}
+    ${impuesto.valor > 0 ? fila('<span class="suave">Base gravable</span>', `<span class="suave">${pesos(impuesto.base)}</span>`) : ''}
+    ${fila(`<span class="suave">${escapar(impuesto.etiqueta)}</span>`, `<span class="suave">${impuesto.valor > 0 ? pesos(impuesto.valor) : ''}</span>`)}
     ${f.propina > 0 ? fila('Propina voluntaria', pesos(f.propina)) : ''}
     ${fila('Total', pesos(f.total), 'total')}
   </table>
@@ -52,6 +110,7 @@ export const htmlFactura = (f, extra = {}) => {
       .map((p) => fila(`Pago ${escapar(p.metodoPago === 'QR' ? 'Transferencia o QR' : p.metodoPago)}`, pesos(p.monto))).join('')}
     ${extra.recibido != null ? fila('Recibido en efectivo', pesos(extra.recibido)) + fila('Cambio', pesos(extra.cambio)) : ''}
   </table>
+  ${pieDian(f, fiscal)}
   <hr>
   <p class="centro">Gracias por su visita</p>
 </body></html>`;

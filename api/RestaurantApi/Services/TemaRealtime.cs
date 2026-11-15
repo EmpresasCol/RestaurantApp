@@ -24,7 +24,7 @@ namespace RestaurantApi.Services
 
             return recurso switch
             {
-                "pedidos" or "pedidodetalles" or "pagos" or "facturas" or "cuentas" => Pedidos,
+                "pedidos" or "pedidodetalles" or "pagos" or "facturas" or "cuentas" or "fiscal" => Pedidos,
                 "mesas" => Mesas,
                 "domicilios" or "domiciliarios" => Domicilios,
                 "compras" or "inventario" => Inventario,

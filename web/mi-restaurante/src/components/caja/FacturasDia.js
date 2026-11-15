@@ -1,11 +1,12 @@
 // Facturas emitidas en un día: búsqueda, detalle, reimpresión y exportación.
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, Download, FileText, Printer, Search } from 'lucide-react';
+import { Ban, ChevronDown, Download, ExternalLink, FileText, Printer, RefreshCw, Search } from 'lucide-react';
 import * as api from '../../services/api';
-import { Boton, Cargando, Lista, Vacio } from '../inventario/ui';
+import { Boton, BotonConfirmar, Campo, Cargando, Chip, Lista, Selector, Vacio } from '../inventario/ui';
 import { coincide } from '../../utils/administracion';
 import { hora, pesos } from '../../utils/caja';
-import { etiquetaImpuesto, impuestoIncluido } from '../../utils/impuestos';
+import { impuestoFactura } from '../../utils/impuestos';
+import { documentoVenta, errorCliente, estadoDian, nombreCodigo, TIPOS_ID } from '../../utils/facturacion';
 import { htmlFactura, imprimirHtml } from '../../utils/recibo';
 
 const nombreMetodo = (m) => (m === 'QR' ? 'Transferencia o QR' : m);
@@ -14,12 +15,71 @@ export const csvFacturas = (facturas) => {
   const celda = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const filas = facturas.map((f) => [
     f.numeroFactura, new Date(f.fechaEmision).toLocaleString('es-CO'), f.mesaNumero ?? (f.domicilioId ? `Domicilio #${f.domicilioId}` : ''), f.nombreCliente, f.nitCliente,
-    nombreMetodo(f.metodoPago), f.subtotal, impuestoIncluido(f.subtotal), f.propina, f.total,
+    nombreMetodo(f.metodoPago), f.subtotal, impuestoFactura(f).base, impuestoFactura(f).valor, f.propina, f.total,
+    estadoDian(f)?.texto ?? 'Sin documento electrónico', documentoVenta(f)?.cufe ?? '',
   ].map(celda).join(';'));
-  return ['Factura;Fecha;Mesa;Cliente;CC/NIT;Pago;Consumo;Impoconsumo incluido;Propina;Total', ...filas].join('\n');
+  return ['Factura;Fecha;Mesa;Cliente;CC/NIT;Pago;Consumo;Base gravable;Impuesto incluido;Propina;Total;Estado DIAN;CUFE/CUDE', ...filas].join('\n');
 };
 
-export default function FacturasDia({ fecha, onFecha, version, mostrar }) {
+/** Anular: motivo obligatorio y, si solo estaban mal los datos, volver a facturar a nombre del cliente. */
+function Anular({ factura, onAnulada, onCancelar, mostrar }) {
+  const [motivo, setMotivo] = useState('');
+  const [refacturar, setRefacturar] = useState(false);
+  const [cliente, setCliente] = useState({ tipoId: 'CC', nit: '', nombre: '', correo: '' });
+  const [enviando, setEnviando] = useState(false);
+  const campo = (k) => (e) => setCliente((c) => ({ ...c, [k]: e.target.value }));
+  const error = motivo.trim().length < 5 ? 'Escribe el motivo (mínimo 5 letras)' : refacturar ? errorCliente(cliente) : null;
+
+  const anular = async () => {
+    if (error || enviando) return;
+    setEnviando(true);
+    try {
+      const r = await api.anularFactura(factura.id, { motivo: motivo.trim(), nuevoCliente: refacturar ? { ...cliente, nit: cliente.nit.trim(), nombre: cliente.nombre.trim(), correo: cliente.correo.trim() || null } : null });
+      mostrar(r.reemplazo ? `Anulada. Nueva factura ${r.reemplazo.numeroFactura}` : `Factura ${factura.numeroFactura} anulada`);
+      onAnulada();
+    } catch (e) {
+      mostrar(e.message, 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-2xl border border-red-200 bg-white p-4">
+      <p className="text-[15px] font-bold text-espresso">Anular la factura {factura.numeroFactura}</p>
+      <p className="mt-1 text-[13px] text-gray-600">
+        {refacturar
+          ? 'La venta sigue en pie: esta factura se anula y sale otra a nombre del cliente.'
+          : 'La venta se reversa: deja de contar en el cierre y debes devolver el dinero. El número no se vuelve a usar.'}
+      </p>
+      <Campo className="mt-3" label="Motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={300} placeholder="Por ejemplo: el cliente pidió factura a nombre de su empresa" />
+      <label className="mt-3 flex cursor-pointer items-center gap-3">
+        <input type="checkbox" className="h-5 w-5 accent-espresso" checked={refacturar} onChange={(e) => setRefacturar(e.target.checked)} />
+        <span className="text-[14px] font-semibold text-espresso">Solo corregir los datos del cliente (volver a facturar)</span>
+      </label>
+      {refacturar && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Selector label="Tipo de identificación" value={cliente.tipoId} onChange={campo('tipoId')}>
+            {TIPOS_ID.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </Selector>
+          <Campo label="Número" value={cliente.nit} onChange={campo('nit')} placeholder={cliente.tipoId === 'NIT' ? '900123456-8' : ''} />
+          <Campo label="Nombre o razón social" value={cliente.nombre} onChange={campo('nombre')} maxLength={150} />
+          <Campo label="Correo (opcional)" type="email" value={cliente.correo} onChange={campo('correo')} maxLength={150} />
+        </div>
+      )}
+      {error && motivo.trim().length >= 5 && <p className="mt-2 text-[13px] font-semibold text-red-700" role="alert">{error}</p>}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <BotonConfirmar disabled={!!error || enviando} onConfirmar={anular} confirmar="Toca otra vez para anular">
+          <Ban size={15} aria-hidden="true" />{refacturar ? 'Anular y volver a facturar' : 'Anular factura'}
+        </BotonConfirmar>
+        <Boton variante="fantasma" tamano="sm" onClick={onCancelar}>No anular</Boton>
+      </div>
+    </div>
+  );
+}
+
+export default function FacturasDia({ fecha, onFecha, version, mostrar, fiscal = null, onCambio }) {
+  const [anulando, setAnulando] = useState(null);
   const [facturas, setFacturas] = useState(null);
   const [q, setQ] = useState('');
   const [abierta, setAbierta] = useState(null);
@@ -33,7 +93,19 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar }) {
 
   const visibles = (facturas ?? []).filter((f) => !q.trim()
     || coincide(f.numeroFactura, q) || coincide(f.nombreCliente, q) || coincide(f.nitCliente, q) || String(f.mesaNumero ?? '') === q.trim());
-  const total = visibles.reduce((t, f) => t + f.total, 0);
+  // Lo anulado sin reemplazo es una venta reversada: se ve en la lista pero no suma.
+  const total = visibles.filter((f) => !f.anulada).reduce((t, f) => t + f.total, 0);
+  const porResolver = (facturas ?? []).filter((f) => documentoVenta(f)?.estado === 'Rechazado' && !f.anulada).length;
+
+  const reintentar = async (f) => {
+    try {
+      await api.reintentarFactura(f.id);
+      mostrar('Documento enviado de nuevo a la DIAN');
+      cargar();
+    } catch (e) {
+      mostrar(e.message, 'error');
+    }
+  };
 
   const exportar = () => {
     const url = URL.createObjectURL(new Blob(['﻿' + csvFacturas(visibles)], { type: 'text/csv;charset=utf-8;' }));
@@ -63,14 +135,22 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar }) {
 
       {!facturas ? <Cargando filas={4} /> : visibles.length === 0 ? (
         <div className="rounded-2xl border border-gray-200 bg-white">
-          <Vacio icono={FileText} titulo={facturas.length ? 'Ninguna factura coincide' : 'No hay facturas este día'} texto={facturas.length ? 'Prueba con otra búsqueda.' : 'Cada cobro de mesa y cada domicilio entregado emite su factura con número consecutivo.'} />
+          <Vacio icono={FileText} titulo={facturas.length ? 'Ninguna factura coincide' : 'No hay facturas este día'} texto={facturas.length ? 'Prueba con otra búsqueda.' : 'Cada cobro de mesa y cada domicilio entregado emite su documento con número consecutivo.'} />
         </div>
       ) : (
         <>
+          {porResolver > 0 && (
+            <p className="mb-3 rounded-2xl bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-800" role="alert">
+              {porResolver === 1 ? 'Hay 1 documento rechazado' : `Hay ${porResolver} documentos rechazados`} por la DIAN. Ábrelo para ver el motivo: corrígelo y reenvíalo, o anúlalo. La caja no se puede cerrar mientras tanto.
+            </p>
+          )}
           <p className="tabular mb-2 text-[13px] text-gray-500">{visibles.length} factura{visibles.length === 1 ? '' : 's'} · {pesos(total)}</p>
           <Lista>
             {visibles.map((f) => {
               const expandida = abierta === f.id;
+              const dian = estadoDian(f);
+              const doc = documentoVenta(f);
+              const impuesto = impuestoFactura(f);
               return (
                 <div key={f.id}>
                   <button
@@ -83,7 +163,8 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar }) {
                         {hora(f.fechaEmision)}{f.mesaNumero ? ` · Mesa ${f.mesaNumero}` : f.domicilioId ? ` · Domicilio #${f.domicilioId}` : ''} · {f.nombreCliente} · {nombreMetodo(f.metodoPago)}
                       </span>
                     </span>
-                    <span className="tabular text-[17px] font-extrabold text-espresso">{pesos(f.total)}</span>
+                    {dian && <Chip tono={dian.tono}>{dian.texto}</Chip>}
+                    <span className={`tabular text-[17px] font-extrabold ${f.anulada ? 'text-gray-500 line-through' : 'text-espresso'}`}>{pesos(f.total)}</span>
                     <ChevronDown size={18} className={`text-gray-500 transition-transform ${expandida ? 'rotate-180' : ''}`} aria-hidden="true" />
                   </button>
                   {expandida && (
@@ -98,7 +179,7 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar }) {
                       </ul>
                       <dl className="tabular mt-3 space-y-0.5 border-t border-gray-200 pt-2 text-[14px]">
                         <div className="flex justify-between"><dt>{f.domicilioId ? 'Productos y envío' : 'Consumo'}</dt><dd>{pesos(f.subtotal)}</dd></div>
-                        <div className="flex justify-between text-[13px] text-gray-500"><dt>{etiquetaImpuesto()}</dt><dd>{pesos(impuestoIncluido(f.subtotal))}</dd></div>
+                        <div className="flex justify-between text-[13px] text-gray-500"><dt>{impuesto.etiqueta}</dt><dd>{impuesto.valor > 0 ? pesos(impuesto.valor) : ''}</dd></div>
                         {f.propina > 0 && <div className="flex justify-between"><dt>Propina</dt><dd>{pesos(f.propina)}</dd></div>}
                         <div className="flex justify-between font-bold text-espresso"><dt>Total</dt><dd>{pesos(f.total)}</dd></div>
                       </dl>
@@ -106,11 +187,33 @@ export default function FacturasDia({ fecha, onFecha, version, mostrar }) {
                         <p className="tabular mt-2 text-[13px] text-gray-600">Pagos: {f.pagos.map((p) => `${nombreMetodo(p.metodoPago)} ${pesos(p.monto)}`).join(' + ')}</p>
                       )}
                       <p className="mt-2 text-[13px] text-gray-500">
-                        CC/NIT {f.nitCliente} · {f.domicilio ?? `pedidos ${f.pedidoIds.map((id) => `#${id}`).join(', ')}`}
+                        {f.tipoIdCliente ?? 'CC/NIT'} {f.nitCliente}{f.correoCliente ? ` · ${f.correoCliente}` : ''} · {f.domicilio ?? `pedidos ${f.pedidoIds.map((id) => `#${id}`).join(', ')}`}
                       </p>
-                      <Boton variante="secundario" tamano="sm" className="mt-3" onClick={() => imprimirHtml(htmlFactura(f))}>
-                        <Printer size={15} aria-hidden="true" />Reimprimir
-                      </Boton>
+                      {dian?.detalle && (
+                        <p className={`mt-2 rounded-xl px-3 py-2 text-[13px] ${dian.tono === 'peligro' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900'}`}>
+                          <strong>{f.anulada ? 'Motivo de la anulación' : 'Respuesta de la DIAN'}:</strong> {dian.detalle}
+                        </p>
+                      )}
+                      {doc?.cufe && <p className="mt-2 break-all text-[12px] text-gray-500">{nombreCodigo(doc.tipo)}: {doc.cufe}</p>}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Boton variante="secundario" tamano="sm" onClick={() => imprimirHtml(htmlFactura(f, {}, fiscal))}>
+                          <Printer size={15} aria-hidden="true" />Reimprimir
+                        </Boton>
+                        {doc?.urlPdf && (
+                          <a href={doc.urlPdf} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 text-[13px] font-bold text-espresso hover:bg-gray-50">
+                            <ExternalLink size={15} aria-hidden="true" />PDF de la DIAN
+                          </a>
+                        )}
+                        {doc?.estado === 'Rechazado' && !f.anulada && (
+                          <Boton variante="secundario" tamano="sm" onClick={() => reintentar(f)}><RefreshCw size={15} aria-hidden="true" />Enviar de nuevo</Boton>
+                        )}
+                        {!f.anulada && anulando !== f.id && (
+                          <Boton variante="peligro" tamano="sm" onClick={() => setAnulando(f.id)}><Ban size={15} aria-hidden="true" />Anular</Boton>
+                        )}
+                      </div>
+                      {anulando === f.id && !f.anulada && (
+                        <Anular factura={f} mostrar={mostrar} onCancelar={() => setAnulando(null)} onAnulada={() => { setAnulando(null); cargar(); onCambio?.(); }} />
+                      )}
                     </div>
                   )}
                 </div>

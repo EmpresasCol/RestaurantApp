@@ -23,8 +23,10 @@ namespace RestaurantApi.Services
         // Pagos de mesa con su pedido (platos, mesero y mesa).
         private async Task<List<(Pago Pago, Pedido? Pedido)>> PagosAsync(DateTime desde, DateTime hasta)
         {
+            // Una factura anulada sin reemplazo es una venta reversada: no cuenta en ventas ni en el cajón.
             var pagos = await _ctx.Pagos.AsNoTracking()
                 .Where(p => p.Fecha >= desde && p.Fecha < hasta)
+                .Where(p => !_ctx.Facturas.Any(f => f.Id == p.FacturaId && f.Anulada))
                 .ToListAsync();
             var ids = pagos.Select(p => p.PedidoId).Distinct().ToList();
             var pedidos = await _ctx.Pedidos.AsNoTracking()
@@ -40,6 +42,7 @@ namespace RestaurantApi.Services
         private Task<List<Domicilio>> DomiciliosAsync(DateTime desde, DateTime hasta) => _ctx.Domicilios.AsNoTracking()
             .Include(d => d.Detalles).ThenInclude(x => x.Platillo)
             .Where(d => d.Estado == "Entregado" && (d.FechaEntrega ?? d.FechaPedido) >= desde && (d.FechaEntrega ?? d.FechaPedido) < hasta)
+            .Where(d => !_ctx.Facturas.Any(f => f.DomicilioId == d.Id && f.Anulada))
             .ToListAsync();
 
         // Una cuenta = una factura (o un pago suelto anterior a las facturas por cuenta).
@@ -111,7 +114,7 @@ namespace RestaurantApi.Services
             var pagos = await PagosAsync(desde, hasta);
             var domicilios = await DomiciliosAsync(desde, hasta);
             var facturas = await _ctx.Facturas.AsNoTracking()
-                .Where(f => f.FechaEmision >= desde && f.FechaEmision < hasta)
+                .Where(f => f.FechaEmision >= desde && f.FechaEmision < hasta && !f.Anulada)
                 .Select(f => f.NumeroFactura)
                 .OrderBy(n => n)
                 .ToListAsync();

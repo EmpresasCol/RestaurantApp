@@ -100,8 +100,76 @@ CREATE TABLE Facturas (
     Total DECIMAL(10,2) NOT NULL,
     ArchivoUrl VARCHAR(255),
     FechaEmision DATETIME DEFAULT CURRENT_TIMESTAMP,
+    TipoIdCliente VARCHAR(5) NULL,
+    CorreoCliente VARCHAR(150) NULL,
+    NombreImpuesto VARCHAR(20) NULL,
+    TarifaImpuesto DECIMAL(5,2) NULL,
+    BaseImpuesto DECIMAL(12,2) NULL,
+    ValorImpuesto DECIMAL(12,2) NULL,
+    Anulada TINYINT(1) NOT NULL DEFAULT 0,
+    FechaAnulacion DATETIME NULL,
+    MotivoAnulacion VARCHAR(300) NULL,
+    UsuarioAnulaId INT NULL,
+    ReemplazaAId INT NULL,
     UNIQUE INDEX ux_facturas_domicilio (DomicilioId),
     FOREIGN KEY (PagoId) REFERENCES Pagos(Id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- Facturación electrónica (DIAN): datos fiscales, numeraciones y cola de documentos.
+CREATE TABLE ConfiguracionFiscal (
+    Id INT PRIMARY KEY,
+    RazonSocial VARCHAR(150) NOT NULL DEFAULT '',
+    NombreComercial VARCHAR(150) NULL,
+    Nit VARCHAR(15) NOT NULL DEFAULT '',
+    DigitoVerificacion VARCHAR(1) NULL,
+    Direccion VARCHAR(200) NULL,
+    Municipio VARCHAR(100) NULL,
+    Telefono VARCHAR(30) NULL,
+    Correo VARCHAR(150) NULL,
+    Regimen VARCHAR(200) NULL,
+    TipoImpuesto VARCHAR(10) NOT NULL DEFAULT 'INC',
+    TarifaImpuesto DECIMAL(5,2) NOT NULL DEFAULT 8.00,
+    FacturacionElectronica TINYINT(1) NOT NULL DEFAULT 0,
+    DocumentoConsumidorFinal VARCHAR(10) NOT NULL DEFAULT 'POS'
+) ENGINE=InnoDB;
+
+CREATE TABLE NumeracionesDian (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    TipoDocumento VARCHAR(15) NOT NULL,
+    Resolucion VARCHAR(50) NULL,
+    Prefijo VARCHAR(6) NOT NULL,
+    Desde BIGINT NOT NULL,
+    Hasta BIGINT NOT NULL,
+    FechaDesde DATE NULL,
+    FechaHasta DATE NULL,
+    Siguiente BIGINT NOT NULL,
+    Activa TINYINT(1) NOT NULL DEFAULT 1,
+    INDEX idx_numeraciones_tipo (TipoDocumento, Activa)
+) ENGINE=InnoDB;
+
+CREATE TABLE DocumentosElectronicos (
+    Id INT AUTO_INCREMENT PRIMARY KEY,
+    FacturaId INT NOT NULL,
+    Tipo VARCHAR(15) NOT NULL,
+    Prefijo VARCHAR(6) NOT NULL,
+    Numero BIGINT NOT NULL,
+    Cufe VARCHAR(120) NULL,
+    Estado VARCHAR(15) NOT NULL DEFAULT 'Pendiente',
+    Mensaje VARCHAR(500) NULL,
+    UrlPdf VARCHAR(500) NULL,
+    UrlXml VARCHAR(500) NULL,
+    QrUrl VARCHAR(500) NULL,
+    Intentos INT NOT NULL DEFAULT 0,
+    ProximoIntento DATETIME NULL,
+    FechaGeneracion DATETIME NOT NULL,
+    FechaValidacion DATETIME NULL,
+    DocumentoReferenciaId INT NULL,
+    Motivo VARCHAR(300) NULL,
+    ClaveIdempotencia VARCHAR(40) NOT NULL,
+    UNIQUE INDEX ux_documentos_clave (ClaveIdempotencia),
+    INDEX idx_documentos_cola (Estado, ProximoIntento),
+    INDEX idx_documentos_factura (FacturaId),
+    FOREIGN KEY (FacturaId) REFERENCES Facturas(Id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;
 
 CREATE TABLE UsuariosFCM (

@@ -78,6 +78,13 @@ namespace RestaurantApi.Controllers
             if (dia > HoraLocal.AhoraColombia().Date)
                 return BadRequest(new { message = "No se cierra una caja de un día que no ha llegado" });
 
+            // Un documento que la DIAN rechazó se corrige o se anula el mismo día, no después de cerrar.
+            var desde = HoraLocal.AUtc(dia);
+            var rechazados = await _context.DocumentosElectronicos.CountAsync(d =>
+                d.Estado == DocumentoElectronico.Rechazado && d.FechaGeneracion >= desde && d.FechaGeneracion < desde.AddDays(1));
+            if (rechazados > 0)
+                return Conflict(new { message = $"Hay {rechazados} documento(s) rechazado(s) por la DIAN ese día. Revísalos en Facturas del día (reintentar o anular) antes de cerrar la caja." });
+
             var registro = await _context.CierresCaja.FirstOrDefaultAsync(c => c.FechaCaja == dia);
             if (registro?.FechaCierre != null && !User.IsInRole(nameof(RolUsuario.Administrador)))
                 return Conflict(new { message = "La caja de ese día ya se cerró. Pide al administrador que la reabra." });

@@ -226,7 +226,7 @@ function AppContent() {
           </ProtectedRoute>
         );
       case 'facturacion':
-        return <ProtectedRoute permisos={['administrador', 'caja']}><Facturacion /></ProtectedRoute>;
+        return <ProtectedRoute permisos={['administrador', 'caja']}><Facturacion esAdmin={usuario?.rol?.toLowerCase() === 'administrador'} /></ProtectedRoute>;
       case 'qr':
         return <ProtectedRoute permisos={['administrador']}><GeneradorQR /></ProtectedRoute>;
       case 'reportes':

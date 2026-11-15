@@ -5,6 +5,12 @@ using RestaurantApi.Models;
 
 namespace RestaurantApi.Services
 {
+    /// <summary>Regla de facturación que impide la operación; la API responde 409 con este mensaje.</summary>
+    public class FacturacionException : Exception
+    {
+        public FacturacionException(string mensaje) : base(mensaje) { }
+    }
+
     /// <summary>Consecutivo, datos del cliente y detalle de las facturas de caja.</summary>
     public static class Facturacion
     {
@@ -29,9 +35,138 @@ namespace RestaurantApi.Services
             f.NombreCliente = string.IsNullOrWhiteSpace(nombre) ? NombreConsumidorFinal : nombre.Trim();
         }
 
-        /// <summary>Guarda la factura con el siguiente consecutivo; si dos cajas chocan, reintenta.</summary>
+        public static readonly string[] TiposId = { "CC", "NIT", "CE", "TI", "PA" };
+
+        /// <summary>
+        /// Datos de quien pide factura a su nombre. La cédula o el NIT llevan solo números; cédula
+        /// de extranjería y pasaporte admiten letras. Un NIT con dígito de verificación se comprueba.
+        /// </summary>
+        public static string? ValidarCliente(string? nit, string? nombre, string? tipoId, string? correo)
+        {
+            tipoId = string.IsNullOrWhiteSpace(tipoId) ? null : tipoId.Trim().ToUpperInvariant();
+            if (tipoId != null && !TiposId.Contains(tipoId))
+                return "Tipo de identificación inválido";
+            if (nombre?.Trim().Length > 150)
+                return "El nombre del cliente admite máximo 150 caracteres";
+            if (!string.IsNullOrWhiteSpace(correo) && (correo.Trim().Length > 150 || !Regex.IsMatch(correo.Trim(), @"^[^@\s]+@[^@\s]+\.[^@\s]+$")))
+                return "El correo del cliente no es válido";
+            if (string.IsNullOrWhiteSpace(nit))
+                return tipoId != null || !string.IsNullOrWhiteSpace(correo) ? "Escribe el número de identificación del cliente" : null;
+
+            nit = nit.Trim();
+            if (tipoId != null && string.IsNullOrWhiteSpace(nombre))
+                return "Escribe el nombre o la razón social del cliente";
+            if (tipoId is "CE" or "PA")
+                return Regex.IsMatch(nit, @"^[A-Za-z0-9]{4,20}$") ? null : "El documento solo lleva letras y números";
+            if (ValidarCliente(nit, nombre) is { } error)
+                return error;
+            if (tipoId == "NIT" && nit.Contains('-') && nit[^1] - '0' != DigitoVerificacion(nit[..^2]))
+                return "El dígito de verificación del NIT no coincide";
+            return null;
+        }
+
+        /// <summary>Dígito de verificación de un NIT (módulo 11 con los pesos de la DIAN).</summary>
+        public static int DigitoVerificacion(string nit)
+        {
+            int[] pesos = { 3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71 };
+            var suma = nit.Reverse().Select((c, i) => (c - '0') * pesos[i]).Sum();
+            var resto = suma % 11;
+            return resto > 1 ? 11 - resto : resto;
+        }
+
+        public static void AsignarCliente(Factura f, string? nit, string? nombre, string? tipoId, string? correo)
+        {
+            AsignarCliente(f, nit, nombre);
+            var identificado = !string.IsNullOrWhiteSpace(nit);
+            f.TipoIdCliente = !identificado ? null : string.IsNullOrWhiteSpace(tipoId) ? "CC" : tipoId.Trim().ToUpperInvariant();
+            f.CorreoCliente = identificado && !string.IsNullOrWhiteSpace(correo) ? correo.Trim() : null;
+        }
+
+        public static Task<ConfiguracionFiscal?> ConfiguracionAsync(RestauranteContext ctx)
+            => ctx.ConfiguracionFiscal.AsNoTracking().FirstOrDefaultAsync();
+
+        /// <summary>
+        /// Separa el impuesto del precio (la carta ya lo incluye): base + impuesto = consumo. La
+        /// propina no entra en la base. Sin configuración se asume impoconsumo del 8 %.
+        /// </summary>
+        public static void DiscriminarImpuesto(Factura f, ConfiguracionFiscal? cfg)
+        {
+            var tipo = cfg?.TipoImpuesto ?? ConfiguracionFiscal.Inc;
+            var tarifa = cfg?.TarifaImpuesto ?? 8;
+            if (tipo == ConfiguracionFiscal.SinImpuesto || tarifa <= 0)
+            {
+                (f.NombreImpuesto, f.TarifaImpuesto, f.BaseImpuesto, f.ValorImpuesto) = (null, 0, f.Subtotal, 0);
+                return;
+            }
+            f.NombreImpuesto = tipo == ConfiguracionFiscal.Iva ? "IVA" : "Impoconsumo";
+            f.TarifaImpuesto = tarifa;
+            f.BaseImpuesto = Math.Round(f.Subtotal / (1 + tarifa / 100), 2, MidpointRounding.AwayFromZero);
+            f.ValorImpuesto = f.Subtotal - f.BaseImpuesto;
+        }
+
+        /// <summary>Factura electrónica si el cliente se identificó; si no, el documento del consumidor final.</summary>
+        public static string TipoDocumento(Factura f, ConfiguracionFiscal cfg)
+            => f.NitCliente != null && f.NitCliente != NitConsumidorFinal ? DocumentoElectronico.Fev : cfg.DocumentoConsumidorFinal;
+
+        public static string NombreTipo(string tipo) => tipo switch
+        {
+            DocumentoElectronico.Pos => "documento equivalente POS",
+            DocumentoElectronico.Fev => "factura electrónica",
+            DocumentoElectronico.NotaAjuste => "nota de ajuste",
+            _ => "nota crédito"
+        };
+
+        /// <summary>Rango vigente hoy: activo, dentro de sus fechas y con números por entregar.</summary>
+        public static bool Vigente(NumeracionDian n, DateTime hoyColombia)
+            => n.Activa && n.Siguiente <= n.Hasta
+               && (n.FechaDesde == null || n.FechaDesde.Value.Date <= hoyColombia.Date)
+               && (n.FechaHasta == null || n.FechaHasta.Value.Date >= hoyColombia.Date);
+
+        /// <summary>
+        /// Entrega el siguiente número autorizado del tipo, con candado sobre los rangos: dos cajas
+        /// a la vez nunca reciben el mismo. Requiere una transacción abierta. No guarda.
+        /// </summary>
+        private static async Task<NumeracionDian> TomarNumeroAsync(RestauranteContext ctx, string tipo)
+        {
+            if (ctx.Database.IsRelational())
+                await ctx.Database.ExecuteSqlInterpolatedAsync($"SELECT Id FROM NumeracionesDian WHERE TipoDocumento = {tipo} FOR UPDATE");
+            var hoy = HoraLocal.AhoraColombia();
+            var rangos = await ctx.NumeracionesDian.Where(n => n.TipoDocumento == tipo && n.Activa).OrderBy(n => n.Id).ToListAsync();
+            foreach (var r in rangos) await ctx.Entry(r).ReloadAsync(); // lo confirmado por quien tenía el candado
+            return rangos.FirstOrDefault(n => Vigente(n, hoy))
+                ?? throw new FacturacionException($"No hay numeración DIAN vigente para {NombreTipo(tipo)}: el rango se agotó o venció. Regístrala en Datos fiscales para seguir cobrando.");
+        }
+
+        /// <summary>
+        /// Guarda la factura con su número. Con facturación electrónica toma el número autorizado
+        /// por la DIAN y deja el documento en cola para el proveedor en la misma transacción; sin
+        /// ella usa el consecutivo interno (si dos cajas chocan, reintenta).
+        /// </summary>
         public static async Task EmitirAsync(RestauranteContext ctx, Factura factura)
         {
+            var cfg = await ConfiguracionAsync(ctx);
+            DiscriminarImpuesto(factura, cfg);
+
+            if (cfg?.FacturacionElectronica == true)
+            {
+                await using var propia = ctx.Database.CurrentTransaction != null ? null
+                    : ctx.Database.IsRelational() ? await ctx.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted)
+                    : await ctx.Database.BeginTransactionAsync();
+                var tipo = TipoDocumento(factura, cfg);
+                var rango = await TomarNumeroAsync(ctx, tipo);
+                var numero = rango.Siguiente++;
+                factura.NumeroFactura = $"{rango.Prefijo}{numero}";
+                ctx.DocumentosElectronicos.Add(new DocumentoElectronico
+                {
+                    Factura = factura, Tipo = tipo, Prefijo = rango.Prefijo, Numero = numero,
+                    ClaveIdempotencia = $"{tipo}-{rango.Prefijo}{numero}",
+                    FechaGeneracion = DateTime.UtcNow, ProximoIntento = DateTime.UtcNow
+                });
+                await ctx.SaveChangesAsync();
+                if (propia != null) await propia.CommitAsync();
+                return;
+            }
+
             for (var intento = 0; ; intento++)
             {
                 factura.NumeroFactura = await SiguienteNumeroAsync(ctx);
@@ -68,7 +203,11 @@ namespace RestaurantApi.Services
         public static async Task<Factura> EmitirDomicilioAsync(RestauranteContext ctx, Domicilio d, string nombreCliente)
         {
             var existente = await ctx.Facturas.FirstOrDefaultAsync(f => f.DomicilioId == d.Id);
-            if (existente != null) return existente;
+            if (existente != null)
+            {
+                await ctx.SaveChangesAsync();
+                return existente;
+            }
 
             var factura = new Factura
             {
@@ -105,6 +244,8 @@ namespace RestaurantApi.Services
                 .Include(p => p.Detalles).ThenInclude(d => d.Platillo)
                 .Where(p => pedidoIds.Contains(p.Id))
                 .ToDictionaryAsync(p => p.Id);
+            var documentos = (await ctx.DocumentosElectronicos.AsNoTracking()
+                .Where(d => ids.Contains(d.FacturaId)).OrderBy(d => d.Id).ToListAsync()).ToLookup(d => d.FacturaId);
             var domicilioIds = facturas.Where(f => f.DomicilioId != null).Select(f => f.DomicilioId!.Value).ToList();
             var domicilios = await ctx.Domicilios.AsNoTracking()
                 .Include(d => d.Cliente)
@@ -127,7 +268,17 @@ namespace RestaurantApi.Services
                     Propina = f.Propina,
                     Total = f.Total,
                     ArchivoUrl = f.ArchivoUrl,
-                    FechaEmision = f.FechaEmision
+                    FechaEmision = f.FechaEmision,
+                    TipoIdCliente = f.TipoIdCliente,
+                    CorreoCliente = f.CorreoCliente,
+                    NombreImpuesto = f.NombreImpuesto,
+                    TarifaImpuesto = f.TarifaImpuesto,
+                    BaseImpuesto = f.BaseImpuesto,
+                    ValorImpuesto = f.ValorImpuesto,
+                    Anulada = f.Anulada,
+                    MotivoAnulacion = f.MotivoAnulacion,
+                    ReemplazaAId = f.ReemplazaAId,
+                    Documentos = documentos[f.Id].Select(DocumentosDian.ADto).ToList()
                 };
 
                 if (f.DomicilioId is { } domicilioId && domicilios.TryGetValue(domicilioId, out var dom))

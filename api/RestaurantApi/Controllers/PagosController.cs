@@ -56,7 +56,7 @@ namespace RestaurantApi.Controllers
             if (dto.Propina < 0)
                 return BadRequest(new { message = "La propina no puede ser negativa" });
 
-            var errorCliente = Facturacion.ValidarCliente(dto.NitCliente, dto.NombreCliente);
+            var errorCliente = Facturacion.ValidarCliente(dto.NitCliente, dto.NombreCliente, dto.TipoIdCliente, dto.CorreoCliente);
             if (errorCliente != null)
                 return BadRequest(new { message = errorCliente });
 
@@ -225,7 +225,7 @@ namespace RestaurantApi.Controllers
                 Total = total,
                 FechaEmision = ahora
             };
-            Facturacion.AsignarCliente(factura, dto.NitCliente, dto.NombreCliente);
+            Facturacion.AsignarCliente(factura, dto.NitCliente, dto.NombreCliente, dto.TipoIdCliente, dto.CorreoCliente);
             await Facturacion.EmitirAsync(_context, factura);
 
             foreach (var r in registros) r.FacturaId = factura.Id;
@@ -282,6 +282,10 @@ namespace RestaurantApi.Controllers
             if (crearPago.MontoPropina < 0)
                 return BadRequest("La propina no puede ser negativa");
 
+            // Este pago no emite documento: con facturación electrónica toda venta sale por el cobro de la cuenta.
+            if ((await Facturacion.ConfiguracionAsync(_context))?.FacturacionElectronica == true)
+                return Conflict(new { message = "Con facturación electrónica el cobro se hace desde la cuenta de la mesa" });
+
             var mesaDelPago = await _context.Pedidos.Where(p => p.Id == crearPago.PedidoId).Select(p => (int?)p.MesaId).FirstOrDefaultAsync();
             if (mesaDelPago == null)
                 return NotFound("Pedido no encontrado");
@@ -297,6 +301,11 @@ namespace RestaurantApi.Controllers
 
             if (await _context.Pagos.AnyAsync(p => p.PedidoId == pedido.Id))
                 return Conflict(new { message = $"El pedido {pedido.Id} ya fue pagado" });
+
+            // Una cuenta dividida deja platos ya facturados sin un pago a nombre de este pedido:
+            // cobrarlo entero aquí los cobraría dos veces.
+            if (pedido.Detalles.Any(d => d.FacturaId != null))
+                return Conflict(new { message = $"Parte del pedido #{pedido.Id} ya se cobró. Cobra el resto desde la cuenta de la mesa." });
 
             if (!EstadosPedido.PuedeCambiar(pedido.Estado, EstadoPedido.Pagado))
                 return Conflict(new { message = $"Un pedido {pedido.Estado} no se puede cobrar" });
