@@ -12,10 +12,10 @@ namespace RestaurantApi.Controllers
 {
     /// <summary>
     /// Lo que hace el comensal desde el QR sin iniciar sesión: llamar al mesero, seguir los
-    /// pedidos de su visita y recibir avisos. El código del QR dice qué mesa es; ver la cuenta
-    /// exige además la llave de la visita en curso (la recibe quien pide por el QR o quien
-    /// escribe el código de 6 dígitos que le da el personal). Una llave de una visita cerrada
-    /// solo recibe "cerrada": nunca los pedidos de quien se sentó después.
+    /// pedidos de su visita y recibir avisos. El código del QR dice qué mesa es y basta para ver
+    /// la visita abierta de esa mesa: el comensal no escribe ningún código. La llave de la visita
+    /// (la entrega el pedido por QR y el propio seguimiento) sirve para el tiempo real, los avisos
+    /// y para decirle "cerrada" a quien vuelve después de pagar.
     /// </summary>
     [Route("api/cliente-mesa")]
     [ApiController]
@@ -111,8 +111,11 @@ namespace RestaurantApi.Controllers
             var ocupacion = string.IsNullOrWhiteSpace(llave)
                 ? null
                 : await _context.Ocupaciones.AsNoTracking().FirstOrDefaultAsync(o => o.Token == llave && o.MesaId == mesa.Id);
+            // El QR de la mesa basta: sin llave (otro teléfono, navegador que no la guardó, pedido que
+            // tomó el mesero) se sigue la visita abierta. El comensal no memoriza ni escribe códigos.
+            ocupacion ??= await _context.Ocupaciones.AsNoTracking().FirstOrDefaultAsync(o => o.MesaId == mesa.Id && o.Abierta == true);
             if (ocupacion == null)
-                return NotFound(new { message = "No encontramos tu seguimiento. Pide el código de la mesa al mesero." });
+                return NotFound(new { message = "Tu mesa todavía no tiene pedidos." });
 
             if (ocupacion.Abierta != true)
             {
@@ -156,6 +159,7 @@ namespace RestaurantApi.Controllers
             return new SeguimientoDto
             {
                 MesaNumero = mesa.Numero,
+                Llave = ocupacion.Token,
                 Pin = ocupacion.Pin,
                 Inicio = ocupacion.Inicio,
                 Llamada = llamada,

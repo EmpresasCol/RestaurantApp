@@ -51,9 +51,14 @@ beforeEach(() => {
 });
 
 describe('getSeguimiento', () => {
-  test('sin llave no consulta la API', async () => {
-    expect(await getSeguimiento('abc', null)).toEqual({ estado: 'sin-llave' });
-    expect(fetch).not.toHaveBeenCalled();
+  test('sin llave pregunta por la visita abierta de la mesa: el QR basta', async () => {
+    fetch.mockReturnValue(respuesta(200, datosVisita({ llave: 'llave-abierta' })));
+    const r = await getSeguimiento('abc', null);
+    expect(r.estado).toBe('activo');
+    expect(r.datos.llave).toBe('llave-abierta');
+    const [, opciones] = fetch.mock.calls[0];
+    expect(opciones.headers['X-Mesa']).toBe('abc');
+    expect(opciones.headers).not.toHaveProperty('X-Seguimiento');
   });
 
   test('envía el código y la llave en cabeceras, nunca en la URL', async () => {
@@ -108,11 +113,12 @@ describe('useSeguimiento', () => {
     expect(mockConexion.invocaciones.length).toBe(2);
   });
 
-  test('al llegar la llave muestra cargando, no el formulario del código, hasta que responde la API', async () => {
+  test('al llegar la llave muestra cargando, no "sin pedidos", hasta que responde la API', async () => {
     let responder;
-    fetch.mockReturnValue(new Promise((r) => { responder = r; }));
+    fetch.mockReturnValueOnce(respuesta(404, {}));
     const { rerender } = render(<Seguir codigo="abc" llave={null} />);
-    expect(screen.getByTestId('estado')).toHaveTextContent('sin-llave');
+    await waitFor(() => expect(screen.getByTestId('estado')).toHaveTextContent('sin-llave'));
+    fetch.mockReturnValue(new Promise((r) => { responder = r; }));
 
     rerender(<Seguir codigo="abc" llave="llave-1" />);
     expect(screen.getByTestId('estado')).toHaveTextContent('cargando');
@@ -202,19 +208,14 @@ describe('Vista de la mesa', () => {
     expect(screen.getByText('En preparación')).toBeInTheDocument();
     expect(screen.getByText('Ya pagado')).toBeInTheDocument();
     expect(screen.getByText(/por confirmar en caja/i)).toBeInTheDocument();
-    expect(screen.getByText('123456')).toBeInTheDocument();
+    expect(screen.queryByText('123456')).toBeNull();
   });
 
-  test('sin llave pide el código de 6 dígitos y guarda la llave al unirse', async () => {
-    const onLlave = jest.fn();
-    fetch.mockReturnValueOnce(respuesta(200, { seguimiento: 'llave-2' }));
-    render(<HojaMesa abierta onCerrar={() => {}} codigo="abc" llave={null} numeroMesa={4} seguimiento={{ estado: 'sin-llave' }} onLlave={onLlave} />);
-    const ver = screen.getByRole('button', { name: /ver el pedido/i });
-    expect(ver).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/código de la mesa/i), { target: { value: '12a3456' } });
-    await act(async () => { fireEvent.click(ver); });
-    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ codigoMesa: 'abc', pin: '123456' });
-    expect(onLlave).toHaveBeenCalledWith('llave-2');
+  test('una mesa sin pedidos no pide ningún código', () => {
+    render(<HojaMesa abierta onCerrar={() => {}} codigo="abc" llave={null} numeroMesa={4} seguimiento={{ estado: 'sin-llave' }} />);
+    expect(screen.getByText(/aún no hay pedidos/i)).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByText(/código/i)).toBeNull();
   });
 
   test('al cerrar la visita muestra el cierre en lugar de los pedidos', () => {
@@ -231,6 +232,15 @@ describe('MenuQR con seguimiento', () => {
   beforeAll(() => {
     global.IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} };
     window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} });
+  });
+
+  test('un teléfono que no pidió ve el pedido de la mesa con solo abrir el QR', async () => {
+    fetch.mockReturnValue(respuesta(200, datosVisita({ llave: 'llave-mesa' })));
+    render(<MenuQR platillos={platillos} cargando={false} mesaId="abc" numeroMesa={4} onEnviarPedido={jest.fn()} />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /tu pedido/i })).toHaveTextContent('En preparación'));
+    expect(localStorage.getItem('qpro:seguimiento:abc')).toBe('llave-mesa');
+    expect(screen.queryByText(/código del mesero/i)).toBeNull();
   });
 
   test('el pedido por QR guarda la llave de la visita y muestra su estado del servidor', async () => {
@@ -250,10 +260,11 @@ describe('MenuQR con seguimiento', () => {
 
   test('una llave de una visita cerrada se olvida y no muestra pedidos de nadie', async () => {
     localStorage.setItem('qpro:seguimiento:abc', 'vieja');
-    fetch.mockReturnValue(respuesta(410, { cerrada: true, pagada: true, message: 'Tu cuenta quedó pagada.' }));
+    fetch.mockReturnValue(respuesta(404, {})); // después, sin llave: la mesa quedó libre
+    fetch.mockReturnValueOnce(respuesta(410, { cerrada: true, pagada: true, message: 'Tu cuenta quedó pagada.' }));
     render(<MenuQR platillos={platillos} cargando={false} mesaId="abc" numeroMesa={4} onEnviarPedido={jest.fn()} />);
     await waitFor(() => expect(localStorage.getItem('qpro:seguimiento:abc')).toBeNull());
     expect(screen.queryByRole('button', { name: /tu pedido/i })).toBeNull();
-    expect(await screen.findByRole('button', { name: /sigue el pedido con el código/i })).toBeInTheDocument();
+    expect(screen.queryByText(/código del mesero/i)).toBeNull();
   });
 });

@@ -133,19 +133,22 @@ public class ClienteMesaTests
     }
 
     [Fact]
-    public async Task Sin_llave_o_con_la_de_otra_mesa_no_hay_seguimiento()
+    public async Task El_qr_solo_basta_para_seguir_la_visita_abierta_de_su_mesa()
     {
         using var ctx = TestDb.Crear();
         var mesaUno = await PedirPorQrAsync(ctx);
-        await PedirPorQrAsync(ctx, codigo: TestDb.CodigoMesaDos);
+        var mesaLibre = await Cliente(ctx).GetSeguimiento(TestDb.CodigoMesaDos, null);
+        var mesaDos = await PedirPorQrAsync(ctx, codigo: TestDb.CodigoMesaDos);
 
         var sinLlave = await Cliente(ctx).GetSeguimiento(TestDb.CodigoMesaUno, null);
         var cruzada = await Cliente(ctx).GetSeguimiento(TestDb.CodigoMesaDos, mesaUno.Seguimiento);
         var qrFalso = await Cliente(ctx).GetSeguimiento("noexiste00000000", mesaUno.Seguimiento);
 
-        Assert.IsType<NotFoundObjectResult>(sinLlave.Result);
-        Assert.IsType<NotFoundObjectResult>(cruzada.Result);
+        // Sin llave ve su mesa y recibe la llave; con la de otra mesa ve la del QR, nunca la otra.
+        Assert.Equal(mesaUno.Seguimiento, sinLlave.Value!.Llave);
+        Assert.Equal(mesaDos.Seguimiento, cruzada.Value!.Llave);
         Assert.IsType<NotFoundObjectResult>(qrFalso.Result);
+        Assert.IsType<NotFoundObjectResult>(mesaLibre.Result);
         Assert.Null(await Ocupaciones.IdParaSeguirAsync(ctx, TestDb.CodigoMesaDos, mesaUno.Seguimiento));
     }
 

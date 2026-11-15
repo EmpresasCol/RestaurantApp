@@ -21,6 +21,8 @@ namespace RestaurantApi.Dtos
     public class SeguimientoDto
     {
         public int MesaNumero { get; set; }
+        /// <summary>Llave de la visita: el navegador la guarda para el tiempo real y los avisos.</summary>
+        public string Llave { get; set; } = string.Empty;
         /// <summary>Código para que otro comensal de la mesa se sume al seguimiento.</summary>
         public string Pin { get; set; } = string.Empty;
         public DateTime Inicio { get; set; }

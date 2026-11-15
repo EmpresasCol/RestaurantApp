@@ -251,7 +251,8 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
   const destacadosRef = useRef(null);
   const [anchoDestacados, setAnchoDestacados] = useState(0);
 
-  // Seguimiento de la visita: la llave llega al pedir por el QR o al unirse con el código.
+  // Seguimiento de la visita: el QR basta. La llave (para el tiempo real y los avisos) llega al
+  // pedir o con el propio seguimiento, así también sigue el pedido quien no pidió desde aquí.
   const [llave, setLlave] = useState(() => leerLlave(mesaId));
   useEffect(() => setLlave(leerLlave(mesaId)), [mesaId]);
   const [seguimiento, recargarSeguimiento] = useSeguimiento(mesaId, llave);
@@ -264,6 +265,13 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
     guardarLlave(mesaId, nueva);
     setLlave(nueva);
   };
+
+  const llaveVisita = seguimiento.estado === 'activo' ? seguimiento.datos?.llave : null;
+  useEffect(() => {
+    if (!llaveVisita || llaveVisita === llave) return;
+    guardarLlave(mesaId, llaveVisita);
+    setLlave(llaveVisita);
+  }, [llaveVisita, llave, mesaId]);
 
   // Visita cerrada (pagada o cancelada): se retira el seguimiento y se olvida la llave.
   useEffect(() => {
@@ -770,7 +778,6 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
           llave={llave}
           numeroMesa={numeroMesa}
           seguimiento={seguimiento}
-          onLlave={cambiarLlave}
         />
       )}
     </div>

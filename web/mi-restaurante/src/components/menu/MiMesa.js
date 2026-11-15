@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Bell, BellRing, Check, ChevronRight, CircleAlert, Receipt, WifiOff, X } from 'lucide-react';
 import HojaInferior from './HojaInferior';
-import { activarAvisos, necesitaInstalar, pushSoportado, unirse } from '../../services/clienteMesa';
+import { activarAvisos, necesitaInstalar, pushSoportado } from '../../services/clienteMesa';
 
 const ease = [0.16, 1, 0.3, 1];
 const formatear = (valor) =>
@@ -109,7 +109,7 @@ function ChipEstado({ estado }) {
   return <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-bold ${e.clase}`}>{e.texto}</span>;
 }
 
-/** Tarjeta en la carta: resumen de la visita, unirse con código o cierre. */
+/** Tarjeta en la carta: resumen de la visita o su cierre. */
 export function ResumenMesa({ seguimiento, cierre, onAbrir, onCerrarCierre }) {
   if (cierre) {
     return (
@@ -149,59 +149,7 @@ export function ResumenMesa({ seguimiento, cierre, onAbrir, onCerrarCierre }) {
     );
   }
 
-  if (seguimiento.estado === 'sin-llave') {
-    return (
-      <button type="button" onClick={onAbrir} className="mx-4 mt-3 min-h-[44px] text-left text-[14px] font-semibold text-orange-700 underline underline-offset-4">
-        ¿Ya pidieron en esta mesa? Sigue el pedido con el código del mesero
-      </button>
-    );
-  }
   return null;
-}
-
-function Unirse({ codigo, onLlave }) {
-  const [pin, setPin] = useState('');
-  const [estado, setEstado] = useState({ cargando: false, error: null });
-
-  const enviar = async (e) => {
-    e.preventDefault();
-    if (pin.length !== 6 || estado.cargando) return;
-    setEstado({ cargando: true, error: null });
-    try {
-      onLlave(await unirse(codigo, pin));
-    } catch (err) {
-      setEstado({ cargando: false, error: err.message });
-    }
-  };
-
-  return (
-    <form onSubmit={enviar} className="px-5 pb-6 pt-4">
-      <h2 className="text-2xl font-extrabold tracking-[-0.02em]">Sigue el pedido de tu mesa</h2>
-      <p className="mt-2 text-[15px] leading-relaxed text-gray-600">
-        Escribe el código de 6 dígitos que te da el mesero o quien pidió desde su teléfono.
-      </p>
-      <label htmlFor="pin-mesa" className="mt-5 block text-[14px] font-bold">Código de la mesa</label>
-      <input
-        id="pin-mesa"
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        maxLength={6}
-        value={pin}
-        onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-        aria-invalid={!!estado.error}
-        aria-describedby={estado.error ? 'pin-error' : undefined}
-        className="tabular mt-2 h-14 w-full rounded-2xl border border-gray-300 px-4 text-center text-[24px] font-extrabold tracking-[0.3em] focus:border-orange-500 focus:outline-none"
-      />
-      {estado.error && <p id="pin-error" role="alert" className="mt-3 text-[14px] font-medium text-red-700">{estado.error}</p>}
-      <button
-        type="submit"
-        disabled={pin.length !== 6 || estado.cargando}
-        className="mt-5 h-14 w-full rounded-full bg-espresso text-[15px] font-bold text-white disabled:bg-gray-300 disabled:text-gray-600"
-      >
-        {estado.cargando ? 'Buscando tu mesa…' : 'Ver el pedido'}
-      </button>
-    </form>
-  );
 }
 
 const TEXTO_AVISOS = {
@@ -253,8 +201,8 @@ function Avisos({ codigo, llave, numeroMesa }) {
   );
 }
 
-/** Hoja con el detalle de la visita: pedidos, cuenta, código para sumar a otro teléfono y avisos. */
-export function HojaMesa({ abierta, onCerrar, codigo, llave, numeroMesa, seguimiento, onLlave }) {
+/** Hoja con el detalle de la visita: pedidos, cuenta y avisos. */
+export function HojaMesa({ abierta, onCerrar, codigo, llave, numeroMesa, seguimiento }) {
   const datos = seguimiento.estado === 'activo' ? seguimiento.datos : null;
   return (
     <HojaInferior abierta={abierta} onCerrar={onCerrar} titulo={`Mesa ${numeroMesa ?? ''}`}>
@@ -265,7 +213,7 @@ export function HojaMesa({ abierta, onCerrar, codigo, llave, numeroMesa, seguimi
             <div className="h-24 animate-pulse rounded-2xl bg-gray-100" />
           </div>
         ) : (
-          <Unirse codigo={codigo} onLlave={onLlave} />
+          <p className="px-5 py-10 text-center text-[15px] text-gray-500">Aún no hay pedidos en esta mesa.</p>
         )
       ) : (
         <div className="px-5 pb-6 pt-4">
@@ -327,10 +275,6 @@ export function HojaMesa({ abierta, onCerrar, codigo, llave, numeroMesa, seguimi
             <p className="mt-3 text-[13px] font-medium text-gray-600">Ya pediste la cuenta. El mesero te la trae.</p>
           ) : null}
 
-          <p className="mt-6 text-[13px] text-gray-600">
-            ¿Alguien más de la mesa quiere seguir el pedido? Dale este código:{' '}
-            <span className="tabular text-[16px] font-extrabold tracking-[0.2em] text-espresso">{datos.pin}</span>
-          </p>
           <Avisos codigo={codigo} llave={llave} numeroMesa={datos.mesaNumero} />
         </div>
       )}

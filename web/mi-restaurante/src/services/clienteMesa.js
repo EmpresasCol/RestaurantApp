@@ -47,10 +47,11 @@ const pedir = (ruta, { codigo, llave, ...opciones } = {}) => fetch(`${API()}${ru
 
 /**
  * Seguimiento de la visita: { estado: 'activo', datos } | { estado: 'cerrada', pagada, mensaje }
- * | { estado: 'sin-llave' }. Lanza Error si no hay conexión (se reintenta luego).
+ * | { estado: 'sin-llave' } (la mesa no tiene pedidos). El QR basta: sin llave la API devuelve
+ * la visita abierta de la mesa. Lanza Error si no hay conexión (se reintenta luego).
  */
 export async function getSeguimiento(codigo, llave) {
-  if (!codigo || !llave) return { estado: 'sin-llave' };
+  if (!codigo) return { estado: 'sin-llave' };
   const r = await pedir('/cliente-mesa/seguimiento', { codigo, llave });
   if (r.ok) return { estado: 'activo', datos: await r.json() };
   if (r.status === 410) {
@@ -59,12 +60,6 @@ export async function getSeguimiento(codigo, llave) {
   }
   if (r.status === 404) return { estado: 'sin-llave' };
   throw new Error(await mensaje(r, 'No pudimos actualizar tu pedido.'));
-}
-
-export async function unirse(codigo, pin) {
-  const r = await pedir('/cliente-mesa/unirse', { method: 'POST', body: JSON.stringify({ codigoMesa: codigo, pin }) });
-  if (!r.ok) throw new Error(await mensaje(r, 'No pudimos unirte a la mesa.'));
-  return (await r.json()).seguimiento;
 }
 
 /** Registra la llamada; la API devuelve la que ya esté viva si alguien de la mesa llamó antes. */
@@ -159,11 +154,11 @@ const RESPALDO_MS = 30000;
  * service worker, y un respaldo cada 30 s. Nunca muestra datos de una respuesta atrasada.
  */
 export function useSeguimiento(codigo, llave) {
-  const [estado, setEstado] = useState({ estado: llave ? 'cargando' : 'sin-llave', datos: null, error: null });
+  const [estado, setEstado] = useState({ estado: codigo ? 'cargando' : 'sin-llave', datos: null, error: null });
   const turno = useRef(ultimaGana());
 
   const recargar = useCallback(async () => {
-    if (!codigo || !llave) {
+    if (!codigo) {
       setEstado({ estado: 'sin-llave', datos: null, error: null });
       return;
     }
@@ -179,20 +174,24 @@ export function useSeguimiento(codigo, llave) {
 
   useEffect(() => {
     // Llave recién llegada (acaba de pedir o se leyó al recargar): mientras responde la API se
-    // muestra "cargando", no el formulario que pide el código del mesero.
+    // muestra "cargando", no "sin pedidos".
     if (codigo && llave) setEstado((a) => (a.estado === 'sin-llave' ? { estado: 'cargando', datos: null, error: null } : a));
     recargar();
-    if (!codigo || !llave) return undefined;
+    if (!codigo) return undefined;
 
-    const conexion = new HubConnectionBuilder()
-      .withUrl(`${API()}/hubs/mesa?mesa=${encodeURIComponent(codigo)}`)
-      .withAutomaticReconnect(reintentoSinFin)
-      .configureLogging(LogLevel.Warning)
-      .build();
-    const seguir = () => conexion.invoke('Seguir', codigo, llave).catch(() => {});
-    conexion.on('cambio', recargar);
-    conexion.onreconnected(() => { seguir(); recargar(); });
-    conexion.start().then(seguir).catch(() => { /* queda el respaldo */ });
+    // El tiempo real necesita la llave; sin ella (mesa sin pedidos aún) queda el respaldo de 30 s.
+    let conexion = null;
+    if (llave) {
+      conexion = new HubConnectionBuilder()
+        .withUrl(`${API()}/hubs/mesa?mesa=${encodeURIComponent(codigo)}`)
+        .withAutomaticReconnect(reintentoSinFin)
+        .configureLogging(LogLevel.Warning)
+        .build();
+      const seguir = () => conexion.invoke('Seguir', codigo, llave).catch(() => {});
+      conexion.on('cambio', recargar);
+      conexion.onreconnected(() => { seguir(); recargar(); });
+      conexion.start().then(seguir).catch(() => { /* queda el respaldo */ });
+    }
 
     const alVolver = () => document.visibilityState === 'visible' && recargar();
     const alAviso = (e) => e.data?.tipo === 'qpro:cambio' && recargar();
@@ -206,8 +205,8 @@ export function useSeguimiento(codigo, llave) {
       document.removeEventListener('visibilitychange', alVolver);
       window.removeEventListener('online', recargar);
       navigator.serviceWorker?.removeEventListener?.('message', alAviso);
-      conexion.off('cambio');
-      if (conexion.state !== HubConnectionState.Disconnected) conexion.stop();
+      conexion?.off('cambio');
+      if (conexion && conexion.state !== HubConnectionState.Disconnected) conexion.stop();
     };
   }, [codigo, llave, recargar]);
 
