@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   --qp-ink: #2a1d15;
   --qp-caramel: #c8955e;
