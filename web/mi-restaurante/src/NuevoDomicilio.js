@@ -10,9 +10,9 @@ import {
 } from './services/domiciliosApi';
 import { Boton, Campo, Chip, useAviso } from './components/inventario/ui';
 import { billetesSugeridos, pesos } from './utils/caja';
+import { marcaActual } from './utils/marca';
 import { cambioDomicilio, METODOS_DOMICILIO, telefonoValido, totalDomicilio } from './utils/domicilios';
 
-const ENVIO_POR_DEFECTO = 3000;
 const NUEVA = 'nueva';
 
 const opcion = (activa) =>
@@ -42,7 +42,8 @@ export default function NuevoDomicilio({ onVolver, onDomicilioCreado }) {
   const [q, setQ] = useState('');
   const [categoria, setCategoria] = useState('Todas');
   const [carrito, setCarrito] = useState([]);
-  const [envio, setEnvio] = useState(String(ENVIO_POR_DEFECTO));
+  // Propone el costo del envío que fijó el administrador en Configuración; la caja puede cambiarlo.
+  const [envio, setEnvio] = useState(() => String(marcaActual().costoEnvio));
   const [metodo, setMetodo] = useState('Efectivo');
   const [anticipado, setAnticipado] = useState(false);
   const [pagaCon, setPagaCon] = useState('');

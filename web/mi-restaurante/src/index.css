@@ -3,9 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --qp-ink: #2a1d15;
-  --qp-caramel: #c8955e;
-  --qp-caramel-soft: #f5e9da;
+  /* Marca de fábrica (caramelo) y color de acciones (espresso) en canales "r g b". Configuración
+     los reemplaza en tiempo de ejecución (src/utils/marca.js). */
+  --qp-marca-50: 251 246 240;
+  --qp-marca-100: 245 233 218;
+  --qp-marca-200: 235 211 182;
+  --qp-marca-300: 223 185 141;
+  --qp-marca-400: 211 163 114;
+  --qp-marca-500: 200 149 94;
+  --qp-marca-600: 169 118 68;
+  --qp-marca-700: 134 91 53;
+  --qp-marca-800: 101 68 48;
+  --qp-marca-900: 74 50 36;
+  --qp-marca-950: 42 29 21;
+  --qp-accion: 42 29 21;
+  --qp-ink: rgb(var(--qp-accion));
+  --qp-caramel: rgb(var(--qp-marca-500));
+  --qp-caramel-soft: rgb(var(--qp-marca-100));
   --qp-line: #e7e5e4;
   --qp-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }

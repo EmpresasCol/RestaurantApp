@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { AlertCircle, ArrowRight, ChefHat, Eye, EyeOff, Package, QrCode, Receipt, Smartphone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import logo from './logo.jpg';
+import { useMarca } from '../context/MarcaContext';
 
 const ease = [0.16, 1, 0.3, 1];
 
@@ -23,6 +23,7 @@ function Login() {
   const [cargando, setCargando] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const { login } = useAuth();
+  const marca = useMarca();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,8 +54,11 @@ function Login() {
       <aside className="relative hidden w-[44%] max-w-[640px] flex-col justify-between overflow-hidden bg-espresso p-12 text-white lg:flex">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease }}>
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Qpro" className="h-12 w-12 rounded-2xl bg-white object-contain p-1" />
-            <span className="text-xl font-extrabold tracking-[-0.01em]">Qpro</span>
+            <img src={marca.logoSrc} alt="" className="h-12 w-12 rounded-2xl bg-white object-contain p-1" />
+            <span className="min-w-0">
+              <span className="block truncate text-xl font-extrabold tracking-[-0.01em]">{marca.nombre}</span>
+              {marca.eslogan && <span className="block truncate text-[14px] font-medium text-orange-100">{marca.eslogan}</span>}
+            </span>
           </div>
           <h1 className="mt-16 max-w-md text-[44px] font-extrabold leading-[1.05] tracking-[-0.03em]">
             Del pedido en la mesa a la factura, en un solo sistema.
@@ -93,7 +97,10 @@ function Login() {
           transition={{ duration: 0.6, ease, delay: 0.05 }}
           className="w-full max-w-[400px]"
         >
-          <img src={logo} alt="Qpro" className="mb-8 h-16 w-16 rounded-2xl object-contain ring-1 ring-gray-200 lg:hidden" />
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <img src={marca.logoSrc} alt="" className="h-16 w-16 rounded-2xl bg-white object-contain ring-1 ring-gray-200" />
+            <span className="min-w-0 text-[20px] font-extrabold tracking-[-0.01em] text-espresso">{marca.nombre}</span>
+          </div>
           <h2 className="text-[30px] font-extrabold tracking-[-0.02em] text-espresso">Inicia sesión</h2>
           <p className="mt-2 text-[15px] text-gray-500">Acceso para administración, caja y cocina.</p>
 

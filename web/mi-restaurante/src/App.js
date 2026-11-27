@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { MotionConfig, motion } from 'motion/react';
 import {
-  BarChart3, ChefHat, LayoutGrid, LogOut, Package, QrCode, Receipt, Truck, Users, Utensils
+  BarChart3, ChefHat, LayoutGrid, LogOut, Package, QrCode, Receipt, Settings, Truck, Users, Utensils
 } from 'lucide-react';
 import * as api from './services/api';
 import Facturacion from './Facturacion';
@@ -11,6 +11,7 @@ import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import MenuQR from './components/menu/MenuQR';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { MarcaProvider, useMarca } from './context/MarcaContext';
 import { useCambios } from './services/realtime';
 import Reportes from './Reportes';
 import GestionPlatillos from './GestionPlatillos';
@@ -19,7 +20,7 @@ import CocinaView from './CocinaView';
 import Inventario from './Inventario';
 import Domicilios from './Domicilios';
 import NuevoDomicilio from './NuevoDomicilio';
-import logo from './components/logo.jpg';
+import Configuracion from './Configuracion';
 
 // Secciones del personal por rol: id de vista, etiqueta e ícono.
 const SECCIONES = {
@@ -32,7 +33,8 @@ const SECCIONES = {
     { id: 'gestion-usuarios', label: 'Usuarios', icon: Users },
     { id: 'inventario', label: 'Inventario', icon: Package },
     { id: 'qr', label: 'Códigos QR', icon: QrCode },
-    { id: 'reportes', label: 'Reportes', icon: BarChart3 }
+    { id: 'reportes', label: 'Reportes', icon: BarChart3 },
+    { id: 'configuracion', label: 'Configuración', icon: Settings }
   ],
   caja: [
     { id: 'facturacion', label: 'Caja', icon: Receipt },
@@ -42,14 +44,15 @@ const SECCIONES = {
 
 function BarraPersonal({ usuario, rol, vistaActual, onCambiar, pendientes, onSalir }) {
   const secciones = SECCIONES[rol] ?? [];
+  const marca = useMarca();
   const iniciales = (usuario?.nombre ?? '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white">
       <div className="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 lg:px-6">
         <div className="flex shrink-0 items-center gap-2.5">
-          <img src={logo} alt="Qpro" className="h-9 w-9 rounded-xl object-contain ring-1 ring-gray-200" />
-          <span className="hidden text-[17px] font-extrabold tracking-[-0.01em] text-espresso sm:block">Qpro</span>
+          <img src={marca.logoSrc} alt="" className="h-9 w-9 rounded-xl bg-white object-contain ring-1 ring-gray-200" />
+          <span className="hidden max-w-[12rem] truncate text-[17px] font-extrabold tracking-[-0.01em] text-espresso sm:block">{marca.nombre}</span>
         </div>
 
         <nav className="qp-rail -mx-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-1" aria-label="Secciones">
@@ -109,6 +112,7 @@ function BarraPersonal({ usuario, rol, vistaActual, onCambiar, pendientes, onSal
 
 function AppContent() {
   const { usuario, esClienteQR, estaAutenticado, logout, cargando: cargandoAuth } = useAuth();
+  const marca = useMarca();
   const [vistaActual, setVistaActual] = useState('menu');
   const [pedidos, setPedidos] = useState([]);
   const [platillos, setPlatillos] = useState([]);
@@ -235,6 +239,8 @@ function AppContent() {
         return <ProtectedRoute permisos={['administrador']}><GestionPlatillos /></ProtectedRoute>;
       case 'gestion-usuarios':
         return <ProtectedRoute permisos={['administrador']}><GestionUsuarios /></ProtectedRoute>;
+      case 'configuracion':
+        return <ProtectedRoute permisos={['administrador']}><Configuracion /></ProtectedRoute>;
       case 'inventario':
         return <ProtectedRoute permisos={['administrador']}><Inventario /></ProtectedRoute>;
       case 'domicilios':
@@ -261,8 +267,8 @@ function AppContent() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="text-center">
-          <img src={logo} alt="" className="mx-auto h-16 w-16 animate-pulse rounded-2xl object-contain" />
-          <p className="mt-4 text-[14px] font-semibold text-gray-500">Cargando Qpro…</p>
+          <img src={marca.logoSrc} alt="" className="mx-auto h-16 w-16 animate-pulse rounded-2xl object-contain" />
+          <p className="mt-4 text-[14px] font-semibold text-gray-500">Cargando {marca.nombre}…</p>
         </div>
       </div>
     );
@@ -302,9 +308,11 @@ function App() {
   return (
     // Respeta "reducir movimiento" del sistema también en las animaciones de motion.
     <MotionConfig reducedMotion="user">
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <MarcaProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </MarcaProvider>
     </MotionConfig>
   );
 }

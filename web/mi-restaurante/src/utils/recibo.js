@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { etiquetaImpuesto, impuestoFactura, impuestoIncluido } from './impuestos';
 import { pesos } from './caja';
 import { documentoVenta, nombreCodigo, numeracionDe, tituloDocumento } from './facturacion';
+import { marcaActual } from './marca';
 
 const escapar = (t) => String(t ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -26,16 +27,27 @@ const ESTILO = `
   .total td { font-size: 16px; font-weight: 800; padding-top: 4px; }
   .codigo { font-size: 10px; word-break: break-all; }
   .qr { margin: 6px 0; }
+  .logo { display: block; max-width: 36mm; max-height: 22mm; margin: 0 auto 4px; object-fit: contain; }
 `;
 
 const fila = (izq, der, clase = '') => `<tr class="${clase}"><td>${izq}</td><td class="n">${der}</td></tr>`;
 
+// El logo solo es una imagen guardada por la API (data URI validado); se escapa igual.
+const logoMarca = (marca) => (marca.logoEnFactura && marca.logo ? `<img class="logo" src="${escapar(marca.logo)}" alt="">` : '');
+
+/** Logo (si se eligió imprimirlo) y nombre del restaurante (Configuración). */
+const marcaTirilla = (marca = marcaActual()) => `${logoMarca(marca)}<h1>${escapar(marca.nombre)}</h1>`;
+
+/** Pie de la factura: el mensaje del restaurante y su Instagram (Configuración). */
+const pieMarca = (marca = marcaActual()) => `<p class="centro">${escapar(marca.pieFactura || 'Gracias por su visita')}</p>
+  ${marca.instagram ? `<p class="centro suave">@${escapar(marca.instagram)}</p>` : ''}`;
+
 /** Encabezado con los datos del vendedor (Datos fiscales); sin ellos, solo la marca. */
-const vendedor = (config) => {
-  if (!config?.razonSocial) return '<h1>Qpro</h1>';
+const vendedor = (config, marca = marcaActual()) => {
+  if (!config?.razonSocial) return marcaTirilla(marca);
   const nit = config.nit ? `NIT ${escapar(config.nit)}${config.digitoVerificacion ? `-${escapar(config.digitoVerificacion)}` : ''}` : '';
   const lugar = [config.direccion, config.municipio].filter(Boolean).map(escapar).join(', ');
-  return `<h1>${escapar(config.nombreComercial || config.razonSocial)}</h1>
+  return `${logoMarca(marca)}<h1>${escapar(config.nombreComercial || config.razonSocial)}</h1>
   ${config.nombreComercial ? `<p class="centro">${escapar(config.razonSocial)}</p>` : ''}
   ${nit ? `<p class="centro">${nit}</p>` : ''}
   ${lugar ? `<p class="centro suave">${lugar}</p>` : ''}
@@ -75,15 +87,16 @@ const pieDian = (f, fiscal) => {
 /**
  * HTML de la factura. extra: { recibido, cambio } del cobro en efectivo (no se guarda en la API).
  * fiscal: respuesta de GET api/fiscal (datos del vendedor y numeraciones); sin ella sale la tirilla simple.
+ * marca: la de Configuración; la vista previa pasa la que el administrador aún no guarda.
  */
-export const htmlFactura = (f, extra = {}, fiscal = null) => {
+export const htmlFactura = (f, extra = {}, fiscal = null, marca = marcaActual()) => {
   const items = (f.items ?? [])
     .map((i) => fila(`${i.cantidad} × ${escapar(i.nombre)}`, pesos(i.total)))
     .join('');
   const impuesto = impuestoFactura(f);
   const identificado = f.tipoIdCliente || (f.nitCliente && f.nitCliente !== '222222222222');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escapar(f.numeroFactura)}</title><style>${ESTILO}</style></head><body>
-  ${vendedor(fiscal?.config)}
+  ${vendedor(fiscal?.config, marca)}
   <hr>
   <p class="centro suave">${escapar(tituloDocumento(f))}</p>
   <p class="centro"><strong>${escapar(f.numeroFactura)}</strong></p>
@@ -112,7 +125,7 @@ export const htmlFactura = (f, extra = {}, fiscal = null) => {
   </table>
   ${pieDian(f, fiscal)}
   <hr>
-  <p class="centro">Gracias por su visita</p>
+  ${pieMarca(marca)}
 </body></html>`;
 };
 
@@ -123,7 +136,7 @@ export const htmlFactura = (f, extra = {}, fiscal = null) => {
 export const htmlCuenta = (cuenta, lineas, ahora = new Date()) => {
   const items = lineas.map((l) => fila(`${l.cantidad} × ${escapar(l.nombre)}`, pesos(l.total))).join('');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cuenta mesa ${escapar(cuenta.mesaNumero)}</title><style>${ESTILO}</style></head><body>
-  <h1>Qpro</h1>
+  ${marcaTirilla()}
   <p class="centro suave">Cuenta de la mesa</p>
   <p class="centro"><strong>Mesa ${escapar(cuenta.mesaNumero)}</strong></p>
   <p class="centro suave">${fechaHora(ahora)}</p>
@@ -148,7 +161,7 @@ export const htmlCierre = (c, a = {}) => {
   const metodos = (c.porMetodo ?? []).map((m) => fila(escapar(m.metodo), pesos(m.total))).join('');
   const dif = (d) => (d?.diferencia == null ? '' : d.estado === 'cuadra' ? 'Cuadra' : `${d.diferencia > 0 ? 'Sobran' : 'Faltan'} ${pesos(Math.abs(d.diferencia))}`);
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cierre ${escapar(c.fecha)}</title><style>${ESTILO}</style></head><body>
-  <h1>Qpro</h1>
+  ${marcaTirilla()}
   <p class="centro"><strong>Cierre de caja</strong></p>
   <p class="centro suave">${escapar(c.fecha)} · impreso ${fechaHora(new Date().toISOString())}</p>
   ${c.cerrada ? `<p class="centro suave">Cerrada${c.cerradaPor ? ` por ${escapar(c.cerradaPor)}` : ''}</p>` : ''}
@@ -198,7 +211,7 @@ export const htmlDomicilio = (d, ahora = new Date()) => {
     ? fila('Pago', 'Pagado: no cobrar')
     : fila('Cobrar', `${pesos(d.total)} · ${escapar(d.metodoPago)}`) + (d.pagaCon ? fila('Paga con', pesos(d.pagaCon)) + fila('Llevar cambio', pesos(d.cambio ?? 0)) : '');
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Domicilio ${escapar(d.id)}</title><style>${ESTILO}</style></head><body>
-  <h1>Qpro</h1>
+  ${marcaTirilla()}
   <p class="centro"><strong>Domicilio #${escapar(d.id)}</strong></p>
   <p class="centro suave">${fechaHora(d.fechaPedido ?? ahora.toISOString())}</p>
   <hr>

@@ -6,17 +6,15 @@ import { useAuth } from "./context/AuthContext"
 import { useCambios } from "./services/realtime"
 import * as api from "./services/api"
 import { getDomiciliosActivos, actualizarEstadoDomicilio, prepararDomicilio } from "./services/domiciliosApi"
-import logo from "./components/logo.jpg"
+import { useMarca } from "./context/MarcaContext"
 
 const ease = [0.16, 1, 0.3, 1]
-const MINUTOS_ALERTA = 10
-const MINUTOS_URGENTE = 15
 
-// Color de la espera: a tiempo, en alerta y urgente.
-const tonoEspera = (minutos) =>
-  minutos >= MINUTOS_URGENTE
+// Color de la espera: a tiempo, en alerta y urgente. Los minutos los fija el administrador en Configuración.
+const tonoEspera = (minutos, { minutosAlerta = 10, minutosUrgente = 15 } = {}) =>
+  minutos >= minutosUrgente
     ? { borde: "ring-red-500/70", chip: "bg-red-600 text-white", texto: "Urgente" }
-    : minutos >= MINUTOS_ALERTA
+    : minutos >= minutosAlerta
       ? { borde: "ring-amber-400/60", chip: "bg-amber-400 text-espresso", texto: "Demorado" }
       : { borde: "ring-white/10", chip: "bg-white/10 text-orange-100", texto: "A tiempo" }
 
@@ -31,7 +29,8 @@ function Ticket({ pedido, minutos, enCarga, onListo, onEmpezar }) {
   const porEmpezar = !pedido.empezado
   // El mesero lo cambió: la cocina debe volver a leerlo.
   const editado = !esDomicilio && pedido.editado
-  const tono = tonoEspera(minutos)
+  const marca = useMarca()
+  const tono = tonoEspera(minutos, marca)
 
   useEffect(() => () => clearTimeout(temporizador.current), [])
 
@@ -206,6 +205,7 @@ function Listos({ pedidos, minutosDe }) {
 // sin ella es la pantalla completa del rol Cocina. Servir es del mesero: aquí solo se marca listo.
 function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
   const { usuario, logout } = useAuth()
+  const marca = useMarca()
 
   const [filtroMesa, setFiltroMesa] = useState("todas")
   const [cargandoEstado, setCargandoEstado] = useState(null)
@@ -290,7 +290,7 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
   const pedidosEnPreparacion = ordenarPorPrioridad(enCocina, horaActual)
 
   const cantidadActivas = pedidosEnPreparacion.length
-  const urgentes = pedidosEnPreparacion.filter((p) => calcularTiempoTranscurrido(p.hora) >= MINUTOS_URGENTE).length
+  const urgentes = pedidosEnPreparacion.filter((p) => calcularTiempoTranscurrido(p.hora) >= marca.minutosUrgente).length
 
   const chipFiltro = (valor, texto) => (
     <button
@@ -324,7 +324,7 @@ function CocinaView({ pedidos = [], onActualizarPedidos, incrustada = false }) {
       <header className="sticky top-0 z-30 border-b border-white/10 bg-espresso">
         <div className="flex h-[72px] items-center justify-between gap-4 px-6">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Qpro" className="h-11 w-11 rounded-xl bg-white object-contain p-0.5" />
+            <img src={marca.logoSrc} alt={marca.nombre} className="h-11 w-11 rounded-xl bg-white object-contain p-0.5" />
             <div>
               <h1 className="text-[20px] font-extrabold leading-tight tracking-[-0.01em]">Cocina</h1>
               <p className="text-[13px] font-medium text-orange-200">{usuario?.nombre || "Cocinero"}</p>

@@ -7,9 +7,8 @@ import { Download, ExternalLink, KeyRound, Minus, Plus, Printer, QrCode } from '
 import { fijarCantidadMesas, getMesas, regenerarCodigosMesas } from './services/api';
 import { Boton, BotonConfirmar, Cargando, useAviso, Vacio } from './components/inventario/ui';
 import { cambioMesas, insigniaMesa, limitarMesas, MAXIMO_MESAS, urlMesa } from './utils/administracion';
-import logo from './components/logo.jpg';
+import { useMarca } from './context/MarcaContext';
 
-const ESPRESSO = '#2A1D15';
 const porNumero = (mesas) => [...mesas].sort((a, b) => a.numero - b.numero);
 
 const descargarPNG = async (nodo, nombre) => {
@@ -23,11 +22,13 @@ const descargarPNG = async (nodo, nombre) => {
 
 /** Tarjeta imprimible de una mesa: el único diseño de QR de Qpro. */
 const TarjetaQR = React.forwardRef(function TarjetaQR({ mesa, url }, ref) {
+  // Logo, nombre y color del restaurante (Configuración); el QR va en el color de acciones, siempre oscuro.
+  const marca = useMarca();
   return (
     <article ref={ref} className="qp-tarjeta-qr w-[300px] rounded-[24px] border border-gray-200 bg-white p-6 text-center">
       <div className="flex items-center justify-center gap-2">
-        <img src={logo} alt="" className="h-8 w-8 rounded-[10px] object-contain ring-1 ring-gray-200" />
-        <span className="text-[17px] font-extrabold tracking-[-0.01em] text-espresso">Qpro</span>
+        <img src={marca.logoSrc} alt="" className="h-8 w-8 rounded-[10px] bg-white object-contain ring-1 ring-gray-200" />
+        <span className="max-w-[200px] truncate text-[17px] font-extrabold tracking-[-0.01em] text-espresso">{marca.nombre}</span>
       </div>
       <p className="mt-5 text-[15px] font-semibold text-gray-500">Mesa</p>
       <p className="tabular text-[56px] font-extrabold leading-none tracking-[-0.03em] text-espresso">{mesa.numero}</p>
@@ -36,10 +37,10 @@ const TarjetaQR = React.forwardRef(function TarjetaQR({ mesa, url }, ref) {
           value={url}
           size={208}
           level="H"
-          fgColor={ESPRESSO}
+          fgColor={marca.colorAccion}
           bgColor="#FFFFFF"
           title={`Código QR de la mesa ${mesa.numero}`}
-          imageSettings={{ src: insigniaMesa(mesa.numero), width: 48, height: 48, excavate: true }}
+          imageSettings={{ src: insigniaMesa(mesa.numero, { fondo: marca.colorAccion }), width: 48, height: 48, excavate: true }}
         />
       </div>
       <p className="mx-auto mt-5 max-w-[220px] text-[14px] font-medium leading-snug text-gray-600">

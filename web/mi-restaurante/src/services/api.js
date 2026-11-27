@@ -383,6 +383,21 @@ export const reintentarFactura = async (id) => {
   if (!response.ok) throw await errorDe(response, 'No se pudo reenviar el documento');
 };
 
+// ==================== CONFIGURACIÓN DEL RESTAURANTE ====================
+/** Nombre, logo, colores y ajustes de operación. Pública: el ingreso y el menú QR la muestran. */
+export const getConfiguracion = async () => {
+  const response = await fetchWithHeaders(`${API_URL}/configuracion`);
+  if (!response.ok) throw await errorDe(response, 'No se pudo cargar la configuración');
+  return await response.json();
+};
+
+/** Solo el administrador. Devuelve lo guardado ya normalizado por la API. */
+export const guardarConfiguracion = async (config) => {
+  const response = await fetchWithHeaders(`${API_URL}/configuracion`, { method: 'PUT', body: JSON.stringify(config) });
+  if (!response.ok) throw await errorDe(response, 'No se pudo guardar la configuración');
+  return await response.json();
+};
+
 // ==================== DATOS FISCALES ====================
 /** { config, numeraciones: [{ ..., vigente, restantes, aviso }], documentos: { pendientes, rechazados, enContingencia } }. */
 export const getFiscal = async () => {

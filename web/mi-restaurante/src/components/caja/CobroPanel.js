@@ -12,6 +12,8 @@ import {
 } from '../../utils/caja';
 import { etiquetaImpuesto, impuestoIncluido } from '../../utils/impuestos';
 import { htmlFactura, imprimirHtml } from '../../utils/recibo';
+import { useMarca } from '../../context/MarcaContext';
+import { tasaPropina } from '../../utils/marca';
 import { documentoVenta, errorCliente, nombreTipoDocumento, TIPOS_ID } from '../../utils/facturacion';
 
 const opcion = (activa) =>
@@ -85,6 +87,7 @@ function PagoAvisado({ pago, foto }) {
 }
 
 export default function CobroPanel({ cuenta, fiscal, onCerrar, onCobrado, mostrar }) {
+  const marca = useMarca();
   const [modo, setModo] = useState('todo');
   const [seleccion, setSeleccion] = useState([]);
   const [elegidos, setElegidos] = useState({});
@@ -153,7 +156,8 @@ export default function CobroPanel({ cuenta, fiscal, onCerrar, onCobrado, mostra
   const consumo = modo === 'consumo'
     ? consumoElegido(platos, elegidos)
     : elegidosPedidos.reduce((t, p) => t + consumoPedido(p), 0);
-  const sugerida = propinaSugerida(consumo);
+  // El porcentaje lo fija el administrador en Configuración; en 0 la caja no sugiere propina.
+  const sugerida = propinaSugerida(consumo, tasaPropina(marca));
   const propina = propinaModo === 'sugerida' ? sugerida : propinaModo === 'otra' ? Math.max(0, Math.round(Number(propinaOtra) || 0)) : 0;
   const total = consumo + propina;
 
@@ -330,11 +334,13 @@ export default function CobroPanel({ cuenta, fiscal, onCerrar, onCobrado, mostra
 
           <section aria-label="Propina">
             <h3 className="mb-2 text-[15px] font-bold text-espresso">Propina voluntaria</h3>
-            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Propina">
+            <div className={`grid gap-2 ${marca.propinaSugerida > 0 ? 'grid-cols-3' : 'grid-cols-2'}`} role="radiogroup" aria-label="Propina">
               <button type="button" role="radio" disabled={bloqueado} aria-checked={propinaModo === 'ninguna'} className={opcion(propinaModo === 'ninguna')} onClick={() => setPropinaModo('ninguna')}>Sin propina</button>
-              <button type="button" role="radio" disabled={bloqueado} aria-checked={propinaModo === 'sugerida'} className={opcion(propinaModo === 'sugerida')} onClick={() => setPropinaModo('sugerida')}>
-                10 % <span className="tabular font-semibold opacity-80">{pesos(sugerida)}</span>
-              </button>
+              {marca.propinaSugerida > 0 && (
+                <button type="button" role="radio" disabled={bloqueado} aria-checked={propinaModo === 'sugerida'} className={opcion(propinaModo === 'sugerida')} onClick={() => setPropinaModo('sugerida')}>
+                  {marca.propinaSugerida} % <span className="tabular font-semibold opacity-80">{pesos(sugerida)}</span>
+                </button>
+              )}
               <button type="button" role="radio" disabled={bloqueado} aria-checked={propinaModo === 'otra'} className={opcion(propinaModo === 'otra')} onClick={() => setPropinaModo('otra')}>Otro valor</button>
             </div>
             {propinaModo === 'otra' && (

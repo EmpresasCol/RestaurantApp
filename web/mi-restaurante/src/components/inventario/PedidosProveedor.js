@@ -9,6 +9,7 @@ import {
 import BuscadorInsumo from './BuscadorInsumo';
 import { PanelEntradasOrden } from './FotosRecepcion';
 import { Boton, BotonConfirmar, Campo, Cargando, Chip, ChipEstado, Lista, Panel, Selector, useAviso, Vacio } from './ui';
+import { marcaActual } from '../../utils/marca';
 
 const ESTADO_ORDEN = {
   Pendiente: { tono: 'neutro', texto: 'Por enviar' },
@@ -41,7 +42,7 @@ async function textoYEnlace(ordenId) {
       ? { insumo: d.insumo, presentacion: pres.nombre, paquetes: d.cantidad / pres.factor }
       : { insumo: d.insumo, cantidad: d.cantidad, unidad: d.unidadMedida };
   });
-  const texto = textoPedidoProveedor({ numeroOrden: o.numeroOrden, proveedor: o.proveedor, fechaEntrega: o.fechaEntregaEstimada, lineas });
+  const texto = textoPedidoProveedor({ numeroOrden: o.numeroOrden, proveedor: o.proveedor, fechaEntrega: o.fechaEntregaEstimada, lineas, restaurante: marcaActual().nombre });
   if (o.estado === 'Pendiente') await compras.estadoOrden(o.id, 'Aprobada');
   return enlaceWhatsApp(o.proveedorTelefono, texto);
 }

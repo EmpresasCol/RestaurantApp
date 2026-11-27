@@ -4,11 +4,12 @@
 // hoja del plato para notas y carrito como hoja inferior.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check, ChevronRight, Minus, Plus, Search, ShoppingBag, Trash2, UtensilsCrossed, X } from 'lucide-react';
+import { Check, ChevronRight, Clock, Instagram, MessageCircle, Minus, Plus, Search, ShoppingBag, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import Carousel from '../reactbits/Carousel/Carousel';
 import CountUp from '../reactbits/CountUp/CountUp';
 import ClickSpark from '../reactbits/ClickSpark/ClickSpark';
-import logo from '../logo.jpg';
+import { useMarca } from '../../context/MarcaContext';
+import { enlaceInstagram, enlaceWhatsapp } from '../../utils/marca';
 import HojaInferior from './HojaInferior';
 import { AvisoLlamada, BotonLlamar, BotonPedido, HojaMesa, ResumenMesa } from './MiMesa';
 import {
@@ -55,9 +56,10 @@ function FotoPlato({ platillo, className = '' }) {
 
 /** Botón + que se convierte en selector − n + al agregar el primer plato. */
 function ControlCantidad({ cantidad, onSumar, onRestar, nombre, oscuro = false }) {
+  const { colorMarca } = useMarca();
   const base = oscuro ? 'bg-white text-espresso' : 'bg-espresso text-white';
   return (
-    <ClickSpark sparkColor="#C8955E" sparkCount={8} sparkRadius={18} sparkSize={8} duration={420}>
+    <ClickSpark sparkColor={colorMarca} sparkCount={8} sparkRadius={18} sparkSize={8} duration={420}>
       <motion.div
         layout
         transition={{ duration: 0.35, ease }}
@@ -103,6 +105,28 @@ function ControlCantidad({ cantidad, onSumar, onRestar, nombre, oscuro = false }
         </button>
       </motion.div>
     </ClickSpark>
+  );
+}
+
+/** Horario y redes del restaurante al pie de la carta (Configuración). */
+function InfoRestaurante({ marca }) {
+  const whatsapp = enlaceWhatsapp(marca.whatsapp);
+  const instagram = enlaceInstagram(marca.instagram);
+  if (!marca.horario && !whatsapp && !instagram) return null;
+  const enlace = 'inline-flex h-11 items-center gap-2 rounded-full bg-gray-100 px-4 text-[14px] font-bold text-espresso transition-colors hover:bg-gray-200';
+  return (
+    <footer className="mx-4 mt-10 border-t border-gray-200 pt-6 text-center">
+      <p className="text-[15px] font-extrabold">{marca.nombre}</p>
+      {marca.horario && (
+        <p className="mt-2 inline-flex items-center gap-1.5 text-[14px] text-gray-500"><Clock size={15} aria-hidden="true" />{marca.horario}</p>
+      )}
+      {(whatsapp || instagram) && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          {whatsapp && <a href={whatsapp} target="_blank" rel="noopener noreferrer" className={enlace}><MessageCircle size={17} aria-hidden="true" />WhatsApp</a>}
+          {instagram && <a href={instagram} target="_blank" rel="noopener noreferrer" className={enlace}><Instagram size={17} aria-hidden="true" />@{marca.instagram}</a>}
+        </div>
+      )}
+    </footer>
   );
 }
 
@@ -241,6 +265,9 @@ function HojaPlato({ platillo, onCerrar, onAgregar }) {
 }
 
 export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso, onEnviarPedido, onRecargarCarta, offsetSuperior = 0 }) {
+  const marca = useMarca();
+  // El administrador puede pausar los pedidos por QR: la carta y "Llamar al mesero" siguen.
+  const puedePedir = !!mesaId && marca.pedidosQR;
   const [carrito, setCarrito] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState(null);
@@ -384,7 +411,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
   };
 
   const enviar = async () => {
-    if (!mesaId || !carrito.length) return;
+    if (!puedePedir || !carrito.length) return;
     setEnvio({ estado: 'enviando', error: null, resumen: null });
     try {
       const creado = await onEnviarPedido(mesaId, carrito);
@@ -414,11 +441,11 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="flex min-w-0 items-center gap-3">
             {/* En el celular el logo cede su espacio a los botones de la mesa; el nombre sigue visible. */}
-            <img src={logo} alt="Qpro" className={`h-10 w-10 shrink-0 rounded-xl object-contain ring-1 ring-gray-200 ${mesaId ? 'hidden sm:block' : ''}`} />
+            <img src={marca.logoSrc} alt="" className={`h-10 w-10 shrink-0 rounded-xl bg-white object-contain ring-1 ring-gray-200 ${mesaId ? 'hidden sm:block' : ''}`} />
             <div className="min-w-0">
-              <p className="text-[17px] font-extrabold leading-tight tracking-[-0.01em]">Qpro</p>
+              <p className="truncate text-[17px] font-extrabold leading-tight tracking-[-0.01em]">{marca.nombre}</p>
               <p className="truncate text-[13px] font-medium text-gray-500">
-                {mesaId ? `Mesa ${numeroMesa} · pide desde aquí` : 'Vista previa del menú'}
+                {mesaId ? `Mesa ${numeroMesa} · ${marca.pedidosQR ? 'pide desde aquí' : 'mira la carta'}` : 'Vista previa del menú'}
               </p>
             </div>
           </div>
@@ -504,6 +531,14 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
             {aviso ?? 'Esta es una vista previa. Para enviar pedidos, abre el menú desde el QR de una mesa.'}
           </p>
         )}
+        {mesaId && !marca.pedidosQR && (
+          <p className="mx-4 mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[14px] font-medium text-amber-900" role="status">
+            Por ahora los pedidos se hacen con el mesero. Mira la carta y toca «Llamar al mesero» cuando estés listo.
+          </p>
+        )}
+        {marca.mensajeBienvenida && (
+          <p className="mx-4 mt-4 max-w-2xl text-[15px] leading-relaxed text-gray-600">{marca.mensajeBienvenida}</p>
+        )}
 
         {cargando && (
           <div className="space-y-6 px-4 pt-6" aria-busy="true" aria-label="Cargando la carta">
@@ -550,7 +585,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
                   baseWidth={anchoDestacados}
                   aspectRatio={anchoDestacados < 640 ? 1.5 : anchoDestacados < 1024 ? 2.3 : 3.4}
                   peek={anchoDestacados < 640 ? 14 : 0}
-                  style={{ '--carousel-faint': 'rgba(42,29,21,0.22)', '--carousel-soft': 'rgba(42,29,21,0.45)', '--carousel-ink': '#2A1D15' }}
+                  style={{ '--carousel-faint': 'rgb(var(--qp-accion) / 0.22)', '--carousel-soft': 'rgb(var(--qp-accion) / 0.45)', '--carousel-ink': 'rgb(var(--qp-accion))' }}
                   gap={12}
                   radius={24}
                   frame={false}
@@ -602,6 +637,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
               </div>
             </section>
           ))}
+        <InfoRestaurante marca={marca} />
       </main>
 
       {/* Barra flotante del pedido */}
@@ -668,7 +704,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
               <button
                 type="button"
                 onClick={enviar}
-                disabled={!mesaId || envio.estado === 'enviando'}
+                disabled={!puedePedir || envio.estado === 'enviando'}
                 className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-espresso text-[15px] font-bold text-white transition-transform active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
               >
                 {envio.estado === 'enviando' ? (
@@ -676,8 +712,10 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
                     <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
                     Enviando a cocina…
                   </>
-                ) : mesaId ? (
+                ) : puedePedir ? (
                   'Enviar pedido a cocina'
+                ) : mesaId ? (
+                  'Pídelo al mesero'
                 ) : (
                   'Disponible desde el QR de la mesa'
                 )}
