@@ -689,7 +689,10 @@ ORDER BY Fecha DESC;
 -- SECCIÓN 5: INSERCIÓN DE DATOS (Tus datos originales)
 -- =====================================================
 
--- Usuarios
+-- Usuarios de demostración: clave '123' solo para el entorno local. En un restaurante real
+-- cámbialas todas desde Administración → Usuarios antes de abrir (mínimo 8 caracteres).
+-- 'cliente_qr' es técnico (firma los pedidos del menú QR) y nunca inicia sesión: su clave es
+-- un valor aleatorio que no se puede usar.
 INSERT INTO Usuarios (Nombre, Usuario, ClaveHash, Rol) VALUES
 ('Admin Principal', 'admin', '123', 'Administrador'),
 ('Juan Pérez', 'juan.mesero', '123', 'Mesero'),
@@ -698,7 +701,7 @@ INSERT INTO Usuarios (Nombre, Usuario, ClaveHash, Rol) VALUES
 ('Ana Martínez', 'ana.cocina', '123', 'Cocina'),
 ('Pedro Rodríguez', 'pedro.caja', '123', 'Caja'),
 ('Laura Fernández', 'laura.caja', '123', 'Caja'),
-('Cliente QR', 'cliente_qr', '123', 'Mesero');
+('Cliente QR', 'cliente_qr', CONCAT('!sin-login!', SHA2(UUID(), 256)), 'Mesero');
 
 -- Mesas
 INSERT INTO Mesas (Numero, Estado) VALUES

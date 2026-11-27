@@ -214,7 +214,7 @@ public class SeguridadTests
         using var ctx = TestDb.Crear();
         var r = await new UsuariosController(ctx).PostUsuario(new Usuario
         {
-            Nombre = "Cocinero", NombreUsuario = "coc2", ClaveHash = "secreta", Rol = RolUsuario.Cocina
+            Nombre = "Cocinero", NombreUsuario = "coc2", ClaveHash = "secreta-larga", Rol = RolUsuario.Cocina
         });
 
         var created = Assert.IsType<CreatedAtActionResult>(r.Result);

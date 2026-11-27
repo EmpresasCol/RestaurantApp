@@ -110,7 +110,7 @@ function FichaUsuario({ usuario, esPropio, mostrar, onGuardado }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo
             label={edicion ? 'Clave nueva' : 'Clave'} type={verClave ? 'text' : 'password'} autoComplete="new-password"
-            value={form.clave} onChange={cambiar('clave')} ayuda="Mínimo 4 caracteres"
+            value={form.clave} onChange={cambiar('clave')} ayuda="Mínimo 8 caracteres"
           />
           <Campo
             label="Repite la clave" type={verClave ? 'text' : 'password'} autoComplete="new-password"

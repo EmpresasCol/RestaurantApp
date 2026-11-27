@@ -66,7 +66,7 @@ export const validarUsuario = (form, { edicion = false } = {}) => {
   if (/\s/.test(usuario)) return 'El usuario no puede tener espacios';
   if (!ROLES.some((r) => r.id === form.rol)) return 'Elige un rol';
   if (!edicion || form.clave) {
-    if (String(form.clave ?? '').length < 4) return 'La clave debe tener al menos 4 caracteres';
+    if (String(form.clave ?? '').length < 8) return 'La clave debe tener al menos 8 caracteres';
     if (form.clave !== form.confirmarClave) return 'Las claves no coinciden';
   }
   return null;

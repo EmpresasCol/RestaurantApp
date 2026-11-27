@@ -17,20 +17,29 @@ namespace RestaurantApi.Controllers
         private static readonly object CredencialesInvalidas = new { message = "Credenciales inválidas" };
         public const string MensajeDesactivado = "Tu usuario está desactivado. Habla con el administrador.";
 
+        /// <summary>Largo mínimo de una clave nueva o cambiada (las vigentes siguen sirviendo).</summary>
+        public const int LargoMinimoClave = 8;
+
         private readonly RestauranteContext _context;
         private readonly JwtTokenService _jwt;
+        private readonly IntentosLogin _intentos;
 
-        public UsuariosController(RestauranteContext context, JwtTokenService? jwt = null)
+        public UsuariosController(RestauranteContext context, JwtTokenService? jwt = null, IntentosLogin? intentos = null)
         {
             _context = context;
             _jwt = jwt ?? new JwtTokenService(new JwtOptions());
+            _intentos = intentos ?? new IntentosLogin();
         }
+
+        private ObjectResult Bloqueado() => StatusCode(StatusCodes.Status429TooManyRequests, new { message = IntentosLogin.MensajeBloqueo });
 
         [HttpPost("login")]
         [AllowAnonymous]
         [EnableRateLimiting("login")]
         public async Task<ActionResult<LoginResponseDto>> Login(LoginRequestDto request)
         {
+            if (_intentos.EstaBloqueado(request.Usuario))
+                return Bloqueado();
             var usuario = await AutenticarAsync(request);
             if (usuario == null)
                 return Unauthorized(CredencialesInvalidas);
@@ -61,6 +70,8 @@ namespace RestaurantApi.Controllers
         [EnableRateLimiting("login")]
         public async Task<ActionResult<LoginResponseDto>> LoginMobile(LoginRequestDto request)
         {
+            if (_intentos.EstaBloqueado(request.Usuario))
+                return Bloqueado();
             var usuario = await AutenticarAsync(request);
             if (usuario == null)
                 return Unauthorized(CredencialesInvalidas);
@@ -268,25 +279,34 @@ namespace RestaurantApi.Controllers
         }
 
         private static string? ValidarClave(string clave)
-            => clave.Length < 4 ? "La clave debe tener al menos 4 caracteres" : null;
+            => clave.Length < LargoMinimoClave ? $"La clave debe tener al menos {LargoMinimoClave} caracteres" : null;
 
         private Task<bool> EsUltimoAdministradorAsync(int id)
             => _context.Usuarios.AllAsync(u => u.Id == id || u.Rol != RolUsuario.Administrador || !u.Activo);
 
-        /// <summary>Valida credenciales y migra a BCrypt las claves heredadas en texto plano.</summary>
+        /// <summary>
+        /// Valida credenciales y migra a BCrypt las claves heredadas en texto plano. Cada fallo
+        /// cuenta para el bloqueo de la cuenta; un ingreso correcto lo reinicia.
+        /// </summary>
         private async Task<Usuario?> AutenticarAsync(LoginRequestDto request)
         {
-            var usuario = await _context.Usuarios
+            // Los usuarios técnicos se tratan como inexistentes: mismo tiempo y mismo mensaje.
+            var usuario = UsuariosSistema.Es(request.Usuario) ? null : await _context.Usuarios
                 .FirstOrDefaultAsync(u => u.NombreUsuario == request.Usuario);
 
             if (usuario == null)
             {
                 ClaveHasher.VerificarFicticio(request.Clave);
+                _intentos.RegistrarFallo(request.Usuario);
                 return null;
             }
 
             if (!ClaveHasher.Verificar(request.Clave, usuario.ClaveHash, out var migrar))
+            {
+                _intentos.RegistrarFallo(request.Usuario);
                 return null;
+            }
+            _intentos.Limpiar(request.Usuario);
 
             if (migrar)
             {

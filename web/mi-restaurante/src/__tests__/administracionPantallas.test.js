@@ -112,7 +112,7 @@ describe('Usuarios', () => {
     fireEvent.change(within(dialogo).getByLabelText(/^Clave/), { target: { value: '12' } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear usuario' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('al menos 4 caracteres');
+    expect(await screen.findByRole('alert')).toHaveTextContent('al menos 8 caracteres');
     expect(api.createUsuario).not.toHaveBeenCalled();
   });
 });

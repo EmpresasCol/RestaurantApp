@@ -41,7 +41,7 @@ namespace RestaurantApi.Controllers
 
         // ID del usuario "sistema" para los pedidos creados por clientes públicos.
         // Se crea on-demand igual que el usuario `cliente_qr`.
-        private const string UsuarioSistemaPublico = "cliente_publico";
+        private const string UsuarioSistemaPublico = UsuariosSistema.ClientePublico;
 
         public DomiciliosPublicoController(
             RestauranteContext context,
@@ -418,7 +418,7 @@ namespace RestaurantApi.Controllers
             {
                 Nombre        = "Cliente Público",
                 NombreUsuario = UsuarioSistemaPublico,
-                ClaveHash     = Guid.NewGuid().ToString("N"),  // inutilizable para login
+                ClaveHash     = UsuariosSistema.ClaveInutilizable(),
                 Rol           = RolUsuario.Mesero              // placeholder, nunca se usa para login
             };
             _context.Usuarios.Add(user);

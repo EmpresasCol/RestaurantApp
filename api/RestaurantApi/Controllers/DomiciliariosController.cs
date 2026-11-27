@@ -22,17 +22,20 @@ namespace RestaurantApi.Controllers
         private readonly DomicilioRealtimeService _realtime;
         private readonly ILogger<DomiciliariosController> _logger;
         private readonly JwtTokenService _jwt;
+        private readonly IntentosLogin _intentos;
 
         public DomiciliariosController(
             RestauranteContext context,
             DomicilioRealtimeService realtime,
             ILogger<DomiciliariosController> logger,
-            JwtTokenService? jwt = null)
+            JwtTokenService? jwt = null,
+            IntentosLogin? intentos = null)
         {
             _context  = context;
             _realtime = realtime;
             _logger   = logger;
             _jwt      = jwt ?? new JwtTokenService(new JwtOptions());
+            _intentos = intentos ?? new IntentosLogin();
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -48,7 +51,11 @@ namespace RestaurantApi.Controllers
             if (string.IsNullOrWhiteSpace(req.Usuario) || string.IsNullOrWhiteSpace(req.Clave))
                 return BadRequest(new { message = "Usuario y contraseña son obligatorios" });
 
-            var usuario = await _context.Usuarios
+            if (_intentos.EstaBloqueado(req.Usuario))
+                return StatusCode(StatusCodes.Status429TooManyRequests, new { message = IntentosLogin.MensajeBloqueo });
+
+            // Los usuarios técnicos se tratan como inexistentes: mismo tiempo y mismo mensaje.
+            var usuario = UsuariosSistema.Es(req.Usuario) ? null : await _context.Usuarios
                 .FirstOrDefaultAsync(u => u.NombreUsuario == req.Usuario);
 
             var migrar = false;
@@ -57,10 +64,12 @@ namespace RestaurantApi.Controllers
 
             if (usuario is null || !ClaveHasher.Verificar(req.Clave, usuario.ClaveHash, out migrar))
             {
+                _intentos.RegistrarFallo(req.Usuario);
                 // No revelamos si el usuario existe o no: mismo mensaje.
                 _logger.LogWarning("🚫 Login domiciliario fallido");
                 return Unauthorized(new { message = "Credenciales inválidas" });
             }
+            _intentos.Limpiar(req.Usuario);
 
             if (migrar)
             {

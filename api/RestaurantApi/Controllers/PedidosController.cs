@@ -535,7 +535,7 @@ namespace RestaurantApi.Controllers
         private async Task<int> ObtenerUsuarioGenericoQR()
         {
             var usuarioQR = await _context.Usuarios
-                .FirstOrDefaultAsync(u => u.NombreUsuario == "cliente_qr");
+                .FirstOrDefaultAsync(u => u.NombreUsuario == UsuariosSistema.ClienteQR);
 
             if (usuarioQR != null)
                 return usuarioQR.Id;
@@ -543,8 +543,8 @@ namespace RestaurantApi.Controllers
             var nuevoUsuario = new Usuario
             {
                 Nombre = "Cliente QR",
-                NombreUsuario = "cliente_qr",
-                ClaveHash = ClaveHasher.Hash(Guid.NewGuid().ToString("N")),
+                NombreUsuario = UsuariosSistema.ClienteQR,
+                ClaveHash = UsuariosSistema.ClaveInutilizable(),
                 Rol = RolUsuario.Mesero
             };
 

@@ -2,7 +2,10 @@
 {
     public class LoginRequestDto
     {
+        // Topes holgados: evitan que un cuerpo enorme llegue a BCrypt.
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
         public string Usuario { get; set; } = string.Empty;
+        [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string Clave { get; set; } = string.Empty;
     }
 

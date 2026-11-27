@@ -36,7 +36,7 @@ describe('platillos', () => {
 });
 
 describe('usuarios', () => {
-  const base = { nombre: 'Ana Ruiz', nombreUsuario: 'ana', rol: 'Caja', clave: 'clave1', confirmarClave: 'clave1' };
+  const base = { nombre: 'Ana Ruiz', nombreUsuario: 'ana', rol: 'Caja', clave: 'clave-segura', confirmarClave: 'clave-segura' };
 
   test('un usuario válido pasa', () => {
     expect(validarUsuario(base)).toBeNull();
@@ -48,7 +48,7 @@ describe('usuarios', () => {
   });
 
   test('la clave se exige al crear y debe coincidir', () => {
-    expect(validarUsuario({ ...base, clave: '123', confirmarClave: '123' })).toMatch(/4 caracteres/);
+    expect(validarUsuario({ ...base, clave: '123', confirmarClave: '123' })).toMatch(/8 caracteres/);
     expect(validarUsuario({ ...base, confirmarClave: 'otra' })).toMatch(/no coinciden/);
   });
 

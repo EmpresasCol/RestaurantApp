@@ -11,7 +11,7 @@ namespace RestaurantApi.Services
     public class ReportesVentas
     {
         /// <summary>Usuario genérico al que quedan los pedidos hechos por el comensal desde el QR.</summary>
-        public const string UsuarioQR = "cliente_qr";
+        public const string UsuarioQR = UsuariosSistema.ClienteQR;
         public const int MaximoDias = 366;
 
         private readonly RestauranteContext _ctx;

@@ -20,6 +20,7 @@ var jwtSinConfigurar = string.IsNullOrWhiteSpace(jwtOptions.Key);
 if (jwtSinConfigurar) jwtOptions.Key = JwtOptions.ClaveAleatoria();
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<JwtTokenService>();
+builder.Services.AddSingleton<IntentosLogin>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -42,14 +43,27 @@ builder.Services
         // El navegador no envía cabeceras en WebSocket: SignalR manda el JWT por query string.
         options.Events = new JwtBearerEvents
         {
-            // Un usuario desactivado pierde el acceso aunque su token siga vigente.
+            // Un usuario desactivado, o al que le cambiaron el rol, pierde el acceso aunque su token
+            // siga vigente: los permisos salen de la base, no de lo que diga un token de hace horas.
             OnTokenValidated = async ctx =>
             {
                 var id = QproClaims.IdUsuario(ctx.Principal);
-                if (id == null) return;
+                if (id == null)
+                {
+                    ctx.Fail("Token sin usuario");
+                    return;
+                }
                 var db = ctx.HttpContext.RequestServices.GetRequiredService<RestauranteContext>();
-                if (!await db.Usuarios.AnyAsync(u => u.Id == id && u.Activo))
+                var actual = await db.Usuarios.AsNoTracking()
+                    .Where(u => u.Id == id)
+                    .Select(u => new { u.Activo, u.Rol, u.NombreUsuario })
+                    .FirstOrDefaultAsync();
+                if (actual == null || !actual.Activo)
                     ctx.Fail("Usuario desactivado");
+                else if (actual.Rol.ToString() != ctx.Principal?.FindFirst(QproClaims.Rol)?.Value)
+                    ctx.Fail("El rol del usuario cambió");
+                else if (UsuariosSistema.Es(actual.NombreUsuario))
+                    ctx.Fail("Usuario técnico");
             },
             OnMessageReceived = ctx =>
             {
