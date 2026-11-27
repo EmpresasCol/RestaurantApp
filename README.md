@@ -160,6 +160,7 @@ La web y la landing comparten la rama `gh-pages`; cada una reemplaza solo sus pr
 - [`PRODUCT.md`](PRODUCT.md): usuarios, propósito y principios del producto.
 - [`DESIGN.md`](DESIGN.md): colores, tipografía y componentes de Qpro.
 - [`CONTEXTO_PROYECTO.md`](CONTEXTO_PROYECTO.md): estado actual, decisiones y pendientes.
+- [`docs/AUDITORIA_SEGURIDAD.md`](docs/AUDITORIA_SEGURIDAD.md): auditoría de seguridad (15 pruebas), eventos de auditoría y pendientes de producción.
 - [`landing/README.md`](landing/README.md): cómo editar y publicar la página comercial.
 
 ## Equipo
