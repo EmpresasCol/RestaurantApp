@@ -144,8 +144,8 @@ namespace RestaurantApi.Controllers
                     });
                 }
 
-                // 4. Costo de envío base (leer de ConfiguracionDomicilios en versiones futuras).
-                const decimal costoEnvioBase = 3000m;
+                // 4. Costo de envío: el que fijó el administrador en Configuración.
+                var costoEnvioBase = (await Personalizacion.ObtenerAsync(_context)).CostoEnvio;
 
                 // 5. Crear el domicilio.
                 var ahora = DateTime.UtcNow;

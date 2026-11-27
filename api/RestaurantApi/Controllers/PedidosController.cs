@@ -87,6 +87,9 @@ namespace RestaurantApi.Controllers
                 mesa = await _context.Mesas.FirstOrDefaultAsync(m => m.CodigoQR == codigo);
                 if (mesa == null)
                     return BadRequest("Este código QR ya no es válido. Pide al mesero el código de tu mesa.");
+                // El administrador puede pausar los pedidos por QR (cocina llena, cierre): la carta se sigue viendo.
+                if (!(await Personalizacion.ObtenerAsync(_context)).PedidosQR)
+                    return BadRequest("Por ahora los pedidos se hacen con el mesero. Toca «Llamar al mesero» y te atiende en un momento.");
             }
             else
             {

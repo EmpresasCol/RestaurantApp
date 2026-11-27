@@ -163,6 +163,7 @@ public class SeguridadTests
             "PlatillosController.GetPlatillos", "PlatillosController.GetPlatillo",
             "PedidosController.PostPedido", // menú QR del comensal
             "MesasController.GetMesaPorCodigo", // el comensal ve el número de su mesa
+            "ConfiguracionController.Get", // nombre, logo y colores del restaurante: el ingreso y el menú QR los muestran sin sesión
             // Comensal del QR: cada acción exige el código de la mesa y, para ver la cuenta, la llave de la visita.
             "ClienteMesaController.Unirse", "ClienteMesaController.GetSeguimiento",
             "ClienteMesaController.Llamar", "ClienteMesaController.GetLlamada",

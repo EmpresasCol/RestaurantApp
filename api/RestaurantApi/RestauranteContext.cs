@@ -95,6 +95,7 @@ namespace RestaurantApi
         public DbSet<LlamadaMesero> LlamadasMesero { get; set; }
         public DbSet<SuscripcionPush> SuscripcionesPush { get; set; }
         public DbSet<ConfiguracionFiscal> ConfiguracionFiscal { get; set; }
+        public DbSet<ConfiguracionRestaurante> ConfiguracionRestaurante { get; set; }
         public DbSet<NumeracionDian> NumeracionesDian { get; set; }
         public DbSet<DocumentoElectronico> DocumentosElectronicos { get; set; }
 
@@ -217,6 +218,12 @@ namespace RestaurantApi
                 e.ToTable("ConfiguracionFiscal");
                 e.Property(c => c.Id).ValueGeneratedNever();
                 e.Property(c => c.TarifaImpuesto).HasColumnType("decimal(5,2)");
+            });
+            modelBuilder.Entity<ConfiguracionRestaurante>(e =>
+            {
+                e.ToTable("ConfiguracionRestaurante");
+                e.Property(c => c.Id).ValueGeneratedNever();
+                e.Property(c => c.CostoEnvio).HasColumnType("decimal(10,2)");
             });
             modelBuilder.Entity<NumeracionDian>().ToTable("NumeracionesDian");
             modelBuilder.Entity<DocumentoElectronico>(e =>
