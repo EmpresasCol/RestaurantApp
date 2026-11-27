@@ -701,7 +701,7 @@ INSERT INTO Usuarios (Nombre, Usuario, ClaveHash, Rol) VALUES
 ('Ana Martínez', 'ana.cocina', '123', 'Cocina'),
 ('Pedro Rodríguez', 'pedro.caja', '123', 'Caja'),
 ('Laura Fernández', 'laura.caja', '123', 'Caja'),
-('Cliente QR', 'cliente_qr', CONCAT('!sin-login!', SHA2(UUID(), 256)), 'Mesero');
+('Cliente QR', 'cliente_qr', CONCAT('!sin-login!', LEFT(SHA2(UUID(), 256), 49)), 'Mesero');
 
 -- Mesas
 INSERT INTO Mesas (Numero, Estado) VALUES

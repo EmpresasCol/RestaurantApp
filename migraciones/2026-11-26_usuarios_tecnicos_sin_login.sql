@@ -7,7 +7,7 @@
 -- el login; esto además reemplaza su clave por un valor aleatorio que nadie conoce.
 
 UPDATE Usuarios
-   SET ClaveHash = CONCAT('!sin-login!', SHA2(UUID(), 256))
+   SET ClaveHash = CONCAT('!sin-login!', LEFT(SHA2(UUID(), 256), 49))
  WHERE Usuario IN ('cliente_qr', 'cliente_publico')
    AND ClaveHash NOT LIKE '!sin-login!%';
 
