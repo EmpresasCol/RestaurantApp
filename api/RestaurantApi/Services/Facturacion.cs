@@ -83,7 +83,7 @@ namespace RestaurantApi.Services
         }
 
         public static Task<ConfiguracionFiscal?> ConfiguracionAsync(RestauranteContext ctx)
-            => ctx.ConfiguracionFiscal.AsNoTracking().FirstOrDefaultAsync();
+            => ctx.ConfiguracionFiscal.AsNoTracking().OrderBy(c => c.Id).FirstOrDefaultAsync();
 
         /// <summary>
         /// Separa el impuesto del precio (la carta ya lo incluye): base + impuesto = consumo. La

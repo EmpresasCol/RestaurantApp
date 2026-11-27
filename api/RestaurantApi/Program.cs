@@ -293,6 +293,9 @@ app.Use(async (context, next) =>
     }
 });
 
+// La raíz responde sin sesión: Render y los monitores la sondean y, con 401, ensuciaban la auditoría.
+app.MapMethods("/", new[] { HttpMethods.Get, HttpMethods.Head }, () => Results.Ok(new { servicio = "Qpro API" })).AllowAnonymous();
+
 // Endpoint de salud para Docker healthcheck
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow })).AllowAnonymous();
 app.MapGet("/api/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow })).AllowAnonymous();

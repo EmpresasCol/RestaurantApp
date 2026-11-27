@@ -138,7 +138,7 @@ namespace RestaurantApi.Controllers
 
             dto.Id = 1;
             dto.RazonSocial = dto.RazonSocial?.Trim() ?? "";
-            var actual = await _context.ConfiguracionFiscal.FirstOrDefaultAsync();
+            var actual = await _context.ConfiguracionFiscal.OrderBy(c => c.Id).FirstOrDefaultAsync();
             if (actual == null) _context.ConfiguracionFiscal.Add(dto);
             else _context.Entry(actual).CurrentValues.SetValues(dto);
             await _context.SaveChangesAsync();
