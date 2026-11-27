@@ -37,7 +37,7 @@ Un solo sistema conecta el pedido del comensal, la cocina, la caja y el inventar
 
 ## Brand Commitments
 
-- Nombre visible en toda la web: **Qpro**.
+- Nombre de fábrica: **Qpro**. El administrador pone el nombre, logo y colores de su restaurante en Configuración y se ven en la web, la carta QR, las tirillas y la app móvil; Qpro sigue siendo el nombre del software.
 - Logo existente obligatorio: `web/mi-restaurante/src/components/logo.jpg`.
 
 ## Evidence on Hand

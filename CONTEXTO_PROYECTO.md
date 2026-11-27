@@ -126,6 +126,13 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - El cierre de caja se bloquea con rechazos por resolver (`DocumentosDian.PorResolver`): no cuenta lo rechazado de una factura anulada cuya venta nunca validó la DIAN.
 - Web: `components/caja/DatosFiscales.js`, estado DIAN y anulación en `FacturasDia.js`, reglas de texto en `utils/facturacion.js`, tirilla en `utils/recibo.js`, impuesto en `utils/impuestos.js`.
 
+### Configuración del restaurante (26/11/2026)
+- Tabla `ConfiguracionRestaurante` (una fila), migración `migraciones/2026-11-26_configuracion_restaurante.sql` (**pendiente de aplicar en TiDB** antes de desplegar). Sin la tabla, `GET` devuelve los valores de fábrica y el sistema funciona como antes; `PUT` responde 503 diciendo qué migración falta.
+- `GET api/configuracion` es anónimo (ingreso y carta QR); `PUT` solo Administrador. Validación en `Services/Personalizacion.cs` (colores #RRGGBB, contraste AA del color de acciones con blanco, logo con contenido real de imagen ≤ 300 kB, rangos). Tema realtime `configuracion`.
+- Qué controla: nombre, eslogan, logo, color de marca (`orange`) y de acciones (`espresso`), bienvenida, horario, WhatsApp e Instagram de la carta, pausa de pedidos por QR (la API rechaza el pedido anónimo; el mesero pide igual), pie y logo de la tirilla, propina sugerida (caja y app), costo del envío (domicilio nuevo y página pública) y minutos de "demorado"/"urgente" en cocina.
+- Web: `src/Configuracion.js` (pestañas Marca, Carta y contacto, Facturas, Operación, Datos fiscales), `context/MarcaContext.js` (caché en `localStorage`), reglas en `utils/marca.js`. Tailwind lee `--qp-marca-50…950` y `--qp-accion` (valores de fábrica en `index.css`).
+- App: `providers/marca_provider.dart` (caché en `SharedPreferences`), `models/marca.dart`; `QColors.espresso` y la familia caramelo ya no son `const` (`QColors.aplicar`).
+
 ### Diseño
 - Sistema "La carta a un toque": espresso `#2A1D15` para acciones, caramelo `#C8955E` para marca y conteos, piedra cálida para lo demás. Manrope con `.tabular` en cifras; solo sombras `card` y `lift`.
 - Tailwind se carga por CDN con un remapeo de paleta en `public/index.html`: `orange` es caramelo, `gray` es piedra y `purple` es petróleo.
@@ -174,6 +181,7 @@ factura y liquidación, cierre de caja con arqueo, cocina con listos aparte y el
 - [x] Render despliega desde `RestaurantApp/AppMovil`.
 - [x] `.env.production` apunta a la API de Render (antes ngrok).
 - [ ] Las claves de la semilla SQL siguen en `123`.
+- [ ] Aplicar `migraciones/2026-11-26_configuracion_restaurante.sql` en TiDB antes de desplegar la API con Configuración.
 - [ ] Confirmar con el asesor si aplica impoconsumo o IVA (ya es configurable en Datos fiscales).
 - [ ] Contratar proveedor tecnológico DIAN y escribir su adaptador (`IProveedorFacturacion`). Sin eso la facturación electrónica no se enciende.
 - [x] `migraciones/2026-11-14_facturacion_electronica.sql` aplicada en TiDB y rama desplegada (14/11/2026). La facturación electrónica sigue apagada.
