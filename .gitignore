@@ -502,3 +502,5 @@ Thumbs.db
 *.sublime-workspace
 .agents/
 .gemini/
+# Respaldos de la base (scripts/respaldo-bd.sh): nunca al repositorio
+respaldos/

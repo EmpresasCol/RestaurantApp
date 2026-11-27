@@ -9,12 +9,13 @@ services:
     container_name: restaurant-db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Define DB_ROOT_PASSWORD en .env (copia .env.example)}
       MYSQL_DATABASE: ${DB_NAME:-restaurantebd}
       MYSQL_USER: ${DB_USER:-restaurant_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-restaurant_password}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env (copia .env.example)}
     ports:
-      - "${DB_PORT:-3307}:3306"
+      # Solo desde este equipo: la base nunca queda expuesta en la red local.
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
@@ -45,9 +46,14 @@ services:
       EnableSwagger: ${ENABLE_SWAGGER:-false}
       Jwt__Key: ${JWT_KEY:-}
       Cors__Origenes: ${CORS_ORIGENES:-http://localhost:3000,http://localhost:3001}
-      ConnectionStrings__DefaultConnection: "server=restaurant-db;port=3306;database=${DB_NAME:-restaurantebd};user=root;password=${DB_ROOT_PASSWORD:-root};"
+      # La API entra con el usuario de la aplicación (permisos solo sobre su base), nunca como root.
+      ConnectionStrings__DefaultConnection: "server=restaurant-db;port=3306;database=${DB_NAME:-restaurantebd};user=${DB_USER:-restaurant_user};password=${DB_PASSWORD};"
+      # Detrás del Nginx de restaurant-web la IP real del cliente llega en X-Real-IP (la fija Nginx).
+      Proxy__CabeceraIp: X-Real-IP
     ports:
-      - "${API_PORT:-5000}:5000"
+      # Por defecto solo local (la web llega por Nginx). API_BIND=0.0.0.0 para probar la app
+      # móvil desde un celular en la misma red.
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-5000}:5000"
     networks:
       - restaurant-network
     healthcheck:
