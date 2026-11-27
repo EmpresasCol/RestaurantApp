@@ -4,7 +4,7 @@
 
 import { useEffect, useRef } from 'react';
 import { HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr';
-import { EVENTO_SESION_EXPIRADA, getApiBaseUrl, obtenerToken } from './sesion';
+import { EVENTO_SESION_EXPIRADA, getApiBaseUrl, manejarNoAutorizado, obtenerToken } from './sesion';
 
 /**
  * La política por defecto de SignalR se rinde tras 4 intentos (unos 42 s): después de una caída
@@ -25,7 +25,8 @@ const obtenerConexion = () => {
   conexion = new HubConnectionBuilder()
     .withUrl(`${getApiBaseUrl()}/hubs/qpro`, { accessTokenFactory: () => obtenerToken() || '' })
     .withAutomaticReconnect(reintentoSinFin)
-    .configureLogging(LogLevel.Warning)
+    // Los fallos se informan abajo, una vez y legibles; el registro propio de SignalR los repetía en rojo.
+    .configureLogging(LogLevel.None)
     .build();
   conexion.on('cambio', (tema) => avisar(tema));
   // Lo que cambió mientras estaba desconectado se recupera recargando todo.
@@ -33,12 +34,23 @@ const obtenerConexion = () => {
   return conexion;
 };
 
+/** La API rechazó el token (vencido, firmado con otra clave, usuario desactivado o con otro rol). */
+export const esNoAutorizado = (error) =>
+  error?.statusCode === 401 || /Status code '401'/.test(String(error?.message ?? ''));
+
 const conectar = () => {
   if (!obtenerToken()) return;
   const c = obtenerConexion();
   if (c.state !== HubConnectionState.Disconnected) return;
-  // Si falla, la pantalla sigue con su polling de respaldo.
-  c.start().catch((error) => console.warn('SignalR no conectó:', error?.message || error));
+  c.start().catch((error) => {
+    // Mismo trato que un 401 del REST: la sesión ya no vale y se vuelve al ingreso.
+    if (esNoAutorizado(error)) {
+      manejarNoAutorizado(401);
+      return;
+    }
+    // Otro fallo (API arrancando en frío, red): la pantalla sigue con su polling de respaldo.
+    console.warn('SignalR no conectó:', error?.message || error);
+  });
 };
 
 if (typeof window !== 'undefined') {

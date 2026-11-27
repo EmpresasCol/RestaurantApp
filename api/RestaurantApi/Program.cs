@@ -50,7 +50,7 @@ builder.Services
                 var id = QproClaims.IdUsuario(ctx.Principal);
                 if (id == null)
                 {
-                    ctx.Fail("Token sin usuario");
+                    Rechazar(ctx, "Token sin usuario");
                     return;
                 }
                 var db = ctx.HttpContext.RequestServices.GetRequiredService<RestauranteContext>();
@@ -59,11 +59,23 @@ builder.Services
                     .Select(u => new { u.Activo, u.Rol, u.NombreUsuario })
                     .FirstOrDefaultAsync();
                 if (actual == null || !actual.Activo)
-                    ctx.Fail("Usuario desactivado");
+                    Rechazar(ctx, "Usuario desactivado o inexistente");
                 else if (actual.Rol.ToString() != ctx.Principal?.FindFirst(QproClaims.Rol)?.Value)
-                    ctx.Fail("El rol del usuario cambió");
+                    Rechazar(ctx, "El rol del usuario cambió");
                 else if (UsuariosSistema.Es(actual.NombreUsuario))
-                    ctx.Fail("Usuario técnico");
+                    Rechazar(ctx, "Usuario técnico");
+            },
+            // Token vencido, firmado con otra clave (Jwt:Key cambió o no está fija) o mal formado.
+            OnAuthenticationFailed = ctx =>
+            {
+                ctx.HttpContext.Items[MotivoRechazo] = ctx.Exception switch
+                {
+                    SecurityTokenExpiredException => "Token vencido",
+                    SecurityTokenSignatureKeyNotFoundException or SecurityTokenInvalidSignatureException
+                        => "Firma inválida: el token se emitió con otra Jwt:Key",
+                    _ => "Token inválido: " + ctx.Exception.GetType().Name
+                };
+                return Task.CompletedTask;
             },
             OnMessageReceived = ctx =>
             {
@@ -242,8 +254,9 @@ app.Use(async (context, next) =>
     var usuario = autenticado ? context.User.Identity!.Name : "anónimo";
     var rol = context.User.FindFirst(QproClaims.Rol)?.Value ?? "-";
     if (denegado)
-        auditoria.LogWarning(Auditoria.AccesoDenegado, "Auditoría: acceso denegado {Estado} a {Usuario} ({Rol}) en {Metodo} {Ruta} desde {Ip}",
-            estado, usuario, rol, context.Request.Method, context.Request.Path.Value, ip);
+        auditoria.LogWarning(Auditoria.AccesoDenegado, "Auditoría: acceso denegado {Estado} a {Usuario} ({Rol}) en {Metodo} {Ruta} desde {Ip}. Motivo: {Motivo}",
+            estado, usuario, rol, context.Request.Method, context.Request.Path.Value, ip,
+            context.Items[MotivoRechazo] as string ?? (context.Request.Headers.Authorization.Count == 0 ? "sin token" : "-"));
     else
         auditoria.LogInformation(Auditoria.EscrituraPersonal, "Auditoría: {Usuario} ({Rol}) {Metodo} {Ruta} → {Estado} desde {Ip}",
             usuario, rol, context.Request.Method, context.Request.Path.Value, estado, ip);
@@ -324,3 +337,15 @@ catch (Exception ex)
 }
 
 app.Run();
+
+static void Rechazar(TokenValidatedContext ctx, string motivo)
+{
+    ctx.HttpContext.Items[MotivoRechazo] = motivo;
+    ctx.Fail(motivo);
+}
+
+public partial class Program
+{
+    /// <summary>Clave de HttpContext.Items con el motivo por el que se rechazó el token.</summary>
+    public const string MotivoRechazo = "qpro:motivo-rechazo";
+}

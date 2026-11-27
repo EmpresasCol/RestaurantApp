@@ -20,7 +20,7 @@ jest.mock('@microsoft/signalr', () => ({
     build() { return mockConexion; }
   },
   HubConnectionState: { Disconnected: 'Disconnected' },
-  LogLevel: { Warning: 3 },
+  LogLevel: { Warning: 3, None: 6 },
 }));
 
 const { useCambios } = require('../services/realtime');
@@ -50,6 +50,39 @@ describe('useCambios', () => {
     unmount();
     mockHandlers.cambio('pedidos');
     expect(recargar).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('token rechazado por el hub', () => {
+  afterEach(() => localStorage.clear());
+
+  test('un 401 al negociar cierra la sesión como en el REST, sin errores en consola', async () => {
+    const { EVENTO_SESION_EXPIRADA } = require('../services/sesion');
+    localStorage.setItem('token', 'jwt-vencido');
+    mockConexion.state = 'Disconnected';
+    const original = mockConexion.start;
+    mockConexion.start = () => Promise.reject(new Error("Failed to complete negotiation with the server: Error: : Status code '401'"));
+    const expirada = jest.fn();
+    window.addEventListener(EVENTO_SESION_EXPIRADA, expirada);
+    const aviso = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    render(<Pantalla tema="pedidos" recargar={() => {}} />);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(expirada).toHaveBeenCalledTimes(1);
+    expect(aviso).not.toHaveBeenCalled();
+    window.removeEventListener(EVENTO_SESION_EXPIRADA, expirada);
+    mockConexion.start = original;
+    aviso.mockRestore();
+  });
+
+  test('esNoAutorizado no confunde otros fallos con un 401', () => {
+    const { esNoAutorizado } = require('../services/realtime');
+    expect(esNoAutorizado({ statusCode: 401 })).toBe(true);
+    expect(esNoAutorizado(new Error("Status code '503'"))).toBe(false);
+    expect(esNoAutorizado(new Error('Failed to fetch'))).toBe(false);
+    expect(esNoAutorizado(undefined)).toBe(false);
   });
 });
 
