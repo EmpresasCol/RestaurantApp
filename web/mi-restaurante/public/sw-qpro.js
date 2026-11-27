@@ -50,6 +50,7 @@ self.addEventListener('push', (e) => {
     if (visita) {
       try {
         const r = await fetch(`${visita.api}/cliente-mesa/seguimiento`, {
+          cache: 'no-store',
           headers: { 'X-Mesa': visita.codigo, 'X-Seguimiento': visita.llave },
         });
         if (r.status === 410) {

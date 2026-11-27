@@ -35,7 +35,10 @@ const mensaje = async (r, respaldo) => {
   }
 };
 
+// no-store: la respuesta depende de las cabeceras, no de la URL. Un 410 guardado en la caché del
+// navegador (que lo trata como permanente) haría ver "sin pedidos" en toda visita posterior.
 const pedir = (ruta, { codigo, llave, ...opciones } = {}) => fetch(`${API()}${ruta}`, {
+  cache: 'no-store',
   ...opciones,
   headers: {
     'Content-Type': 'application/json',

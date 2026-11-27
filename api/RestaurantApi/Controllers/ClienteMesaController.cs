@@ -21,6 +21,9 @@ namespace RestaurantApi.Controllers
     [ApiController]
     [AllowAnonymous]
     [EnableRateLimiting("cliente-mesa")]
+    // La respuesta depende de las cabeceras X-Mesa/X-Seguimiento, no de la URL. Sin esto el navegador
+    // guarda para siempre un 410 ("visita cerrada") y lo repite en cualquier mesa y visita posterior.
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public class ClienteMesaController : ControllerBase
     {
         public const string CabeceraMesa = "X-Mesa";
