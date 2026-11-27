@@ -106,6 +106,9 @@ namespace RestaurantApi.Controllers
                 // 3. Validar platillos y calcular subtotal.
                 if (dto.Detalles.Count == 0)
                     return BadRequest(new { message = "Debe incluir al menos un platillo" });
+                var errorLineas = ErrorDeLineas(dto.Detalles.Select(d => d.Cantidad).ToList());
+                if (errorLineas != null)
+                    return BadRequest(new { message = errorLineas });
 
                 var platilloIds = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
                 var platillos = await _context.Platillos
@@ -294,6 +297,9 @@ namespace RestaurantApi.Controllers
 
             if (dto.Detalles.Count == 0)
                 return BadRequest(new { message = "Debe incluir al menos un platillo" });
+            var errorLineas = ErrorDeLineas(dto.Detalles.Select(d => d.Cantidad).ToList());
+            if (errorLineas != null)
+                return BadRequest(new { message = errorLineas });
 
             // Validar platillos
             var ids = dto.Detalles.Select(d => d.PlatilloId).Distinct().ToList();
@@ -391,6 +397,21 @@ namespace RestaurantApi.Controllers
         // ══════════════════════════════════════════════════════════════════
 
         /// <summary>Genera un token criptográficamente seguro de 32 chars hex.</summary>
+        private const int CantidadMaximaPorLinea = 100;
+
+        /// <summary>
+        /// Mismos topes que el pedido de mesa: la página es anónima, así que se rechazan cantidades
+        /// en cero, negativas o desmedidas antes de tocar el inventario o el total.
+        /// </summary>
+        private static string? ErrorDeLineas(IReadOnlyCollection<int> cantidades)
+        {
+            if (cantidades.Count > PedidosController.MaximoLineas)
+                return $"Máximo {PedidosController.MaximoLineas} platos por pedido";
+            return cantidades.Any(c => c <= 0 || c > CantidadMaximaPorLinea)
+                ? $"La cantidad de cada plato debe estar entre 1 y {CantidadMaximaPorLinea}"
+                : null;
+        }
+
         private static string GenerarTokenSeguro()
         {
             Span<byte> bytes = stackalloc byte[16];

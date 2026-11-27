@@ -209,10 +209,10 @@ namespace RestaurantApi.Controllers
                 if (metodo != nameof(MetodoPago.QR)) continue;
                 if (string.IsNullOrWhiteSpace(p.Comprobante))
                     return "Toma la foto de cada transferencia antes de enviarla a caja";
-                if (!p.Comprobante.StartsWith("data:image/", StringComparison.Ordinal))
-                    return "El comprobante debe ser una foto";
                 if (p.Comprobante.Length > MaximoComprobante)
                     return "La foto del comprobante es muy pesada";
+                if (!ImagenDataUri.EsFoto(p.Comprobante, MaximoComprobante))
+                    return "El comprobante debe ser una foto (JPG, PNG, WebP o HEIC)";
             }
             var suma = pagos.Sum(p => p.Monto);
             return suma - total >= 0.01m

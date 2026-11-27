@@ -217,7 +217,7 @@ public class ComprasTests
     public async Task La_recepcion_guarda_proveedor_factura_y_fotos_de_evidencia()
     {
         using var ctx = Crear();
-        const string foto = "data:image/jpeg;base64,AAAA";
+        const string foto = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
         var dto = Recepcion(new RecepcionLineaDto { ProductoId = TestDb.ProductoCarneId, Cantidad = 1 });
         dto.Documento = "FV-881";
         dto.Fotos = new() { foto, foto };

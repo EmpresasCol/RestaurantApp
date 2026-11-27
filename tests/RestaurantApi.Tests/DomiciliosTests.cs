@@ -159,4 +159,20 @@ public class DomiciliosTests
 
         Assert.Equal(TestDb.StockInicialCarne - 5 * TestDb.CarnePorHamburguesa, TestDb.StockCarne(ctx));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    [InlineData(101)]
+    public async Task Pedido_publico_rechaza_cantidades_invalidas_sin_crear_nada(int cantidad)
+    {
+        using var ctx = TestDb.Crear();
+        var dto = PedidoPublico();
+        dto.Detalles[0].Cantidad = cantidad;
+
+        var r = await Publico(ctx).Crear(dto);
+
+        Assert.IsType<BadRequestObjectResult>(r.Result);
+        Assert.Empty(ctx.Domicilios);
+    }
 }

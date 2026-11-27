@@ -233,7 +233,7 @@ namespace RestaurantApi.Controllers
         private static string? ValidarFotos(List<string> fotos, int yaGuardadas)
         {
             if (fotos.Count + yaGuardadas > MaximoFotos) return $"Máximo {MaximoFotos} fotos por recepción";
-            return fotos.Any(f => string.IsNullOrWhiteSpace(f) || !f.StartsWith("data:image/") || f.Length > MaximoFoto)
+            return fotos.Any(f => !ImagenDataUri.EsFoto(f, MaximoFoto))
                 ? "Una de las fotos no es una imagen válida o pesa demasiado"
                 : null;
         }

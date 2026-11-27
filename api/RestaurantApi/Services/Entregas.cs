@@ -47,10 +47,10 @@ namespace RestaurantApi.Services
             }
             if (!string.IsNullOrWhiteSpace(comprobante))
             {
-                if (!comprobante.StartsWith("data:image/", StringComparison.Ordinal))
-                    return "El comprobante debe ser una foto";
                 if (comprobante.Length > Controllers.CuentasController.MaximoComprobante)
                     return "La foto del comprobante es muy pesada";
+                if (!ImagenDataUri.EsFoto(comprobante, Controllers.CuentasController.MaximoComprobante))
+                    return "El comprobante debe ser una foto (JPG, PNG, WebP o HEIC)";
                 d.ComprobantePago = comprobante;
             }
 
