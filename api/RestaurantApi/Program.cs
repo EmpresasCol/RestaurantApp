@@ -208,6 +208,19 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("EnableS
     app.UseSwaggerUI();
 }
 
+// Cabeceras de seguridad: la API solo entrega JSON, así que nada de lo que devuelve debe
+// interpretarse como página, incrustarse en un marco ni filtrar la URL de origen.
+app.Use((context, next) =>
+{
+    var h = context.Response.Headers;
+    h.XContentTypeOptions = "nosniff";
+    h.XFrameOptions = "DENY";
+    h["Referrer-Policy"] = "no-referrer";
+    if (!context.Request.Path.StartsWithSegments("/swagger"))
+        h.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
+    return next();
+});
+
 app.UseResponseCompression();
 app.UseCors("Frontend");
 

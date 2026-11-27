@@ -2,6 +2,14 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8">
+    <!--
+      Política de contenido (CSP): solo se ejecuta el JavaScript propio del sitio; un texto con
+      <script> o un onerror guardado en la base no corre aunque se colara en pantalla. Va aquí y no
+      como cabecera porque GitHub Pages no deja configurar cabeceras. connect-src admite la API
+      por HTTPS/WSS y la API local de desarrollo. El build no inyecta scripts en línea
+      (INLINE_RUNTIME_CHUNK=false en .env.production).
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss: http://localhost:5000 ws://localhost:5000; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#2A1D15" />
