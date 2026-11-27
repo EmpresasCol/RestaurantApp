@@ -1,17 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/marca.dart';
+
 /// Tokens de DESIGN.md ("La carta a un toque"), los mismos de la web.
 /// Espresso actúa, caramelo marca conteos y foco, piedra cálida para lo demás.
 /// Verde, ámbar y rojo solo significan estado.
+///
+/// Espresso y la familia caramelo son el color de acciones y el de marca que el administrador
+/// elige en Configuración ([aplicar]); por eso no son `const`. Los de fábrica son los de Qpro.
 abstract final class QColors {
-  static const espresso = Color(0xFF2A1D15);
-  static const espressoRaised = Color(0xFF3A2A20);
-  static const caramel = Color(0xFFC8955E);
-  static const caramelDeep = Color(0xFF865B35);
-  static const caramelLight = Color(0xFFEBD3B6);
-  static const caramelSoft = Color(0xFFF5E9DA);
-  static const caramelWash = Color(0xFFFBF6F0);
+  static Color espresso = const Color(0xFF2A1D15);
+  static Color espressoRaised = const Color(0xFF3A2A20);
+  static Color caramel = const Color(0xFFC8955E);
+  static Color caramelDeep = const Color(0xFF865B35);
+  static Color caramelLight = const Color(0xFFEBD3B6);
+  static Color caramelSoft = const Color(0xFFF5E9DA);
+  static Color caramelWash = const Color(0xFFFBF6F0);
+
+  /// Pinta la app con la marca del restaurante. El caramelo de fábrica conserva sus tonos
+  /// afinados a mano; otro color genera los suyos mezclando con blanco o negro, como la web.
+  static void aplicar(Marca marca) {
+    final m = marca.colorMarca, a = marca.colorAccion;
+    espresso = a;
+    espressoRaised = Color.lerp(a, const Color(0xFFFFFFFF), 0.08)!;
+    if (m == Marca.colorMarcaFabrica) {
+      caramel = m;
+      caramelDeep = const Color(0xFF865B35);
+      caramelLight = const Color(0xFFEBD3B6);
+      caramelSoft = const Color(0xFFF5E9DA);
+      caramelWash = const Color(0xFFFBF6F0);
+    } else {
+      caramel = m;
+      caramelDeep = Color.lerp(m, const Color(0xFF000000), 0.33)!;
+      caramelLight = Color.lerp(m, const Color(0xFFFFFFFF), 0.7)!;
+      caramelSoft = Color.lerp(m, const Color(0xFFFFFFFF), 0.86)!;
+      caramelWash = Color.lerp(m, const Color(0xFFFFFFFF), 0.94)!;
+    }
+  }
   static const tealDeep = Color(0xFF1E505A);
   static const tealLight = Color(0xFF82BCC3);
   static const tealWash = Color(0xFFEFF7F7);
@@ -66,18 +92,18 @@ abstract final class QMotion {
 const tabular = [FontFeature.tabularFigures()];
 
 ThemeData qproTheme() {
-  const texto = TextTheme(
+  final texto = TextTheme(
     headlineMedium: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -0.5, height: 1.1, color: QColors.espresso),
     headlineSmall: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.4, height: 1.15, color: QColors.espresso),
     titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.4, color: QColors.espresso),
     titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: QColors.espresso),
     titleSmall: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: QColors.espresso),
     bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, height: 1.5, color: QColors.espresso),
-    bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, height: 1.45, color: QColors.stone600),
-    bodySmall: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: QColors.stone500),
-    labelLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-    labelMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-    labelSmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    bodyMedium: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, height: 1.45, color: QColors.stone600),
+    bodySmall: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: QColors.stone500),
+    labelLarge: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+    labelMedium: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+    labelSmall: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
   );
 
   final esquinas = RoundedRectangleBorder(borderRadius: BorderRadius.circular(QRadius.control));
@@ -87,7 +113,7 @@ ThemeData qproTheme() {
     fontFamily: 'Manrope',
     textTheme: texto,
     scaffoldBackgroundColor: QColors.stone50,
-    colorScheme: const ColorScheme.light(
+    colorScheme: ColorScheme.light(
       primary: QColors.espresso,
       onPrimary: QColors.white,
       secondary: QColors.caramel,
@@ -100,7 +126,7 @@ ThemeData qproTheme() {
       outlineVariant: QColors.stone200,
     ),
     splashFactory: InkSparkle.splashFactory,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: QColors.white,
       foregroundColor: QColors.espresso,
       surfaceTintColor: Colors.transparent,
@@ -108,7 +134,7 @@ ThemeData qproTheme() {
       scrolledUnderElevation: 0,
       centerTitle: false,
       systemOverlayStyle: SystemUiOverlayStyle.dark,
-      shape: Border(bottom: BorderSide(color: QColors.stone200)),
+      shape: const Border(bottom: BorderSide(color: QColors.stone200)),
       titleTextStyle: TextStyle(fontFamily: 'Manrope', fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.3, color: QColors.espresso),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -146,11 +172,11 @@ ThemeData qproTheme() {
       hintStyle: const TextStyle(color: QColors.stone500),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.control), borderSide: const BorderSide(color: QColors.stone300)),
       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.control), borderSide: const BorderSide(color: QColors.stone300)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.control), borderSide: const BorderSide(color: QColors.caramel, width: 2)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.control), borderSide: BorderSide(color: QColors.caramel, width: 2)),
       errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.control), borderSide: const BorderSide(color: QColors.danger)),
     ),
-    textSelectionTheme: const TextSelectionThemeData(cursorColor: QColors.caramel, selectionColor: QColors.caramelSoft, selectionHandleColor: QColors.caramel),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: QColors.caramel),
+    textSelectionTheme: TextSelectionThemeData(cursorColor: QColors.caramel, selectionColor: QColors.caramelSoft, selectionHandleColor: QColors.caramel),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: QColors.caramel),
     dividerTheme: const DividerThemeData(color: QColors.stone200, thickness: 1, space: 1),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: QColors.white,

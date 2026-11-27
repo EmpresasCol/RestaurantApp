@@ -56,7 +56,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Form(
                   key: _form,
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    const Align(alignment: Alignment.centerLeft, child: LogoQpro(tamano: 64)),
+                    Row(children: [
+                      const LogoQpro(tamano: 64),
+                      const SizedBox(width: 14),
+                      Expanded(child: DefaultTextStyle.merge(style: t.titleLarge, child: const NombreRestaurante())),
+                    ]),
                     const SizedBox(height: 28),
                     Text('Inicia sesión', style: t.headlineMedium?.copyWith(fontSize: 30)),
                     const SizedBox(height: 8),

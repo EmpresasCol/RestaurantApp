@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/cuenta.dart';
+import '../../providers/marca_provider.dart';
 import '../../providers/salon_provider.dart';
 import '../../services/api.dart';
 import '../../theme/qpro_theme.dart';
@@ -56,7 +57,7 @@ class _PagoSheetState extends State<PagoSheet> {
   double get _consumo => widget.cuenta.total;
   double get _valorPropina => switch (_propina) {
         _Propina.ninguna => 0,
-        _Propina.sugerida => propinaSugerida(_consumo),
+        _Propina.sugerida => propinaSugerida(_consumo, MarcaProvider.actual.tasaPropina),
         _Propina.otra => double.tryParse(_otraPropina.text.replaceAll(RegExp(r'[^\d]'), '')) ?? 0,
       };
   double get _total => _consumo + _valorPropina;
@@ -206,7 +207,12 @@ class _PagoSheetState extends State<PagoSheet> {
             ),
             segments: [
               const ButtonSegment(value: _Propina.ninguna, label: Text('Sin propina')),
-              ButtonSegment(value: _Propina.sugerida, label: Text('10 % ${pesos(propinaSugerida(_consumo))}')),
+              // En 0 % el administrador decidió no sugerir propina.
+              if (MarcaProvider.actual.propinaSugerida > 0)
+                ButtonSegment(
+                  value: _Propina.sugerida,
+                  label: Text('${MarcaProvider.actual.propinaSugerida} % ${pesos(propinaSugerida(_consumo, MarcaProvider.actual.tasaPropina))}'),
+                ),
               const ButtonSegment(value: _Propina.otra, label: Text('Otra')),
             ],
             selected: {_propina},
@@ -399,7 +405,7 @@ class _OpcionMetodo extends StatelessWidget {
                   Text(metodo.ayuda, style: TextStyle(fontSize: 12, color: activa ? QColors.caramelLight : QColors.stone500)),
                 ]),
               ),
-              if (activa) const Icon(Icons.check_circle_rounded, color: QColors.caramel),
+              if (activa) Icon(Icons.check_circle_rounded, color: QColors.caramel),
             ]),
           ),
         ),

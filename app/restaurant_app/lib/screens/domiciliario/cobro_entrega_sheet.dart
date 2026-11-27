@@ -123,7 +123,7 @@ class _CobroEntregaSheetState extends State<CobroEntregaSheet> {
                     Expanded(
                       child: Text(nombre, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _metodo == api ? QColors.white : QColors.espresso)),
                     ),
-                    if (_metodo == api) const Icon(Icons.check_circle_rounded, color: QColors.caramel),
+                    if (_metodo == api) Icon(Icons.check_circle_rounded, color: QColors.caramel),
                   ]),
                 ),
               ),

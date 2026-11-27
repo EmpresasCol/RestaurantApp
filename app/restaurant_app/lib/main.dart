@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'models/usuario.dart';
 import 'providers/auth_provider.dart';
 import 'providers/domiciliario_provider.dart';
+import 'providers/marca_provider.dart';
 import 'providers/notificacion_provider.dart';
 import 'providers/salon_provider.dart';
 import 'screens/domiciliario/entregas_screen.dart';
@@ -31,9 +32,12 @@ Future<void> main() async {
 
   final auth = AuthProvider();
   final avisos = NotificacionProvider();
-  await Future.wait([auth.cargarUsuario(), avisos.cargar()]);
+  final marca = MarcaProvider();
+  await Future.wait([auth.cargarUsuario(), avisos.cargar(), marca.cargarGuardada()]);
 
-  runApp(QproApp(auth: auth, avisos: avisos));
+  runApp(QproApp(auth: auth, avisos: avisos, marca: marca));
+  // Nombre, logo y colores del restaurante: la API confirma lo guardado sin retrasar el arranque.
+  marca.actualizar();
 
   // El push no retrasa el arranque y es opcional (iOS sin GoogleService-Info.plist).
   final push = NotificationService();
@@ -80,10 +84,12 @@ Future<void> _abrirMesa(int numero) async {
 }
 
 class QproApp extends StatelessWidget {
-  const QproApp({super.key, required this.auth, required this.avisos, this.api});
+  const QproApp({super.key, required this.auth, required this.avisos, this.marca, this.api});
 
   final AuthProvider auth;
   final NotificacionProvider avisos;
+  /// Marca del restaurante (Configuración de la web). Sin ella, la de fábrica de Qpro.
+  final MarcaProvider? marca;
   /// Para pruebas: la API simulada que usan los datos del rol.
   final Api? api;
 
@@ -93,6 +99,7 @@ class QproApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: avisos),
+        if (marca != null) ChangeNotifierProvider.value(value: marca!) else ChangeNotifierProvider(create: (_) => MarcaProvider(api: api)),
       ],
       child: Consumer<AuthProvider>(builder: (_, auth, __) {
         final usuario = auth.usuario;
@@ -143,10 +150,30 @@ class _AppState extends State<_App> {
     super.dispose();
   }
 
+  Object? _marcaPintada;
+
+  /// Los colores de la marca se leen de QColors al construir cada pantalla: cuando el
+  /// administrador los cambia, se reconstruye todo lo que está montado (sin perder la navegación).
+  void _reconstruirTodo() {
+    void marcar(Element e) {
+      e.markNeedsBuild();
+      e.visitChildren(marcar);
+    }
+
+    (context as Element).visitChildren(marcar);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final marca = context.watch<MarcaProvider>().marca;
+    if (_marcaPintada != null && !identical(_marcaPintada, marca)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _reconstruirTodo();
+      });
+    }
+    _marcaPintada = marca;
     return MaterialApp(
-      title: 'Qpro',
+      title: marca.nombre,
       debugShowCheckedModeBanner: false,
       navigatorKey: _navegadorPropio,
       scaffoldMessengerKey: _mensajeroPropio,
@@ -177,6 +204,7 @@ class _AlVolverState extends State<_AlVolver> {
     super.initState();
     _ciclo = AppLifecycleListener(onResume: () {
       context.read<NotificacionProvider>().cargar();
+      context.read<MarcaProvider>().actualizar();
       context.read<SalonProvider?>()?.cargar(silencioso: true);
       context.read<DomiciliarioProvider?>()?.cargar(silencioso: true);
     });

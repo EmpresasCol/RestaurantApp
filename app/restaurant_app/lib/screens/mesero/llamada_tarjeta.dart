@@ -54,7 +54,7 @@ class _TarjetaLlamadaState extends State<TarjetaLlamada> {
         borde: QColors.caramel,
         color: QColors.caramelWash,
         child: Row(children: [
-          const Icon(Icons.notifications_active_rounded, color: QColors.caramelDeep),
+          Icon(Icons.notifications_active_rounded, color: QColors.caramelDeep),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

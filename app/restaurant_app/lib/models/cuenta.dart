@@ -21,8 +21,9 @@ enum MetodoPago {
   }
 }
 
-/// Propina voluntaria sugerida (10 %), redondeada a centenas como en la web.
-double propinaSugerida(double consumo) => ((consumo * 0.1) / 100).roundToDouble() * 100;
+/// Propina voluntaria sugerida (por defecto 10 %; el administrador la fija en Configuración),
+/// redondeada a centenas como en la web.
+double propinaSugerida(double consumo, [double tasa = 0.1]) => ((consumo * tasa) / 100).roundToDouble() * 100;
 
 /// Un total en n partes iguales redondeadas a centenas; la última cuadra la suma exacta.
 List<double> partesIguales(double total, int n) {

@@ -213,7 +213,7 @@ class _CartaScreenState extends State<CartaScreen> {
                 fillColor: QColors.stone100,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.surface), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.surface), borderSide: const BorderSide(color: QColors.caramelLight, width: 2)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(QRadius.surface), borderSide: BorderSide(color: QColors.caramelLight, width: 2)),
               ),
             ),
           ),
@@ -367,7 +367,7 @@ class _BarraCarrito extends StatelessWidget {
                   height: 40,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(color: QColors.caramel, borderRadius: BorderRadius.circular(QRadius.control)),
-                  child: Text('$unidades', style: const TextStyle(color: QColors.espresso, fontWeight: FontWeight.w800, fontSize: 16, fontFeatures: tabular)),
+                  child: Text('$unidades', style: TextStyle(color: QColors.espresso, fontWeight: FontWeight.w800, fontSize: 16, fontFeatures: tabular)),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(child: Text('Ver pedido', style: TextStyle(color: QColors.white, fontSize: 15, fontWeight: FontWeight.w700))),
@@ -445,7 +445,7 @@ class _HojaPedido extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 l.nota.isEmpty ? 'Agregar nota' : l.nota,
-                                style: const TextStyle(color: QColors.caramelDeep, fontWeight: FontWeight.w700, fontSize: 13),
+                                style: TextStyle(color: QColors.caramelDeep, fontWeight: FontWeight.w700, fontSize: 13),
                               ),
                             ),
                           ]),

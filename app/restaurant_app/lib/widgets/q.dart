@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../models/platillo.dart';
+import '../providers/marca_provider.dart';
 import '../theme/qpro_theme.dart';
 
 // Piezas compartidas de la app, equivalentes a components/inventario/ui.js de la web.
@@ -334,7 +336,7 @@ class FotoPlatillo extends StatelessWidget {
   Widget build(BuildContext context) {
     final pixeles = (tamano * MediaQuery.devicePixelRatioOf(context)).round();
     final bytes = platillo.bytesFoto;
-    Widget sinFoto() => const ColoredBox(
+    Widget sinFoto() => ColoredBox(
           color: QColors.caramelWash,
           child: Center(child: Icon(Icons.restaurant_rounded, color: QColors.caramelLight)),
         );
@@ -350,22 +352,42 @@ class FotoPlatillo extends StatelessWidget {
   }
 }
 
-/// Logo de Qpro en un cuadrado redondeado con anillo de piedra 200.
+/// Logo del restaurante (Configuración de la web; sin él, el de Qpro) en un cuadrado
+/// redondeado con anillo de piedra 200.
 class LogoQpro extends StatelessWidget {
   const LogoQpro({super.key, this.tamano = 40});
 
   final double tamano;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: tamano,
-        height: tamano,
-        padding: EdgeInsets.all(tamano * 0.08),
-        decoration: BoxDecoration(
-          color: QColors.white,
-          borderRadius: BorderRadius.circular(tamano * 0.3),
-          border: Border.all(color: QColors.stone200),
-        ),
-        child: Image.asset('assets/splash/logo.png', fit: BoxFit.contain, cacheWidth: (tamano * 3).round()),
+  Widget build(BuildContext context) {
+    final logo = (context.watch<MarcaProvider?>()?.marca ?? MarcaProvider.actual).logo;
+    final pixeles = (tamano * 3).round();
+    final deQpro = Image.asset('assets/splash/logo.png', fit: BoxFit.contain, cacheWidth: pixeles);
+    return Container(
+      width: tamano,
+      height: tamano,
+      padding: EdgeInsets.all(tamano * 0.08),
+      decoration: BoxDecoration(
+        color: QColors.white,
+        borderRadius: BorderRadius.circular(tamano * 0.3),
+        border: Border.all(color: QColors.stone200),
+      ),
+      child: logo == null
+          ? deQpro
+          : Image.memory(logo, fit: BoxFit.contain, cacheWidth: pixeles, gaplessPlayback: true, errorBuilder: (_, __, ___) => deQpro),
+    );
+  }
+}
+
+/// Nombre del restaurante (Configuración de la web) en una línea.
+class NombreRestaurante extends StatelessWidget {
+  const NombreRestaurante({super.key});
+
+  @override
+  Widget build(BuildContext context) => Text(
+        (context.watch<MarcaProvider?>()?.marca ?? MarcaProvider.actual).nombre,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       );
 }

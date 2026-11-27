@@ -49,7 +49,7 @@ class _SalonScreenState extends State<SalonScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
-        title: const Row(children: [LogoQpro(tamano: 36), SizedBox(width: 10), Text('Qpro')]),
+        title: const Row(children: [LogoQpro(tamano: 36), SizedBox(width: 10), Flexible(child: NombreRestaurante())]),
         actions: [
           IconButton(
             tooltip: noLeidas > 0 ? '$noLeidas avisos sin leer' : 'Avisos',
@@ -185,7 +185,7 @@ class _MenuUsuario extends StatelessWidget {
       itemBuilder: (_) => [
         PopupMenuItem(
           enabled: false,
-          child: Text('${usuario?.nombre ?? ''}\nMesero', style: const TextStyle(color: QColors.espresso, fontWeight: FontWeight.w700)),
+          child: Text('${usuario?.nombre ?? ''}\nMesero', style: TextStyle(color: QColors.espresso, fontWeight: FontWeight.w700)),
         ),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'salir', child: Row(children: [Icon(Icons.logout_rounded, size: 20), SizedBox(width: 10), Text('Cerrar sesión')])),
@@ -312,7 +312,7 @@ class _TarjetaMesa extends StatelessWidget {
             Text('${cuenta.mesa.numero}', style: t.headlineMedium?.copyWith(fontSize: 30, fontFeatures: tabular)),
             const Spacer(),
             if (llama)
-              const Icon(Icons.notifications_active_rounded, size: 20, color: QColors.caramelDeep)
+              Icon(Icons.notifications_active_rounded, size: 20, color: QColors.caramelDeep)
             else if (!cuenta.libre)
               Text(plural(cuenta.platos, 'plato'), style: t.bodySmall),
           ]),
