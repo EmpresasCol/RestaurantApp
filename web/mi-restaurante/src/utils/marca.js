@@ -27,13 +27,13 @@ export const CONFIG_FABRICA = Object.freeze({
   fechaActualizacion: null,
 });
 
-/** Combinaciones probadas (contraste AA del color de acciones con blanco). */
+/** Combinaciones probadas: acciones legibles sobre blanco y sobre el color de marca (contraste AA). */
 export const PALETAS = [
   { id: 'caramelo', nombre: 'Caramelo', marca: COLOR_MARCA, accion: COLOR_ACCION },
-  { id: 'oliva', nombre: 'Oliva', marca: '#8A9A3B', accion: '#2E3A1F' },
-  { id: 'vino', nombre: 'Vino', marca: '#C0596B', accion: '#4A1624' },
-  { id: 'mar', nombre: 'Mar', marca: '#2F8F9D', accion: '#123B47' },
-  { id: 'terracota', nombre: 'Terracota', marca: '#D2693C', accion: '#3D1E12' },
+  { id: 'oliva', nombre: 'Oliva', marca: '#9AA856', accion: '#2A3519' },
+  { id: 'vino', nombre: 'Vino', marca: '#C96A7A', accion: '#3A0F1B' },
+  { id: 'mar', nombre: 'Mar', marca: '#4FA3AE', accion: '#0F2F3A' },
+  { id: 'terracota', nombre: 'Terracota', marca: '#D6754C', accion: '#3D1E12' },
   { id: 'carbon', nombre: 'Carbón', marca: '#E0A526', accion: '#1F2328' },
 ];
 
@@ -68,6 +68,9 @@ export const contraste = (a, b) => {
 
 export const accionLegible = (hex) => esHex(hex) && contraste(hex, '#FFFFFF') >= CONTRASTE_MINIMO;
 
+/** Los conteos van en el color de acciones sobre el de marca: aviso (no bloquea) si no se leen bien. */
+export const conteosLegibles = (marca, accion) => !esHex(marca) || !esHex(accion) || contraste(marca, accion) >= CONTRASTE_MINIMO;
+
 /** Escala 50–950 a partir del color de marca (el 500 es el color elegido). */
 export const escala = (hex) => {
   if (!esHex(hex)) return { ...ESCALA_CARAMELO };
@@ -86,6 +89,8 @@ export const normalizar = (config) => {
   Object.entries(config ?? {}).forEach(([k, v]) => {
     if (k in c && v !== undefined && v !== null && v !== '') c[k] = v;
   });
+  // La API guarda Instagram sin @; lo que aún se está escribiendo puede traerla.
+  if (c.instagram) c.instagram = String(c.instagram).trim().replace(/^@+/, '') || null;
   if (!esHex(c.colorMarca)) c.colorMarca = COLOR_MARCA;
   if (!accionLegible(c.colorAccion)) c.colorAccion = COLOR_ACCION;
   return c;

@@ -1,5 +1,5 @@
 import {
-  CONFIG_FABRICA, COLOR_ACCION, COLOR_MARCA, PALETAS, accionLegible, aplicarMarca, contraste, enlaceInstagram, enlaceWhatsapp,
+  CONFIG_FABRICA, COLOR_ACCION, COLOR_MARCA, PALETAS, accionLegible, conteosLegibles, aplicarMarca, contraste, enlaceInstagram, enlaceWhatsapp,
   errorConfiguracion, escala, marcaActual, normalizar, tasaPropina, variablesCss
 } from '../utils/marca';
 import { htmlFactura } from '../utils/recibo';
@@ -23,7 +23,10 @@ describe('marca del restaurante', () => {
 
   test('el contraste sigue WCAG y todas las paletas dejan leer el texto blanco', () => {
     expect(contraste('#000000', '#FFFFFF')).toBeCloseTo(21, 1);
-    PALETAS.forEach((p) => expect(accionLegible(p.accion)).toBe(true));
+    PALETAS.forEach((p) => {
+      expect(accionLegible(p.accion)).toBe(true);
+      expect(conteosLegibles(p.marca, p.accion)).toBe(true);
+    });
     expect(accionLegible('#F5E9DA')).toBe(false);
   });
 
@@ -33,6 +36,7 @@ describe('marca del restaurante', () => {
     expect(c.colorAccion).toBe(COLOR_ACCION);
     expect(c.minutosUrgente).toBe(15);
     expect(c.propinaSugerida).toBe(0);
+    expect(normalizar({ instagram: '@lafonda' }).instagram).toBe('lafonda');
   });
 
   test('las variables CSS van en canales r g b', () => {

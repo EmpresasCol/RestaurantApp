@@ -31,10 +31,18 @@ namespace RestaurantApi.Controllers
             if (error != null) return BadRequest(new { message = error });
 
             dto.FechaActualizacion = DateTime.UtcNow;
-            var actual = await _context.ConfiguracionRestaurante.FirstOrDefaultAsync(c => c.Id == 1);
-            if (actual == null) _context.ConfiguracionRestaurante.Add(dto);
-            else _context.Entry(actual).CurrentValues.SetValues(dto);
-            await _context.SaveChangesAsync();
+            try
+            {
+                var actual = await _context.ConfiguracionRestaurante.FirstOrDefaultAsync(c => c.Id == 1);
+                if (actual == null) _context.ConfiguracionRestaurante.Add(dto);
+                else _context.Entry(actual).CurrentValues.SetValues(dto);
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex) when (Personalizacion.FaltaLaTabla(ex))
+            {
+                return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                    new { message = "Falta aplicar la migración 2026-11-26_configuracion_restaurante.sql en la base de datos" });
+            }
             return Ok(dto);
         }
     }

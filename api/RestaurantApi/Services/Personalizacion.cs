@@ -28,11 +28,15 @@ namespace RestaurantApi.Services
                 return await ctx.ConfiguracionRestaurante.AsNoTracking().OrderBy(c => c.Id).FirstOrDefaultAsync()
                        ?? new ConfiguracionRestaurante();
             }
-            catch (MySqlException ex) when (ex.ErrorCode == MySqlErrorCode.NoSuchTable)
+            catch (Exception ex) when (FaltaLaTabla(ex))
             {
                 return new ConfiguracionRestaurante();
             }
         }
+
+        /// <summary>La base aún no tiene la tabla (migración sin aplicar), directo o dentro de un error de EF.</summary>
+        public static bool FaltaLaTabla(Exception ex)
+            => (ex as MySqlException ?? ex.InnerException as MySqlException)?.ErrorCode == MySqlErrorCode.NoSuchTable;
 
         /// <summary>Contraste WCAG entre dos colores #RRGGBB (1 a 21).</summary>
         public static double Contraste(string a, string b)

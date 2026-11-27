@@ -443,7 +443,8 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
             {/* En el celular el logo cede su espacio a los botones de la mesa; el nombre sigue visible. */}
             <img src={marca.logoSrc} alt="" className={`h-10 w-10 shrink-0 rounded-xl bg-white object-contain ring-1 ring-gray-200 ${mesaId ? 'hidden sm:block' : ''}`} />
             <div className="min-w-0">
-              <p className="truncate text-[17px] font-extrabold leading-tight tracking-[-0.01em]">{marca.nombre}</p>
+              {/* Hasta dos líneas: un nombre largo no debe quedar en "La Fon…" junto a los botones de la mesa. */}
+              <p className="line-clamp-2 break-words text-[15px] font-extrabold leading-tight tracking-[-0.01em] sm:text-[17px]">{marca.nombre}</p>
               <p className="truncate text-[13px] font-medium text-gray-500">
                 {mesaId ? `Mesa ${numeroMesa} · ${marca.pedidosQR ? 'pide desde aquí' : 'mira la carta'}` : 'Vista previa del menú'}
               </p>
@@ -533,7 +534,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
         )}
         {mesaId && !marca.pedidosQR && (
           <p className="mx-4 mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-[14px] font-medium text-amber-900" role="status">
-            Por ahora los pedidos se hacen con el mesero. Mira la carta y toca «Llamar al mesero» cuando estés listo.
+            Por ahora los pedidos se hacen con el mesero. Mira la carta y toca «Llamar» cuando estés listo.
           </p>
         )}
         {marca.mensajeBienvenida && (

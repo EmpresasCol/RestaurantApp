@@ -14,7 +14,7 @@ import { reducirLogo } from './utils/imagenes';
 import { htmlFactura } from './utils/recibo';
 import { pesos, propinaSugerida } from './utils/caja';
 import {
-  CONFIG_FABRICA, CONTRASTE_MINIMO, PALETAS, accionLegible, contraste, errorConfiguracion, esHex, normalizar, paraGuardar, tasaPropina, variablesCss
+  CONFIG_FABRICA, CONTRASTE_MINIMO, PALETAS, accionLegible, contraste, conteosLegibles, errorConfiguracion, esHex, normalizar, paraGuardar, tasaPropina, variablesCss
 } from './utils/marca';
 import logoQpro from './components/logo.jpg';
 
@@ -218,6 +218,12 @@ function PestanaMarca({ form, cambiar, logoSrc, mostrar }) {
               error={esHex(form.colorAccion) && !accionLegible(form.colorAccion) ? `Muy claro: contraste ${ratio.toFixed(1)} a 1. Elige uno más oscuro (mínimo ${CONTRASTE_MINIMO}).` : null}
             />
           </div>
+          {accionLegible(form.colorAccion) && !conteosLegibles(form.colorMarca, form.colorAccion) && (
+            <p className="mt-4 flex items-start gap-2 rounded-xl bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-900">
+              <TriangleAlert size={16} className="mt-px shrink-0" aria-hidden="true" />
+              Los números sobre el color de marca (como el del carrito) se leen con dificultad. Prueba un color de marca más claro o un color de acciones más oscuro.
+            </p>
+          )}
         </Seccion>
       </div>
 
