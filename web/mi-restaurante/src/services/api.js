@@ -41,8 +41,12 @@ export const login = async (usuario, clave) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: 'Credenciales inválidas' }));
-      throw new Error(errorData.message || 'Credenciales inválidas');
+      // 429: cuenta bloqueada (trae su mensaje) o demasiados intentos desde esta red (sin cuerpo).
+      const porDefecto = response.status === 429
+        ? 'Demasiados intentos. Espera un minuto e inténtalo de nuevo'
+        : 'Credenciales inválidas';
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || porDefecto);
     }
 
     return await response.json();

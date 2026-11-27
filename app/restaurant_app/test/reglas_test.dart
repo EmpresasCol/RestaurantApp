@@ -207,6 +207,7 @@ void main() {
       expect(Api.mensajeDe('"Mesa 9 no existe"', 400), 'Mesa 9 no existe');
       expect(Api.mensajeDe('{"errors":{"Clave":["La clave es obligatoria"]},"title":"x"}', 400), 'La clave es obligatoria');
       expect(Api.mensajeDe('', 500), 'El servidor tuvo un problema. Inténtalo de nuevo.');
+      expect(Api.mensajeDe('', 429), 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.');
     });
   });
 }

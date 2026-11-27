@@ -47,6 +47,14 @@ describe('Autenticación', () => {
     global.fetch.mockReturnValue(fallo(401, { message: 'Credenciales inválidas' }));
     await expect(api.login('x', 'y')).rejects.toThrow('Credenciales inválidas');
   });
+
+  test('login con 429 avisa el bloqueo en vez de culpar a la clave', async () => {
+    global.fetch.mockReturnValue(Promise.resolve({ ok: false, status: 429, json: () => Promise.reject(new Error('sin cuerpo')) }));
+    await expect(api.login('x', 'y')).rejects.toThrow('Demasiados intentos');
+
+    global.fetch.mockReturnValue(fallo(429, { message: 'Demasiados intentos fallidos con este usuario.' }));
+    await expect(api.login('x', 'y')).rejects.toThrow('con este usuario');
+  });
 });
 
 describe('Comandas (mesero / QR → cocina)', () => {

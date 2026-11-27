@@ -86,6 +86,7 @@ class Api {
     return switch (status) {
       403 => 'Tu usuario no tiene permiso para esto.',
       404 => 'No se encontró lo que buscabas. Actualiza la pantalla.',
+      429 => 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.',
       >= 500 => 'El servidor tuvo un problema. Inténtalo de nuevo.',
       _ => 'No se pudo completar la acción (error $status).',
     };

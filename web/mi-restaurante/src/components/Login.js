@@ -100,7 +100,9 @@ function Login() {
           {error && (
             <div role="alert" className="mt-6 flex items-start gap-3 rounded-xl bg-red-50 p-4">
               <AlertCircle className="mt-0.5 shrink-0 text-red-700" size={18} />
-              <p className="text-[14px] font-medium text-red-800">{error}. Revisa el usuario y la contraseña.</p>
+              <p className="text-[14px] font-medium text-red-800">
+                {error.startsWith('Credenciales') ? `${error}. Revisa el usuario y la contraseña.` : error}
+              </p>
             </div>
           )}
 
