@@ -210,6 +210,32 @@ if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("EnableS
 
 app.UseResponseCompression();
 app.UseCors("Frontend");
+
+// Rastro de auditoría: toda escritura del personal (quién, qué ruta, resultado) y todo acceso
+// rechazado (401/403/429). Solo la ruta, nunca la query: SignalR manda ahí el JWT.
+var auditoria = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(Auditoria.Categoria);
+app.Use(async (context, next) =>
+{
+    await next();
+
+    var estado = context.Response.StatusCode;
+    var denegado = estado is StatusCodes.Status401Unauthorized or StatusCodes.Status403Forbidden or StatusCodes.Status429TooManyRequests;
+    var autenticado = context.User.Identity?.IsAuthenticated == true;
+    var escritura = !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)
+                    && !HttpMethods.IsOptions(context.Request.Method);
+    if (!denegado && !(autenticado && escritura)) return;
+
+    var ip = CupoPeticiones.Ip(context, cabeceraIp);
+    var usuario = autenticado ? context.User.Identity!.Name : "anónimo";
+    var rol = context.User.FindFirst(QproClaims.Rol)?.Value ?? "-";
+    if (denegado)
+        auditoria.LogWarning(Auditoria.AccesoDenegado, "Auditoría: acceso denegado {Estado} a {Usuario} ({Rol}) en {Metodo} {Ruta} desde {Ip}",
+            estado, usuario, rol, context.Request.Method, context.Request.Path.Value, ip);
+    else
+        auditoria.LogInformation(Auditoria.EscrituraPersonal, "Auditoría: {Usuario} ({Rol}) {Metodo} {Ruta} → {Estado} desde {Ip}",
+            usuario, rol, context.Request.Method, context.Request.Path.Value, estado, ip);
+});
+
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
@@ -251,6 +277,26 @@ app.MapHub<ClienteHub>("/api/hubs/mesa").RequireRateLimiting("cliente-mesa");
 
 if (!pushOptions.ClavePublica.Any())
     app.Logger.LogInformation("Push:ClavePublica no está configurada: los comensales no recibirán avisos con la página cerrada.");
+
+// Claves que siguen en texto plano (usuarios de la semilla que nunca han entrado): se avisan en el
+// log para cambiarlas. No se listan las claves, solo los usuarios.
+try
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<RestauranteContext>();
+    var sinHash = await db.Usuarios.AsNoTracking()
+        .Where(u => u.Activo && !u.ClaveHash.StartsWith("$2") && !u.ClaveHash.StartsWith("!sin-login!"))
+        .Select(u => u.NombreUsuario).ToListAsync();
+    sinHash.RemoveAll(UsuariosSistema.Es);
+    if (sinHash.Count > 0)
+        auditoria.LogWarning(Auditoria.ClavesEnTextoPlano,
+            "Auditoría: {Cantidad} usuario(s) activos con clave en texto plano de la semilla: {Usuarios}. Cámbialas desde Administración → Usuarios.",
+            sinHash.Count, string.Join(", ", sinHash));
+}
+catch (Exception ex)
+{
+    app.Logger.LogWarning(ex, "No se pudo revisar las claves en texto plano");
+}
 
 // Inicializar recetas predeterminadas en arranque de la aplicación
 try

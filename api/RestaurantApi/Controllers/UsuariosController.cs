@@ -23,15 +23,26 @@ namespace RestaurantApi.Controllers
         private readonly RestauranteContext _context;
         private readonly JwtTokenService _jwt;
         private readonly IntentosLogin _intentos;
+        private readonly ILogger _auditoria;
 
-        public UsuariosController(RestauranteContext context, JwtTokenService? jwt = null, IntentosLogin? intentos = null)
+        public UsuariosController(RestauranteContext context, JwtTokenService? jwt = null, IntentosLogin? intentos = null,
+            ILoggerFactory? logs = null)
         {
             _context = context;
             _jwt = jwt ?? new JwtTokenService(new JwtOptions());
             _intentos = intentos ?? new IntentosLogin();
+            _auditoria = logs?.CreateLogger(Auditoria.Categoria) ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
         }
 
-        private ObjectResult Bloqueado() => StatusCode(StatusCodes.Status429TooManyRequests, new { message = IntentosLogin.MensajeBloqueo });
+        private ObjectResult Bloqueado(string usuario)
+        {
+            _auditoria.LogWarning(Auditoria.CuentaBloqueada, "Auditoría: ingreso rechazado, cuenta {Usuario} bloqueada por intentos fallidos", Auditoria.Limpio(usuario));
+            return StatusCode(StatusCodes.Status429TooManyRequests, new { message = IntentosLogin.MensajeBloqueo });
+        }
+
+        private void IngresoCorrecto(Usuario usuario, string canal)
+            => _auditoria.LogInformation(Auditoria.LoginCorrecto, "Auditoría: ingreso correcto de {Usuario} (Id {Id}, {Rol}) por {Canal}",
+                usuario.NombreUsuario, usuario.Id, usuario.Rol, canal);
 
         [HttpPost("login")]
         [AllowAnonymous]
@@ -39,7 +50,7 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<LoginResponseDto>> Login(LoginRequestDto request)
         {
             if (_intentos.EstaBloqueado(request.Usuario))
-                return Bloqueado();
+                return Bloqueado(request.Usuario);
             var usuario = await AutenticarAsync(request);
             if (usuario == null)
                 return Unauthorized(CredencialesInvalidas);
@@ -62,6 +73,7 @@ namespace RestaurantApi.Controllers
                 return Unauthorized(new { message = "No tienes permisos para acceder al sistema web" });
             }
 
+            IngresoCorrecto(usuario, "web");
             return Ok(CrearRespuestaLogin(usuario));
         }
 
@@ -71,7 +83,7 @@ namespace RestaurantApi.Controllers
         public async Task<ActionResult<LoginResponseDto>> LoginMobile(LoginRequestDto request)
         {
             if (_intentos.EstaBloqueado(request.Usuario))
-                return Bloqueado();
+                return Bloqueado(request.Usuario);
             var usuario = await AutenticarAsync(request);
             if (usuario == null)
                 return Unauthorized(CredencialesInvalidas);
@@ -86,6 +98,7 @@ namespace RestaurantApi.Controllers
                 });
             }
 
+            IngresoCorrecto(usuario, "app móvil");
             return Ok(CrearRespuestaLogin(usuario));
         }
 
@@ -182,6 +195,7 @@ namespace RestaurantApi.Controllers
             usuario.ClaveHash = ClaveHasher.Hash(usuario.ClaveHash);
             _context.Usuarios.Add(usuario);
             await _context.SaveChangesAsync();
+            Cambio("creó el usuario {Usuario} (Id {Id}) con rol {Rol}", usuario.NombreUsuario, usuario.Id, usuario.Rol);
             return CreatedAtAction(nameof(GetUsuario), new { id = usuario.Id }, ADto(usuario));
         }
 
@@ -213,13 +227,19 @@ namespace RestaurantApi.Controllers
                     return BadRequest(new { message = "Debe quedar al menos un Administrador" });
             }
 
+            var rolAnterior = usuario.Rol;
             usuario.Nombre = dto.Nombre;
             usuario.NombreUsuario = dto.NombreUsuario;
             usuario.Rol = dto.Rol;
-            if (!string.IsNullOrWhiteSpace(dto.ClaveHash))
-                usuario.ClaveHash = ClaveHasher.Hash(dto.ClaveHash);
+            var cambiaClave = !string.IsNullOrWhiteSpace(dto.ClaveHash);
+            if (cambiaClave)
+                usuario.ClaveHash = ClaveHasher.Hash(dto.ClaveHash!);
 
             await _context.SaveChangesAsync();
+            if (rolAnterior != usuario.Rol)
+                Cambio("cambió el rol de {Usuario} (Id {Id}) de {Antes} a {Despues}", usuario.NombreUsuario, id, rolAnterior, usuario.Rol);
+            if (cambiaClave)
+                Cambio("cambió la clave de {Usuario} (Id {Id})", usuario.NombreUsuario, id);
             return NoContent();
         }
 
@@ -245,6 +265,7 @@ namespace RestaurantApi.Controllers
             _context.UsuariosFCM.RemoveRange(_context.UsuariosFCM.Where(t => t.UsuarioId == id));
             _context.Usuarios.Remove(usuario);
             await _context.SaveChangesAsync();
+            Cambio("eliminó al usuario {Usuario} (Id {Id})", usuario.NombreUsuario, id);
             return NoContent();
         }
 
@@ -266,8 +287,14 @@ namespace RestaurantApi.Controllers
 
             usuario.Activo = dto.Activo;
             await _context.SaveChangesAsync();
+            Cambio(dto.Activo ? "activó a {Usuario} (Id {Id})" : "desactivó a {Usuario} (Id {Id})", usuario.NombreUsuario, id);
             return NoContent();
         }
+
+        /// <summary>Cambio administrativo sobre usuarios, firmado por quien lo hizo.</summary>
+        private void Cambio(string accion, params object?[] datos)
+            => _auditoria.LogWarning(Auditoria.CambioDeUsuario, "Auditoría: {Admin} (Id {AdminId}) " + accion,
+                new object?[] { User?.Identity?.Name, QproClaims.IdUsuario(User) }.Concat(datos).ToArray());
 
         private static string? ValidarDatos(string nombre, string nombreUsuario, RolUsuario rol)
         {
@@ -297,13 +324,13 @@ namespace RestaurantApi.Controllers
             if (usuario == null)
             {
                 ClaveHasher.VerificarFicticio(request.Clave);
-                _intentos.RegistrarFallo(request.Usuario);
+                RegistrarFallo(request.Usuario, existe: false);
                 return null;
             }
 
             if (!ClaveHasher.Verificar(request.Clave, usuario.ClaveHash, out var migrar))
             {
-                _intentos.RegistrarFallo(request.Usuario);
+                RegistrarFallo(request.Usuario, existe: true);
                 return null;
             }
             _intentos.Limpiar(request.Usuario);
@@ -314,6 +341,15 @@ namespace RestaurantApi.Controllers
                 await _context.SaveChangesAsync();
             }
             return usuario;
+        }
+
+        private void RegistrarFallo(string usuario, bool existe)
+        {
+            var fallos = _intentos.RegistrarFallo(usuario);
+            // El log sí distingue si el usuario existe (la respuesta no): ayuda a ver ataques de diccionario.
+            _auditoria.LogWarning(fallos >= IntentosLogin.MaximoFallos ? Auditoria.CuentaBloqueada : Auditoria.LoginFallido,
+                "Auditoría: clave errada para {Usuario} (existe: {Existe}), fallo {Fallos} de {Maximo}",
+                Auditoria.Limpio(usuario), existe, fallos, IntentosLogin.MaximoFallos);
         }
 
         private LoginResponseDto CrearRespuestaLogin(Usuario usuario) => new()

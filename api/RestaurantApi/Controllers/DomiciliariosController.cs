@@ -52,7 +52,10 @@ namespace RestaurantApi.Controllers
                 return BadRequest(new { message = "Usuario y contraseña son obligatorios" });
 
             if (_intentos.EstaBloqueado(req.Usuario))
+            {
+                _logger.LogWarning(Auditoria.CuentaBloqueada, "Auditoría: ingreso de domiciliario rechazado, cuenta {Usuario} bloqueada", Auditoria.Limpio(req.Usuario));
                 return StatusCode(StatusCodes.Status429TooManyRequests, new { message = IntentosLogin.MensajeBloqueo });
+            }
 
             // Los usuarios técnicos se tratan como inexistentes: mismo tiempo y mismo mensaje.
             var usuario = UsuariosSistema.Es(req.Usuario) ? null : await _context.Usuarios
@@ -64,9 +67,11 @@ namespace RestaurantApi.Controllers
 
             if (usuario is null || !ClaveHasher.Verificar(req.Clave, usuario.ClaveHash, out migrar))
             {
-                _intentos.RegistrarFallo(req.Usuario);
-                // No revelamos si el usuario existe o no: mismo mensaje.
-                _logger.LogWarning("🚫 Login domiciliario fallido");
+                var fallos = _intentos.RegistrarFallo(req.Usuario);
+                // No revelamos si el usuario existe o no: mismo mensaje (el log sí lo distingue).
+                _logger.LogWarning(fallos >= IntentosLogin.MaximoFallos ? Auditoria.CuentaBloqueada : Auditoria.LoginFallido,
+                    "Auditoría: clave errada de domiciliario para {Usuario} (existe: {Existe}), fallo {Fallos} de {Maximo}",
+                    Auditoria.Limpio(req.Usuario), usuario is not null, fallos, IntentosLogin.MaximoFallos);
                 return Unauthorized(new { message = "Credenciales inválidas" });
             }
             _intentos.Limpiar(req.Usuario);
@@ -102,7 +107,8 @@ namespace RestaurantApi.Controllers
             var entregasTotales = await _context.Domicilios
                 .CountAsync(d => d.DomiciliarioId == usuario.Id && d.Estado == "Entregado");
 
-            _logger.LogInformation("✅ Login domiciliario: {Nombre}", usuario.Nombre);
+            _logger.LogInformation(Auditoria.LoginCorrecto, "Auditoría: ingreso correcto de {Usuario} (Id {Id}, Domiciliario) por app móvil",
+                usuario.NombreUsuario, usuario.Id);
 
             return Ok(new LoginDomiciliarioResponseDto
             {
