@@ -27,7 +27,7 @@ jest.mock('@microsoft/signalr', () => ({
 const {
   getSeguimiento, guardarLlamada, leerLlamada, ultimaGana, useLlamada, useSeguimiento,
 } = require('../services/clienteMesa');
-const { BotonLlamar, AvisoLlamada, HojaMesa, ResumenMesa, estadoResumen } = require('../components/menu/MiMesa');
+const { BotonLlamar, BotonPedido, AvisoLlamada, HojaMesa, ResumenMesa, estadoResumen } = require('../components/menu/MiMesa');
 
 const respuesta = (status, cuerpo) => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(cuerpo) });
 
@@ -97,6 +97,12 @@ function Seguir({ codigo, llave }) {
 }
 
 describe('useSeguimiento', () => {
+  test('nunca usa la caché del navegador: un 410 guardado escondería las visitas siguientes', async () => {
+    fetch.mockReturnValueOnce(respuesta(200, datosVisita()));
+    await getSeguimiento('abc', 'llave-1');
+    expect(fetch.mock.calls[0][1]).toMatchObject({ cache: 'no-store', headers: { 'X-Mesa': 'abc', 'X-Seguimiento': 'llave-1' } });
+  });
+
   test('se une al grupo de la visita y recarga con cada aviso y al reconectar', async () => {
     fetch.mockReturnValue(respuesta(200, datosVisita()));
     render(<Seguir codigo="abc" llave="llave-1" />);
@@ -216,6 +222,17 @@ describe('Vista de la mesa', () => {
     expect(screen.getByText(/aún no hay pedidos/i)).toBeInTheDocument();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByText(/código/i)).toBeNull();
+  });
+
+  test('el botón "Ver mi pedido" solo se activa con un pedido en curso', () => {
+    const onAbrir = jest.fn();
+    const { rerender } = render(<BotonPedido seguimiento={{ estado: 'sin-llave' }} onAbrir={onAbrir} />);
+    expect(screen.getByRole('button', { name: /ver mi pedido/i })).toBeDisabled();
+    rerender(<BotonPedido seguimiento={{ estado: 'activo', datos: datosVisita({ pedidos: [{ id: 1, estado: 'Pagado', platos: [] }] }) }} onAbrir={onAbrir} />);
+    expect(screen.getByRole('button', { name: /ver mi pedido/i })).toBeDisabled();
+    rerender(<BotonPedido seguimiento={{ estado: 'activo', datos: datosVisita() }} onAbrir={onAbrir} />);
+    fireEvent.click(screen.getByRole('button', { name: /ver mi pedido/i }));
+    expect(onAbrir).toHaveBeenCalled();
   });
 
   test('al cerrar la visita muestra el cierre en lugar de los pedidos', () => {

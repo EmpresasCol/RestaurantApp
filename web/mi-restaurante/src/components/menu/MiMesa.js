@@ -25,7 +25,7 @@ const ORDEN_RESUMEN = ['Listo', 'EnPreparacion', 'Recibido', 'Entregado'];
 
 /** Estado que resume la visita: lo más urgente primero (listo > en preparación > recibido). */
 export const estadoResumen = (pedidos = []) => {
-  const estados = pedidos.map((p) => p.estado);
+  const estados = (pedidos ?? []).map((p) => p.estado);
   return ORDEN_RESUMEN.find((e) => estados.includes(e)) ?? null;
 };
 
@@ -57,6 +57,27 @@ export function BotonLlamar({ llamada }) {
       <span className="sr-only">{viva ? 'Mesero avisado' : 'Llamar al mesero'}</span>
       <span aria-hidden="true" className="sm:hidden">{viva ? 'Avisado' : 'Llamar'}</span>
       <span aria-hidden="true" className="hidden sm:inline">{viva ? 'Mesero avisado' : 'Llamar al mesero'}</span>
+    </button>
+  );
+}
+
+/** La mesa tiene un pedido en curso (recibido, en preparación, listo o en la mesa sin pagar). */
+export const pedidoEnCurso = (seguimiento) =>
+  seguimiento.estado === 'activo' && estadoResumen(seguimiento.datos?.pedidos) !== null;
+
+/** Botón de la cabecera junto a "Llamar": abre el seguimiento. Solo se activa con un pedido en curso. */
+export function BotonPedido({ seguimiento, onAbrir }) {
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      disabled={!pedidoEnCurso(seguimiento)}
+      className="flex h-11 shrink-0 items-center gap-2 rounded-full bg-gray-100 px-3 text-[14px] font-bold text-espresso transition-transform active:scale-[0.98] disabled:opacity-40 sm:px-4"
+    >
+      <Receipt size={18} aria-hidden="true" />
+      <span className="sr-only">Ver mi pedido</span>
+      <span aria-hidden="true" className="sm:hidden">Pedido</span>
+      <span aria-hidden="true" className="hidden sm:inline">Ver mi pedido</span>
     </button>
   );
 }

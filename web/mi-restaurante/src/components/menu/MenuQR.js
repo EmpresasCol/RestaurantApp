@@ -10,7 +10,7 @@ import CountUp from '../reactbits/CountUp/CountUp';
 import ClickSpark from '../reactbits/ClickSpark/ClickSpark';
 import logo from '../logo.jpg';
 import HojaInferior from './HojaInferior';
-import { AvisoLlamada, BotonLlamar, HojaMesa, ResumenMesa } from './MiMesa';
+import { AvisoLlamada, BotonLlamar, BotonPedido, HojaMesa, ResumenMesa } from './MiMesa';
 import {
   activarAvisos, guardarLlave, leerLlave, olvidarVisita, useLlamada, useSeguimiento
 } from '../../services/clienteMesa';
@@ -413,7 +413,8 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
       <header className="sticky z-30 border-b border-gray-200/80 bg-white" style={{ top: offsetSuperior }}>
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <div className="flex min-w-0 items-center gap-3">
-            <img src={logo} alt="Qpro" className="h-10 w-10 shrink-0 rounded-xl object-contain ring-1 ring-gray-200" />
+            {/* En el celular el logo cede su espacio a los botones de la mesa; el nombre sigue visible. */}
+            <img src={logo} alt="Qpro" className={`h-10 w-10 shrink-0 rounded-xl object-contain ring-1 ring-gray-200 ${mesaId ? 'hidden sm:block' : ''}`} />
             <div className="min-w-0">
               <p className="text-[17px] font-extrabold leading-tight tracking-[-0.01em]">Qpro</p>
               <p className="truncate text-[13px] font-medium text-gray-500">
@@ -423,6 +424,7 @@ export default function MenuQR({ platillos, cargando, mesaId, numeroMesa, aviso,
           </div>
           <div className="flex shrink-0 items-center gap-2">
           {mesaId && <BotonLlamar llamada={llamada} />}
+          {mesaId && <BotonPedido seguimiento={seguimiento} onAbrir={() => setHojaMesa(true)} />}
           <button
             type="button"
             onClick={() => setCarritoAbierto(true)}
